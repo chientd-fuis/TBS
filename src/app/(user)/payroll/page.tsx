@@ -39,6 +39,12 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
           <Card title={`Tháng ${viMonth(month)}`} actions={<Badge tone={payroll.status === "PAID" ? "green" : "yellow"}>{payroll.status === "PAID" ? "Đã thanh toán" : "Đã công bố"}</Badge>}>
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
               <dt>Giờ tính công</dt><dd className="text-right">{hoursVi(item.totalHours)} h</dd>
+              {!!item.supportHours && (
+                <>
+                  <dt className="pl-3 text-xs text-ink/70">trong đó hỗ trợ</dt>
+                  <dd className="text-right text-xs text-ink/70">{item.supportNote}</dd>
+                </>
+              )}
               <dt>Lương giờ</dt><dd className="text-right">{vnd(item.hourlyWage)}</dd>
               <dt>Lương cơ bản</dt><dd className="text-right">{vnd(item.basePay)}</dd>
               <dt>Phụ cấp</dt><dd className="text-right">{vnd(item.allowance)}</dd>

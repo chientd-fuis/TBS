@@ -32,19 +32,24 @@ export async function POST(req: Request) {
 
     const dev = await checkDeviceForAttendance(user._id);
     if (!dev.ok) throw new HttpError(403, dev.error);
-    const store = await Store.findById(user.storeId).lean();
-    if (!store) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
-    const tz = store.timezone || "Asia/Ho_Chi_Minh";
+    const home = await Store.findById(user.storeId).lean();
+    if (!home) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
+    const homeTz = home.timezone || "Asia/Ho_Chi_Minh";
     const now = new Date();
-    const today = localDate(now, tz);
+    const homeToday = localDate(now, homeTz);
 
     // gắn với lượt chấm công đang mở, hoặc lượt gần nhất hôm nay
     const att =
       (await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean()) ??
-      (await Attendance.findOne({ userId: user._id, workDate: today }).sort({ checkInAt: -1 }).lean());
+      (await Attendance.findOne({ userId: user._id, workDate: homeToday }).sort({ checkInAt: -1 }).lean());
 
-    // ca đang chốt + những người cùng ca
-    const shift = await findShiftForClosing(user._id, now, tz, att?.shiftAssignmentId);
+    // ca đang chốt (có thể là ca hỗ trợ ở cơ sở khác) + những người cùng ca
+    const shift = await findShiftForClosing(user._id, now, homeTz, att?.shiftAssignmentId);
+    // chốt ca gửi về nhóm của cơ sở đang làm (lượt chấm công → ca → cơ sở gốc)
+    const storeId = att?.storeId ?? shift?.storeId ?? home._id;
+    const store = String(storeId) === String(home._id) ? home : ((await Store.findById(storeId).lean()) ?? home);
+    const tz = store.timezone || homeTz;
+    const today = localDate(now, tz);
     let coworkers: string[] = [];
     if (shift) {
       const mates = await ShiftAssignment.find({

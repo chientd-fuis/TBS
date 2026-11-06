@@ -20,9 +20,14 @@ export function shiftWindow(date: string, startTime: string, endTime: string, tz
 }
 
 /** Tìm ca được xếp phù hợp nhất với thời điểm check-in (spec 4.4). */
-export async function findShiftFor(userId: Id, at: Date, tz: string) {
+export async function findShiftFor(userId: Id, at: Date, tz: string, storeId?: Id) {
   const today = localDate(at, tz);
-  const list = await ShiftAssignment.find({ userId, date: { $in: [today, addDays(today, -1)] }, ...APPROVED_SHIFT }).lean();
+  const list = await ShiftAssignment.find({
+    userId,
+    date: { $in: [today, addDays(today, -1)] },
+    ...(storeId ? { storeId } : {}),
+    ...APPROVED_SHIFT,
+  }).lean();
   let best: { a: (typeof list)[number]; start: Date; end: Date; score: number } | null = null;
   for (const a of list) {
     if (!a.startTime || !a.endTime) continue;
@@ -39,13 +44,18 @@ export async function findShiftFor(userId: Id, at: Date, tz: string) {
  * Ca dùng cho CHỐT CA: ưu tiên ca gắn với lượt chấm công; nếu không có thì ca đã duyệt
  * mà thời điểm chốt nằm trong [giờ bắt đầu − 1h, giờ kết thúc + 4h] (chốt ca thường sau giờ kết thúc).
  */
-export async function findShiftForClosing(userId: Id, at: Date, tz: string, attendanceShiftId?: Id | null) {
+export async function findShiftForClosing(userId: Id, at: Date, tz: string, attendanceShiftId?: Id | null, storeId?: Id) {
   if (attendanceShiftId) {
     const a = await ShiftAssignment.findById(attendanceShiftId).lean();
     if (a) return a;
   }
   const today = localDate(at, tz);
-  const list = await ShiftAssignment.find({ userId, date: { $in: [today, addDays(today, -1)] }, ...APPROVED_SHIFT }).lean();
+  const list = await ShiftAssignment.find({
+    userId,
+    date: { $in: [today, addDays(today, -1)] },
+    ...(storeId ? { storeId } : {}),
+    ...APPROVED_SHIFT,
+  }).lean();
   let best: (typeof list)[number] | null = null;
   let bestScore = Infinity;
   for (const a of list) {
@@ -91,6 +101,17 @@ export async function computeFields(att: {
     if (shift) out.earlyMinutes = earlyMinutes(att.checkOutAt, shift.end, settings.earlyThresholdMinutes);
   }
   return out;
+}
+
+/** Cơ sở trả lương cho 1 lượt chấm công (= cơ sở gốc; bản ghi cũ chưa có homeStoreId → cơ sở làm việc). */
+export function payStoreOf(a: { storeId: Id; homeStoreId?: Id | null }) {
+  return a.homeStoreId ?? a.storeId;
+}
+
+/** Điều kiện lọc chấm công thuộc bảng lương của 1 cơ sở (gồm giờ đi hỗ trợ nơi khác). */
+export function payStoreFilter(storeId: Id) {
+  const id = typeof storeId === "string" ? new Types.ObjectId(storeId) : storeId;
+  return { $or: [{ homeStoreId: id }, { homeStoreId: { $exists: false }, storeId: id }, { homeStoreId: null, storeId: id }] };
 }
 
 /** Tháng đã khoá (bảng lương đã công bố / đã trả) → không cho sửa. */

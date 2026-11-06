@@ -19,6 +19,7 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Bảng chấm công theo mẫu, tổng hợp tháng, chấm hộ, sửa / xoá có lịch sử, "Thêm phạt" từ dòng muộn/sớm | 5, 3.5, 7.1 |
 | | Thưởng / phạt nhập tự do (VND), bảng lương (phụ cấp, tạm ứng), công bố sớm / tự công bố 00:00 ngày 5, khoá tháng, mở khoá | 3.6, 3.7 |
 | | Xuất Excel 7 loại báo cáo (header vàng/nâu, freeze, filter, dòng tổng, tô màu) + audit log | 3.8 |
+| | **Hỗ trợ cơ sở khác**: admin gọi nhân viên cơ sở khác sang (chọn ở ô "＋ Thêm…" → nhóm "Gọi hỗ trợ từ …"), chặn trùng giờ giữa các cơ sở; nhân viên chỉ chấm công được ở cơ sở khác khi có **ca hỗ trợ đã duyệt** đúng giờ (app tự nhận cơ sở theo GPS); giờ hỗ trợ tính vào **bảng lương cơ sở gốc** (ghi chú "hỗ trợ: TBS … Xh"); chốt ca gửi vào nhóm Telegram của cơ sở đang làm | – |
 | | **Chốt ca**: nhân viên chụp ảnh cuối ca (camera sau, tối đa 4 ảnh) → gửi album vào nhóm Telegram của cơ sở; admin xem / gửi lại; webhook cho hệ thống phân tích ảnh | – |
 | | Cài đặt: kết nối Google Drive, cấu hình làm tròn / ngưỡng / số thiết bị…, lịch sử đăng nhập admin, nhật ký thao tác | 2.1 |
 | Hệ thống | Cron: quên check-out, upload lại ảnh lỗi, tạo bảng lương nháp, công bố ngày 5 | 6.1 |

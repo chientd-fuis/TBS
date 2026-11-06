@@ -29,6 +29,8 @@ export type History = {
   freq: Record<string, Record<string, number>>; // userId → tplId → số lần
   pair: Record<string, Record<string, number>>; // userId → userId → số lần làm chung ca
 };
+/** Ca đã duyệt của nhân viên ở CƠ SỞ KHÁC (đi hỗ trợ) – chỉ để tránh xếp trùng giờ & tính số ca. */
+export type ExternalShift = { userId: string; date: string; startTime: string; endTime: string };
 export type PlanChange =
   | { kind: "approve"; entryId: string; userId: string; tplId: string; date: string; reason: string }
   | { kind: "add"; userId: string; tplId: string; date: string; reason: string };
@@ -41,7 +43,8 @@ const toMin = (hhmm: string) => {
 
 /** Khoảng thời gian tuyệt đối (phút) của 1 ca trong tuần – dùng để tránh xếp trùng giờ. */
 export function slotInterval(days: string[], date: string, tpl: { startTime: string; endTime: string }) {
-  const d = days.indexOf(date);
+  // số ngày tính từ đầu tuần (hỗ trợ cả ngày ngoài tuần, VD ca qua đêm của Chủ nhật tuần trước)
+  const d = Math.round((Date.parse(date + "T00:00:00Z") - Date.parse(days[0] + "T00:00:00Z")) / 86400000);
   const s = d * 1440 + toMin(tpl.startTime);
   let e = d * 1440 + toMin(tpl.endTime);
   if (e <= s) e += 1440; // qua đêm
@@ -67,6 +70,7 @@ export function planAutoSchedule(input: {
   entries: Entry[];
   history: History;
   opts: AutoOptions;
+  external?: ExternalShift[];
 }) {
   const { days, templates, staff, history, opts } = input;
   const tplById = new Map(templates.map((t) => [t.id, t]));
@@ -86,6 +90,12 @@ export function planAutoSchedule(input: {
   for (const e of approved) {
     count.set(e.userId, (count.get(e.userId) ?? 0) + 1);
     addBusy(e.userId, e.date, e.tplId);
+  }
+  for (const x of input.external ?? []) {
+    const list = busy.get(x.userId) ?? [];
+    list.push(slotInterval(days, x.date, x) as [number, number]);
+    busy.set(x.userId, list);
+    if (days.includes(x.date)) count.set(x.userId, (count.get(x.userId) ?? 0) + 1);
   }
   const overlaps = (uid: string, date: string, t: TplInfo) => {
     const [s, e] = slotInterval(days, date, t);

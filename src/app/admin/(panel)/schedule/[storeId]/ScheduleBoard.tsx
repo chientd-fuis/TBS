@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Settings2, Sparkles, X, Zap } from "lucide-react";
+import { ArrowLeftRight, Check, Loader2, Settings2, Sparkles, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
@@ -20,6 +20,12 @@ type Props = {
   entries: Entry[];
   staff: { id: string; name: string }[];
   names: Record<string, string>;
+  /** userId → tên cơ sở gốc của người được gọi sang hỗ trợ */
+  supportFrom: Record<string, string>;
+  /** ca của nhân viên cơ sở này đang đi hỗ trợ nơi khác */
+  external: { userId: string; date: string; startTime: string; endTime: string; shiftName: string; storeName: string }[];
+  /** nhân viên các cơ sở khác (để gọi sang hỗ trợ) */
+  otherStaff: { id: string; name: string; storeName: string }[];
   isPast: boolean;
 };
 
@@ -55,6 +61,12 @@ export default function ScheduleBoard(p: Props) {
       }
     });
 
+  const otherGroups = useMemo(
+    () => Object.entries(p.otherStaff.reduce<Record<string, Props["otherStaff"]>>((m, s) => ((m[s.storeName] ??= []).push(s), m), {})),
+    [p.otherStaff],
+  );
+  /** Nhân viên đang có ca ở cơ sở khác trong ngày → tên cơ sở (để admin biết khi xếp) */
+  const busyAway = (uid: string, date: string) => p.external.find((x) => x.userId === uid && x.date === date)?.storeName;
   const cell = (tplId: string, date: string) => p.entries.filter((e) => e.tplId === tplId && e.date === date && e.status !== "REJECTED");
   const pendingAll = p.entries.filter((e) => e.status === "PENDING");
   const proposed = useMemo(() => new Map((plan?.changes ?? []).filter((c) => c.kind === "add").map((c) => [`${c.date}|${c.tplId}|${c.userId}`, c])), [plan]);
@@ -68,7 +80,18 @@ export default function ScheduleBoard(p: Props) {
         const ok = mine.filter((e) => e.status === "APPROVED");
         const byTpl = Object.fromEntries(p.templates.map((t) => [t.id, ok.filter((e) => e.tplId === t.id).length]));
         const h = ok.reduce((s, e) => s + hours(p.templates.find((t) => t.id === e.tplId) ?? p.templates[0]), 0);
-        return { id, name: p.names[id] ?? "?", ok: ok.length, wait: mine.filter((e) => e.status === "PENDING").length, rej: mine.filter((e) => e.status === "REJECTED").length, byTpl, h };
+        const away = p.external.filter((x) => x.userId === id && p.days.includes(x.date));
+        return {
+          id,
+          name: p.names[id] ?? "?",
+          ok: ok.length,
+          wait: mine.filter((e) => e.status === "PENDING").length,
+          rej: mine.filter((e) => e.status === "REJECTED").length,
+          byTpl,
+          h,
+          from: p.supportFrom[id],
+          away: Object.entries(away.reduce<Record<string, number>>((m, x) => ((m[x.storeName] = (m[x.storeName] ?? 0) + 1), m), {})),
+        };
       })
       .sort((a, b) => b.ok - a.ok || a.name.localeCompare(b.name));
   }, [p]);
@@ -109,6 +132,7 @@ export default function ScheduleBoard(p: Props) {
           <span className="inline-flex items-center gap-1"><Zap size={12} className="text-secondary" /> Tự động xếp</span>
           <Badge tone="red">Thiếu người</Badge>
           <Badge tone="yellow">Ít người</Badge>
+          <span className="inline-flex items-center gap-1 rounded-md bg-[#dbeafe] px-1.5 text-[#1e40af]"><ArrowLeftRight size={12} /> Hỗ trợ</span>
         </div>
       </div>
 
@@ -208,10 +232,19 @@ export default function ScheduleBoard(p: Props) {
                   key={e.id}
                   className={cn(
                     "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-xs",
-                    e.status === "PENDING" ? "bg-[#ffd8b8] font-semibold text-warn ring-1 ring-warn/40" : "bg-white/80",
+                    e.status === "PENDING"
+                      ? "bg-[#ffd8b8] font-semibold text-warn ring-1 ring-warn/40"
+                      : p.supportFrom[e.userId]
+                        ? "bg-[#dbeafe] text-[#1e40af] ring-1 ring-[#93c5fd]"
+                        : "bg-white/80",
                   )}
-                  title={e.status === "PENDING" ? "Nhân viên đăng ký – chờ duyệt" : e.source === "AUTO" ? "Xếp tự động" : ""}
+                  title={
+                    p.supportFrom[e.userId]
+                      ? `Hỗ trợ từ ${p.supportFrom[e.userId]}`
+                      : e.status === "PENDING" ? "Nhân viên đăng ký – chờ duyệt" : e.source === "AUTO" ? "Xếp tự động" : ""
+                  }
                 >
+                  {p.supportFrom[e.userId] && <ArrowLeftRight size={10} className="shrink-0" />}
                   {e.source === "AUTO" && e.status === "APPROVED" && <Zap size={10} className="shrink-0 text-secondary" />}
                   <span className="flex-1 truncate">{p.names[e.userId] ?? "?"}</span>
                   {e.status === "PENDING" ? (
@@ -237,9 +270,24 @@ export default function ScheduleBoard(p: Props) {
                   onChange={(ev) => ev.target.value && run(() => addToSlot(p.storeId, t.id, d, ev.target.value))}
                 >
                   <option value="">＋ Thêm…</option>
-                  {p.staff.filter((s) => !inCell.has(s.id)).map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                  <optgroup label="Nhân viên cơ sở">
+                    {p.staff.filter((s) => !inCell.has(s.id)).map((s) => {
+                      const away = busyAway(s.id, d);
+                      return (
+                        <option key={s.id} value={s.id}>{s.name}{away ? ` (đang hỗ trợ ${away})` : ""}</option>
+                      );
+                    })}
+                  </optgroup>
+                  {otherGroups.map(([store, list]) => {
+                    const free = list.filter((s) => !inCell.has(s.id));
+                    return free.length ? (
+                      <optgroup key={store} label={`Gọi hỗ trợ từ ${store}`}>
+                        {free.map((s) => (
+                          <option key={s.id} value={s.id}>⇄ {s.name}</option>
+                        ))}
+                      </optgroup>
+                    ) : null;
+                  })}
                 </select>
                 {lv === "short" && <span className="whitespace-nowrap text-[10px] font-bold text-danger">Thiếu {tpl.minStaff - approvedN}</span>}
                 {lv === "low" && <span className="whitespace-nowrap text-[10px] font-bold text-warn">Ít {approvedN}/{tpl.targetStaff}</span>}
@@ -293,17 +341,23 @@ export default function ScheduleBoard(p: Props) {
             </thead>
             <tbody>
               {summary.map((s) => (
-                <tr key={s.id} className={s.ok === 0 ? "row-missing" : ""}>
-                  <td className="font-semibold">{s.name}</td>
+                <tr key={s.id} className={s.ok === 0 && !s.away.length ? "row-missing" : ""}>
+                  <td className="font-semibold">
+                    {s.name}
+                    {s.from && <span className="ml-1 rounded bg-[#dbeafe] px-1 text-[10px] font-normal text-[#1e40af]">hỗ trợ từ {s.from}</span>}
+                  </td>
                   {p.templates.map((t) => <td key={t.id} className="text-center">{s.byTpl[t.id] || ""}</td>)}
                   <td className="text-right font-bold">{s.ok}</td>
                   <td className="text-right">{s.h ? s.h.toFixed(1) : ""}</td>
                   <td className="text-right text-warn">{s.wait || ""}</td>
                   <td className="text-xs">
-                    {s.ok === 0 && <Badge tone="red">Chưa có ca</Badge>}{" "}
+                    {s.ok === 0 && !s.away.length && <Badge tone="red">Chưa có ca</Badge>}{" "}
                     {s.ok > 0 && avg > 0 && s.ok >= avg * 1.5 && <Badge tone="orange">Nhiều ca</Badge>}{" "}
                     {s.ok > 0 && avg > 0 && s.ok <= avg * 0.5 && <Badge tone="yellow">Ít ca</Badge>}{" "}
-                    {s.rej > 0 && <span className="text-ink/60">{s.rej} ca bị từ chối</span>}
+                    {s.rej > 0 && <span className="text-ink/60">{s.rej} ca bị từ chối</span>}{" "}
+                    {s.away.map(([st, n]) => (
+                      <span key={st} className="mr-1 rounded bg-[#dbeafe] px-1 text-[#1e40af]">⇄ {n} ca ở {st}</span>
+                    ))}
                   </td>
                 </tr>
               ))}

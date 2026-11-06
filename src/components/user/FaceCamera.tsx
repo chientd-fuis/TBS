@@ -32,7 +32,7 @@ export default function FaceCamera({
   onCapture,
   buttonLabel = "Chụp & xác nhận",
   disabled,
-  autoCapture = true,
+  autoCapture = false,
 }: {
   onCapture: (c: FaceCapture) => void | Promise<void>;
   buttonLabel?: string;

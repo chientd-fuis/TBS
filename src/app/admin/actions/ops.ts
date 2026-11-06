@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
 import {
   AdjustmentRequest,
@@ -18,7 +19,7 @@ import {
 import { assertAdmin } from "@/lib/guards";
 import { adminActor, type AdminSession } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
-import { assertNotLocked, computeFields, findShiftFor, storeTz } from "@/lib/attendance";
+import { assertNotLocked, computeFields, findShiftFor, payStoreOf, storeTz } from "@/lib/attendance";
 import { addDays, localMonth, zonedToDate } from "@/lib/time";
 import { generatePayroll, publishPayroll, updateItemExtras } from "@/lib/payroll";
 import { errMsg, num, str, type FormState } from "./types";
@@ -172,6 +173,8 @@ async function upsertAttendance(
     outTime: string;
     reason: string;
     source: "ADMIN_MANUAL" | "REQUEST";
+    /** cơ sở làm việc (đi hỗ trợ). Bỏ trống → theo ca đã xếp, không có ca thì cơ sở gốc */
+    workStoreId?: string;
   },
 ) {
   const user = await User.findById(opts.userId).lean();
@@ -182,20 +185,30 @@ async function upsertAttendance(
   if (opts.reason.length < 3) throw new Error("Bắt buộc nhập lý do");
 
   const existing = opts.id ? await Attendance.findById(opts.id) : null;
-  const storeId = existing?.storeId ?? user.storeId;
-  const tz = await storeTz(storeId);
+  const homeStoreId = existing ? payStoreOf(existing) : user.storeId;
+  let storeId = existing?.storeId ?? (opts.workStoreId ? new Types.ObjectId(opts.workStoreId) : user.storeId);
+  if (opts.workStoreId && !(await Store.exists({ _id: opts.workStoreId }))) throw new Error("Cơ sở làm việc không hợp lệ");
+  let tz = await storeTz(storeId);
   const checkInAt = opts.inTime ? zonedToDate(opts.date, opts.inTime, tz) : existing?.checkInAt;
   if (!checkInAt) throw new Error("Cần giờ vào");
+  if (!existing && !opts.workStoreId) {
+    // chấm hộ / duyệt yêu cầu: nếu hôm đó nhân viên có ca hỗ trợ ở cơ sở khác → ghi vào cơ sở đó
+    const any = await findShiftFor(opts.userId, checkInAt, tz);
+    if (any && String(any.a.storeId) !== String(storeId)) {
+      storeId = any.a.storeId;
+      tz = await storeTz(storeId);
+    }
+  }
   let checkOutAt: Date | null = opts.outTime ? zonedToDate(opts.date, opts.outTime, tz) : (existing?.checkOutAt ?? null);
   if (checkOutAt && checkOutAt <= checkInAt) checkOutAt = new Date(checkOutAt.getTime() + 24 * 3600_000); // qua đêm
   if (checkOutAt && checkOutAt.getTime() - checkInAt.getTime() > 24 * 3600_000) throw new Error("Lượt làm việc không quá 24 giờ");
 
   const month = localMonth(checkInAt, tz);
-  await assertNotLocked(storeId, month);
-  if (existing && existing.month !== month) await assertNotLocked(existing.storeId, existing.month);
+  await assertNotLocked(homeStoreId, month); // khoá theo bảng lương cơ sở gốc
+  if (existing && existing.month !== month) await assertNotLocked(homeStoreId, existing.month);
 
   // luôn tìm lại ca theo giờ vào mới (sửa ngày/giờ thì ca cũ có thể không còn đúng)
-  const shift = await findShiftFor(opts.userId, checkInAt, tz);
+  const shift = await findShiftFor(opts.userId, checkInAt, tz, storeId);
   const shiftAssignmentId = shift?.a._id ?? null;
   const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt });
   const status = checkOutAt ? "COMPLETED" : "OPEN";
@@ -208,6 +221,7 @@ async function upsertAttendance(
     ...fields,
     userId: opts.userId,
     storeId,
+    homeStoreId,
     checkInAt,
     checkOutAt,
     status,
@@ -259,6 +273,7 @@ export async function manualAttendance(_: FormState, fd: FormData): Promise<Form
       outTime: str(fd.get("outTime")),
       reason: str(fd.get("reason")),
       source: "ADMIN_MANUAL",
+      workStoreId: str(fd.get("workStoreId")) || undefined,
     });
     revalidatePath("/admin/attendance");
     return { ok: true };
@@ -297,7 +312,7 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
     if (reason.length < 3) return { error: "Nhập lý do xoá" };
     const a = await Attendance.findById(id);
     if (!a) return { error: "Không tìm thấy" };
-    await assertNotLocked(a.storeId, a.month);
+    await assertNotLocked(payStoreOf(a), a.month);
     await AttendanceAdjustment.create({ attendanceId: a._id, adminName: adminActor(admin).name, action: "DELETE", before: a.toObject(), reason });
     await audit(adminActor(admin), "attendance.delete", { type: "Attendance", id }, a.toObject(), { reason });
     await a.deleteOne();

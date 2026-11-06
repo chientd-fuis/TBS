@@ -26,6 +26,7 @@ export type CaptionData = {
   checkOutAt?: Date | null;
   coworkers?: string[];
   note?: string | null;
+  supportFrom?: string;
 };
 
 /** Nội dung tin nhắn Telegram của 1 lượt chốt ca (thuần – có unit test). */
@@ -42,7 +43,7 @@ export function formatCaption(d: CaptionData) {
     `🧾 CHỐT CA – ${d.storeName}`,
     `📅 ${weekdayVi(d.workDate)}, ${viDate(d.workDate)}`,
     shiftLine,
-    `👤 Người chốt: ${d.employeeName}${d.employeePhone ? ` · ${d.employeePhone}` : ""}`,
+    `👤 Người chốt: ${d.employeeName}${d.employeePhone ? ` · ${d.employeePhone}` : ""}${d.supportFrom ? ` (hỗ trợ từ ${d.supportFrom})` : ""}`,
     d.checkInAt
       ? `🕐 Vào ca ${hhmm(d.checkInAt)}${d.checkOutAt ? ` · Ra ca ${hhmm(d.checkOutAt)}` : ""} · Chốt lúc ${hhmm(d.createdAt)} (${worked}h)`
       : `🕐 Chốt lúc ${hhmm(d.createdAt)} (chưa có lượt check-in)`,
@@ -74,6 +75,7 @@ export async function buildCaption(closingId: string) {
     checkOutAt: c.checkOutAt,
     coworkers: c.coworkers,
     note: c.note,
+    supportFrom: user?.storeId && String(user.storeId) !== String(c.storeId) ? ((await Store.findById(user.storeId).select("name").lean())?.name ?? undefined) : undefined,
   });
 }
 

@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, LogIn, LogOut, MapPin, TriangleAlert } from "lucide-react";
 import { Alert, Button, Card } from "@/components/ui";
+import { cn } from "@/lib/format";
 import FaceCamera, { type FaceCapture } from "./FaceCamera";
 import { DeviceNotice } from "./DeviceNotice";
 import { fingerprint, useDevice } from "./useDevice";
@@ -16,6 +17,8 @@ type Result = {
   roundedHours?: number;
   shiftLabel?: string | null;
   outOfShift?: boolean;
+  storeName?: string;
+  support?: boolean;
 };
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -24,14 +27,22 @@ function getPosition(): Promise<GeolocationPosition> {
   );
 }
 
-export default function CheckInWidget({ openSince, storeName }: { openSince: string | null; storeName: string }) {
+export default function CheckInWidget({ openSince, storeName, supportNote }: { openSince: string | null; storeName: string; supportNote?: string }) {
   const router = useRouter();
   const device = useDevice();
-  const [step, setStep] = useState<"idle" | "locating" | "camera" | "sending" | "done">("idle");
+  const [step, setStep] = useState<"idle" | "locating" | "camera" | "sending">("idle");
   const [pos, setPos] = useState<GeolocationPosition | null>(null);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
-  const isCheckOut = !!openSince;
+  const [toasts, setToasts] = useState<{ id: number; tone: "ok" | "warn"; text: string }[]>([]);
+  const toast = useCallback((tone: "ok" | "warn", text: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((l) => [...l, { id, tone, text }]);
+    setTimeout(() => setToasts((l) => l.filter((x) => x.id !== id)), tone === "ok" ? 4000 : 7000);
+  }, []);
+  // sau khi chấm xong, cập nhật ngay trạng thái (không chờ trang tải lại)
+  const [localOpen, setLocalOpen] = useState<string | null | undefined>(undefined);
+  const openNow = localOpen !== undefined ? localOpen : openSince;
+  const isCheckOut = !!openNow;
 
   const start = async () => {
     setError("");
@@ -73,11 +84,22 @@ export default function CheckInWidget({ openSince, storeName }: { openSince: str
         setStep(j.code === "FACE_MISMATCH" ? "camera" : "idle");
         return;
       }
-      setResult(j);
-      setStep("done");
+      const res = j as Result;
+      const where = res.storeName ? ` · ${res.storeName}${res.support ? " (hỗ trợ)" : ""}` : "";
+      toast(
+        "ok",
+        res.action === "CHECK_IN"
+          ? `Check-in thành công lúc ${res.time}${where}${res.shiftLabel ? ` · Ca ${res.shiftLabel}` : ""}`
+          : `Check-out thành công lúc ${res.time}${where} · ${res.roundedHours ?? 0}h tính công`,
+      );
+      if (res.action === "CHECK_IN" && res.outOfShift) toast("warn", "Bạn đang chấm công ngoài ca (không có ca được xếp) – giờ làm vẫn được ghi nhận, nhớ CHECK-OUT khi về.");
+      if (res.action === "CHECK_IN" && res.lateMinutes) toast("warn", `Đi muộn ${res.lateMinutes} phút`);
+      if (res.earlyMinutes) toast("warn", `Về sớm ${res.earlyMinutes} phút`);
+      setLocalOpen(res.action === "CHECK_IN" ? res.time : null);
+      setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();
     },
-    [pos, router],
+    [pos, router, toast],
   );
 
   const deviceOk = device.state === "APPROVED";
@@ -92,32 +114,33 @@ export default function CheckInWidget({ openSince, storeName }: { openSince: str
         </Alert>
       )}
 
-      {step === "done" && result ? (
-        <Card>
-          <div className="space-y-2 text-center">
-            <CheckCircle2 className="mx-auto text-secondary" size={48} />
-            <p className="text-lg font-bold">
-              {result.action === "CHECK_IN" ? "Check-in" : "Check-out"} thành công lúc {result.time}
-            </p>
-            {result.shiftLabel && <p className="text-sm">Ca: {result.shiftLabel}</p>}
-            {result.outOfShift && result.action === "CHECK_IN" && <Alert tone="gray">Bạn không có ca được xếp – đã ghi nhận "Ngoài ca".</Alert>}
-            {!!result.lateMinutes && result.action === "CHECK_IN" && <Alert tone="orange">⚠️ Đi muộn {result.lateMinutes} phút</Alert>}
-            {!!result.earlyMinutes && <Alert tone="orange">⚠️ Về sớm {result.earlyMinutes} phút</Alert>}
-            {result.action === "CHECK_OUT" && (
-              <p className="text-sm">
-                Tổng: <b>{result.totalHours}h</b> · Giờ tính công: <b>{result.roundedHours}h</b>
-              </p>
-            )}
-            <Button variant="outline" onClick={() => { setStep("idle"); setResult(null); }}>Xong</Button>
-          </div>
-        </Card>
-      ) : step === "camera" || step === "sending" ? (
+      {/* Thông báo nổi trên đầu màn hình, tự ẩn – chạm để đóng */}
+      {toasts.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex flex-col items-center gap-2 px-4">
+          {toasts.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}
+              className={cn(
+                "pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-2xl px-4 py-3 text-left text-sm shadow-lg ring-1 animate-[tbs-toast_.25s_ease-out]",
+                t.tone === "ok" ? "bg-secondary text-white ring-secondary-dark" : "bg-[#fff4e5] text-warn ring-warn/40",
+              )}
+            >
+              {t.tone === "ok" ? <CheckCircle2 size={18} className="mt-0.5 shrink-0" /> : <TriangleAlert size={18} className="mt-0.5 shrink-0" />}
+              <span>{t.text}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {step === "camera" || step === "sending" ? (
         <Card>
           <p className="mb-2 flex items-center gap-1 text-xs text-ink/70">
             <MapPin size={14} /> Đã lấy vị trí (sai số ±{Math.round(pos?.coords.accuracy || 0)}m)
           </p>
           <FaceCamera
             onCapture={submit}
+            autoCapture={false}
             disabled={step === "sending"}
             buttonLabel={step === "sending" ? "Đang ghi nhận…" : isCheckOut ? "Chụp & Check-out" : "Chụp & Check-in"}
           />
@@ -127,8 +150,9 @@ export default function CheckInWidget({ openSince, storeName }: { openSince: str
         <Card>
           <div className="space-y-3 text-center">
             <p className="text-sm text-ink/70">{storeName}</p>
+            {supportNote && <Alert tone="blue">⇄ {supportNote}</Alert>}
             {isCheckOut ? (
-              <p>Bạn đang trong ca từ <b>{openSince}</b></p>
+              <p>Bạn đang trong ca từ <b>{openNow}</b></p>
             ) : (
               <p>Bạn chưa check-in</p>
             )}

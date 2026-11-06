@@ -103,7 +103,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                   const u = users.get(String(i.userId));
                   return (
                     <tr key={String(i._id)}>
-                      <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div></td>
+                      <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
                       <td className="text-right">{vnd(i.hourlyWage)}</td>
                       <td className="text-right">{vnd(i.basePay)}</td>

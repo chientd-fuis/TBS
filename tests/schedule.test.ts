@@ -82,3 +82,25 @@ test("giới hạn số ca/tuần & cảnh báo thiếu người", () => {
   assert.ok(Object.values(r.shiftCount).every((c) => c <= 3));
   assert.ok(r.slots.some((s) => s.level === "short"));
 });
+
+test("hỗ trợ cơ sở khác: không xếp trùng giờ với ca đang hỗ trợ nơi khác, có tính vào số ca", () => {
+  // An đang hỗ trợ cơ sở khác ca 07:00–12:00 thứ 2 → không được xếp ca S (08–13) thứ 2 ở đây
+  const plan = planAutoSchedule({
+    days,
+    templates: [S],
+    staff: [{ id: "An", name: "An" }, { id: "Binh", name: "Binh" }, { id: "Chi", name: "Chi" }],
+    entries: [],
+    history: noHist,
+    opts: { ...base, fillTo: "min", maxShiftsPerWeek: 7 },
+    external: [{ userId: "An", date: days[0], startTime: "07:00", endTime: "12:00" }],
+  });
+  const monAdds = plan.changes.filter((c) => c.date === days[0]).map((c) => c.userId).sort();
+  assert.deepEqual(monAdds, ["Binh", "Chi"]);
+  assert.ok(plan.shiftCount["An"] >= 1); // ca hỗ trợ được đếm
+});
+
+test("slotInterval với ngày ngoài tuần (ca qua đêm CN tuần trước)", () => {
+  const [s, e] = slotInterval(days, "2026-11-08", { startTime: "22:00", endTime: "02:00" });
+  assert.equal(s, -120);
+  assert.equal(e, 120);
+});

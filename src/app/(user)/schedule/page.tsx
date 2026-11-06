@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
 import { ShiftAssignment, ShiftTemplate, Store } from "@/lib/models";
-import { addDays, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekStartOf } from "@/lib/time";
+import { addDays, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekdayVi, weekStartOf } from "@/lib/time";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { Alert, Badge, Card, LinkButton } from "@/components/ui";
 import { cn } from "@/lib/format";
@@ -33,6 +33,30 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const tplDocs = await ShiftTemplate.find({ storeId: user.storeId, $or: [{ active: true }, { _id: { $in: mine.map((m) => m.shiftTemplateId) } }] })
     .sort({ startTime: 1 })
     .lean();
+  // ca được xếp đi hỗ trợ cơ sở khác (không nằm trong bảng ca của cơ sở gốc)
+  const supportShifts = mine
+    .filter((m) => String(m.storeId) !== String(user.storeId) && m.status !== "REJECTED")
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+  const supportStore = new Map(
+    (await Store.find({ _id: { $in: supportShifts.map((m) => m.storeId) } }).select("name").lean()).map((x) => [String(x._id), x.name]),
+  );
+  const supportList = (days: string[]) => {
+    const list = supportShifts.filter((m) => days.includes(m.date));
+    if (!list.length) return null;
+    return (
+      <div className="mt-2 rounded-xl bg-[#dbeafe] p-3 text-sm text-[#1e40af]">
+        <p className="mb-1 font-bold">⇄ Ca hỗ trợ cơ sở khác</p>
+        <ul className="space-y-0.5">
+          {list.map((m) => (
+            <li key={String(m._id)}>
+              {weekdayVi(m.date)} {m.date.slice(8)}/{m.date.slice(5, 7)} · {m.shiftName} {m.startTime}–{m.endTime} tại <b>{supportStore.get(String(m.storeId))}</b>
+              {m.status === "PENDING" && " (chờ duyệt)"}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
   const templates: GridTpl[] = tplDocs.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }));
   const at = (tplId: string, d: string) => mine.find((m) => String(m.shiftTemplateId) === tplId && m.date === d);
   const approvedCount = (days: string[]) => mine.filter((m) => days.includes(m.date) && (m.status ?? "APPROVED") === "APPROVED").length;
@@ -86,6 +110,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         <>
           <WeekNav ws={ws} href={(w) => `/schedule?week=${w}`} label={ws === weekStartOf(today) ? "Tuần này" : ws === nextWeek ? "Tuần sau" : undefined} />
           {templates.length === 0 ? <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert> : grid(ws)}
+          {supportList(weekDays(ws))}
           <p className="text-center text-sm">Tuần này bạn có <b>{approvedCount(weekDays(ws))}</b> ca đã duyệt.</p>
         </>
       ) : (
@@ -98,6 +123,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           {weeks.map((w) => (
             <Card key={w} title={<span className="text-sm">Tuần {w.slice(8)}/{w.slice(5, 7)} – {addDays(w, 6).slice(8)}/{addDays(w, 6).slice(5, 7)}</span>} actions={<Badge tone="green">{approvedCount(weekDays(w))} ca</Badge>}>
               {grid(w)}
+              {supportList(weekDays(w))}
             </Card>
           ))}
         </>

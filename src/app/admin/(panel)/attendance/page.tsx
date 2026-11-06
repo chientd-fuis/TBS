@@ -3,7 +3,8 @@ import { requireAdmin } from "@/lib/guards";
 import { Attendance, Store, User } from "@/lib/models";
 import { localDate, localMonth, localTime, viDate } from "@/lib/time";
 import { hoursVi } from "@/lib/format";
-import { isMonthLocked } from "@/lib/attendance";
+import { isMonthLocked, payStoreFilter } from "@/lib/attendance";
+import { labelSupport } from "@/lib/support";
 import { AttendanceTable, summarize, type AttRow } from "@/components/AttendanceTable";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ActionForm } from "@/components/ActionForm";
@@ -28,11 +29,22 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
   const locked = store ? await isMonthLocked(store._id, month) : false;
   const params = { store: String(store?._id), user: sp.user, status: sp.status };
 
-  const q: Record<string, unknown> = { storeId: store?._id, month };
+  // bảng chấm công theo cơ sở GỐC (khớp bảng lương): gồm cả giờ nhân viên đi hỗ trợ nơi khác
+  const q: Record<string, unknown> = { month, ...(store ? payStoreFilter(store._id) : {}) };
   if (selected) q.userId = selected._id;
   if (sp.status) q.status = sp.status;
-  const rows = await Attendance.find(q).sort({ checkInAt: 1 }).lean();
+  const rows = await labelSupport(await Attendance.find(q).sort({ checkInAt: 1 }).lean(), String(store?._id));
   const name = new Map(staff.map((u) => [String(u._id), u.name]));
+  // nhân viên cơ sở khác sang hỗ trợ tại cơ sở này (lương tính ở cơ sở gốc của họ)
+  const visitors = store
+    ? await labelSupport(
+        await Attendance.find({ storeId: store._id, month, homeStoreId: { $exists: true, $ne: store._id } }).sort({ checkInAt: 1 }).lean(),
+        String(store._id),
+      )
+    : [];
+  const visitorNames = new Map(
+    (await User.find({ _id: { $in: visitors.map((v) => v.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]),
+  );
 
   return (
     <>
@@ -107,16 +119,29 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
           />
         </Card>
       ) : (
-        <Card title="Tổng hợp tháng">
-          <SummaryTable rows={rows} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
-        </Card>
+        <>
+          <Card title="Tổng hợp tháng">
+            <SummaryTable rows={rows} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
+            {rows.some((r) => r.supportLabel) && <p className="mt-2 text-xs text-ink/60">Đã gồm giờ nhân viên đi hỗ trợ cơ sở khác (lương do {store?.name} trả).</p>}
+          </Card>
+          {visitors.length > 0 && (
+            <Card title={`Nhân viên cơ sở khác hỗ trợ tại ${store?.name} (${visitors.length} lượt)`}>
+              <p className="mb-2 text-xs text-ink/60">Chỉ để theo dõi – giờ công và lương tính ở bảng của cơ sở gốc.</p>
+              <AttendanceTable
+                rows={visitors as AttRow[]}
+                tz={tz}
+                actions={(r) => <span className="text-xs font-semibold">{visitorNames.get(String((r as AttRow & { userId: unknown }).userId))}</span>}
+              />
+            </Card>
+          )}
+        </>
       )}
 
       {!locked && (
         <Card title="Chấm công hộ">
           <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">
             <p className="text-xs text-ink/70">Dùng khi nhân viên không chấm được (hỏng điện thoại, hết pin, lỗi camera/GPS…). Không cần nhân viên xác nhận. Bản ghi có nhãn &quot;Chấm hộ&quot;.</p>
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-5">
               <Field label="Nhân viên">
                 <Select name="userId" defaultValue={sp.user || ""} required>
                   <option value="">— Chọn —</option>
@@ -126,6 +151,12 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
               <Field label="Ngày"><Input type="date" name="date" defaultValue={localDate(new Date(), tz)} required /></Field>
               <Field label="Giờ vào"><TimeInput seconds name="inTime" required /></Field>
               <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><TimeInput seconds name="outTime" /></Field>
+              <Field label="Làm tại" hint="Đi hỗ trợ thì chọn cơ sở đó">
+                <Select name="workStoreId" defaultValue="">
+                  <option value="">Tự nhận (theo ca / cơ sở gốc)</option>
+                  {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name}</option>)}
+                </Select>
+              </Field>
             </div>
             <Field label="Lý do (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
           </ActionForm>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
 import { Attendance, AttendanceAdjustment, Store, User } from "@/lib/models";
 import { localTime, viDate, viDateTime } from "@/lib/time";
-import { isMonthLocked } from "@/lib/attendance";
+import { isMonthLocked, payStoreOf } from "@/lib/attendance";
 import { AttendanceTable, type AttRow } from "@/components/AttendanceTable";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Card, Field, Input, PageTitle, Textarea } from "@/components/ui";
@@ -23,7 +23,7 @@ export default async function EditAttendance({ params }: { params: Promise<{ id:
     AttendanceAdjustment.find({ attendanceId: a._id }).sort({ createdAt: -1 }).lean(),
   ]);
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
-  const locked = await isMonthLocked(a.storeId, a.month);
+  const locked = await isMonthLocked(payStoreOf(a), a.month);
   const back = `/admin/attendance?store=${a.storeId}&user=${a.userId}&month=${a.month}`;
   return (
     <>

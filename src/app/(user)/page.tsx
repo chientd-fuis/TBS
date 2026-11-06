@@ -15,10 +15,29 @@ export default async function HomePage() {
   const today = localDate(new Date(), tz);
   const shifts = await ShiftAssignment.find({ userId: user._id, date: today, ...APPROVED_SHIFT }).sort({ startTime: 1 }).lean();
   const todayAtts = await Attendance.find({ userId: user._id, workDate: today }).sort({ checkInAt: 1 }).lean();
+  // tên các cơ sở khác (ca hỗ trợ / lượt chấm công ở cơ sở khác)
+  const otherIds = [...shifts.map((s) => String(s.storeId)), ...todayAtts.map((a) => String(a.storeId)), ...(open ? [String(open.storeId)] : [])].filter(
+    (id) => id !== String(user.storeId),
+  );
+  const otherNames = new Map(
+    (await Store.find({ _id: { $in: [...new Set(otherIds)] } }).select("name").lean()).map((x) => [String(x._id), x.name]),
+  );
+  const supportOf = (storeId: unknown) => otherNames.get(String(storeId));
+  const supportToday = [...new Set(shifts.map((s) => supportOf(s.storeId)).filter(Boolean))] as string[];
 
   return (
     <>
-      <CheckInWidget openSince={open ? localTime(open.checkInAt, tz) : null} storeName={store?.name || ""} />
+      <CheckInWidget
+        openSince={open ? localTime(open.checkInAt, tz) : null}
+        storeName={(open && supportOf(open.storeId)) || store?.name || ""}
+        supportNote={
+          open && supportOf(open.storeId)
+            ? `Bạn đang hỗ trợ ${supportOf(open.storeId)} – check-out tại đó`
+            : supportToday.length
+              ? `Hôm nay bạn có ca hỗ trợ ở ${supportToday.join(", ")} – tới đó bấm CHECK-IN, app tự nhận cơ sở theo GPS`
+              : undefined
+        }
+      />
       <Link
         href="/closing"
         className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
@@ -34,8 +53,9 @@ export default async function HomePage() {
           <p className="font-semibold text-accent">Ca được xếp</p>
           {shifts.length ? (
             shifts.map((s) => (
-              <p key={String(s._id)}>
-                {s.shiftName}: {s.startTime} – {s.endTime}
+              <p key={String(s._id)} className="flex flex-wrap items-center gap-2">
+                <span>{s.shiftName}: {s.startTime} – {s.endTime}</span>
+                {supportOf(s.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(s.storeId)}</Badge>}
               </p>
             ))
           ) : (
@@ -52,6 +72,7 @@ export default async function HomePage() {
                 {!!a.lateMinutes && <Badge tone="orange">Muộn {a.lateMinutes}&apos;</Badge>}
                 {!!a.earlyMinutes && <Badge tone="orange">Sớm {a.earlyMinutes}&apos;</Badge>}
                 {a.source === "ADMIN_MANUAL" && <Badge tone="green">Chấm hộ</Badge>}
+                {supportOf(a.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(a.storeId)}</Badge>}
               </div>
             ))
           ) : (

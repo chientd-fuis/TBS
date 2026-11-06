@@ -170,7 +170,9 @@ export const APPROVED_SHIFT = { status: { $nin: ["PENDING", "REJECTED"] } } as c
 const AttendanceSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true }, // cơ sở làm việc thực tế
+    // cơ sở gốc của nhân viên (trả lương). Khác storeId = đi HỖ TRỢ cơ sở khác. Bản ghi cũ không có → = storeId
+    homeStoreId: { type: Schema.Types.ObjectId, ref: "Store" },
     workDate: { type: String, required: true }, // YYYY-MM-DD theo giờ cơ sở (ngày check-in)
     month: { type: String, required: true }, // YYYY-MM
     shiftAssignmentId: { type: Schema.Types.ObjectId, ref: "ShiftAssignment" },
@@ -206,6 +208,7 @@ const AttendanceSchema = new Schema(
 );
 AttendanceSchema.index({ userId: 1, checkInAt: -1 });
 AttendanceSchema.index({ storeId: 1, month: 1 });
+AttendanceSchema.index({ homeStoreId: 1, month: 1 });
 AttendanceSchema.index({ userId: 1, month: 1 });
 // Mỗi nhân viên chỉ có 1 lượt đang mở → chống chấm trùng / ghi đồng thời
 AttendanceSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: "OPEN" }, name: "one_open_per_user" });
@@ -359,6 +362,8 @@ const PayrollItemSchema = new Schema(
     netPay: { type: Number, default: 0 },
     lateCount: { type: Number, default: 0 },
     earlyCount: { type: Number, default: 0 },
+    supportHours: { type: Number, default: 0 }, // trong tổng giờ: số giờ đi hỗ trợ cơ sở khác
+    supportNote: String, // VD "TBS Văn Phú 8h"
   },
   { timestamps: true },
 );

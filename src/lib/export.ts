@@ -140,7 +140,17 @@ export async function buildExport(f: ExportFilter) {
   const used = new Set<string>();
 
   if (f.type === "chamcong" || f.type === "tonghop") {
-    const atts = await Attendance.find({ storeId: { $in: storeIds }, userId: { $in: userIds }, month: { $in: ms } }).sort({ checkInAt: 1 }).lean();
+    // theo cơ sở trả lương (gồm giờ đi hỗ trợ cơ sở khác)
+    const atts = await Attendance.find({
+      userId: { $in: userIds },
+      month: { $in: ms },
+      $or: [{ homeStoreId: { $in: storeIds } }, { homeStoreId: { $exists: false }, storeId: { $in: storeIds } }, { homeStoreId: null, storeId: { $in: storeIds } }],
+    })
+      .sort({ checkInAt: 1 })
+      .lean();
+    const allStoreNames = new Map((await Store.find().select("name").lean()).map((x) => [String(x._id), x.name]));
+    const supportNote = (a: { storeId: unknown; homeStoreId?: unknown }) =>
+      a.homeStoreId && String(a.homeStoreId) !== String(a.storeId) ? `Hỗ trợ tại ${allStoreNames.get(String(a.storeId)) ?? "?"}` : "";
     const summary = makeSheet(wb, sheetName("Summary", used), "Tổng hợp chấm công", meta, [
       { header: "Nhân viên", key: "name", width: 24 },
       { header: "Cơ sở", key: "store", width: 18 },
@@ -199,7 +209,7 @@ export async function buildExport(f: ExportFilter) {
               a.lateMinutes || null,
               a.earlyMinutes || null,
               a.source === "ADMIN_MANUAL" ? "Chấm hộ" : a.source === "REQUEST" ? "Điều chỉnh" : "Tự chấm",
-              [a.source === "ADMIN_MANUAL" ? `Chấm hộ bởi ${a.createdByAdminName}: ${a.manualReason}` : "", a.status === "MISSING_CHECKOUT" ? "Quên check-out" : "", a.note || ""]
+              [supportNote(a), a.source === "ADMIN_MANUAL" ? `Chấm hộ bởi ${a.createdByAdminName}: ${a.manualReason}` : "", a.status === "MISSING_CHECKOUT" ? "Quên check-out" : "", a.note || ""]
                 .filter(Boolean)
                 .join(" | "),
             ],
@@ -304,7 +314,9 @@ export async function buildExport(f: ExportFilter) {
     for (const m of ms) {
       const { first, last } = monthRange(m);
       const days = daysOfMonth(m);
-      const list = await ShiftAssignment.find({ storeId: { $in: storeIds }, userId: { $in: userIds }, date: { $gte: first, $lte: last }, ...APPROVED_SHIFT }).lean();
+      // gồm cả ca đi hỗ trợ cơ sở khác của nhân viên
+      const list = await ShiftAssignment.find({ userId: { $in: userIds }, date: { $gte: first, $lte: last }, ...APPROVED_SHIFT }).lean();
+      const otherStoreNames = new Map((await Store.find().select("name").lean()).map((x) => [String(x._id), x.name]));
       const s = makeSheet(wb, sheetName(`Lịch ca ${m}`, used), `Lịch ca tháng ${viMonth(m)}`, meta, [
         { header: "Nhân viên", key: "n", width: 22 },
         ...days.map((d) => ({ header: d.slice(8, 10), key: d, width: 11 })),
@@ -312,7 +324,7 @@ export async function buildExport(f: ExportFilter) {
       for (const u of users) {
         const mine = list.filter((a) => String(a.userId) === String(u._id));
         if (!mine.length) continue;
-        const row = s.add([u.name, ...days.map((d) => mine.filter((a) => a.date === d).map((a) => `${a.shiftName} ${a.startTime}-${a.endTime}`).join("\n") || null)]);
+        const row = s.add([u.name, ...days.map((d) => mine.filter((a) => a.date === d).map((a) => `${a.shiftName} ${a.startTime}-${a.endTime}${storeIds.some((x) => String(x) === String(a.storeId)) ? "" : ` (HT ${otherStoreNames.get(String(a.storeId)) ?? ""})`}`).join("\n") || null)]);
         row.alignment = { wrapText: true, vertical: "top" };
       }
       s.finish();

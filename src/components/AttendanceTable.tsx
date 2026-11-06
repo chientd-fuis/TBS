@@ -24,6 +24,8 @@ export type AttRow = {
   checkOutPhotoId?: string | null;
   checkInPendingPhotoId?: unknown;
   checkOutPendingPhotoId?: unknown;
+  /** "Hỗ trợ tại X" / "Hỗ trợ từ Y" – xem lib/support.labelSupport */
+  supportLabel?: string;
 };
 
 /** Bảng chấm công theo mẫu: Ngày | Giờ Đến | Giờ Về | Tổng | Format | Giờ tính công | Ca | Cảnh báo | Ảnh | Ghi chú (spec 5) */
@@ -88,6 +90,7 @@ export function AttendanceTable({ rows, tz, actions }: { rows: AttRow[]; tz: str
                   )}
                 </td>
                 <td className="min-w-40 text-xs">
+                  {r.supportLabel && <><Badge tone="blue">⇄ {r.supportLabel}</Badge>{" "}</>}
                   {r.source === "ADMIN_MANUAL" && (
                     <span>
                       <Badge tone="green">Chấm hộ</Badge> bởi {r.createdByAdminName}: {r.manualReason}

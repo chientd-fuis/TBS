@@ -59,7 +59,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
-type Tone = "yellow" | "green" | "orange" | "red" | "gray" | "pink";
+type Tone = "yellow" | "green" | "orange" | "red" | "gray" | "pink" | "blue";
 const tones: Record<Tone, string> = {
   yellow: "bg-primary-light text-ink",
   green: "bg-[#e3f3e7] text-secondary-dark",
@@ -67,6 +67,7 @@ const tones: Record<Tone, string> = {
   red: "bg-[#fde2e2] text-danger",
   gray: "bg-gray-100 text-gray-600",
   pink: "bg-[#fbe4df] text-accent",
+  blue: "bg-[#dbeafe] text-[#1e40af]",
 };
 export function Badge({ tone = "gray", children }: { tone?: Tone; children: ReactNode }) {
   return <span className={cn("inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap", tones[tone])}>{children}</span>;

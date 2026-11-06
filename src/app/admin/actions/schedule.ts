@@ -5,8 +5,9 @@ import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { isYmd, weekStartOf } from "@/lib/time";
-import { planAutoSchedule, slotInterval, type AutoOptions, type PlanChange } from "@/lib/schedule";
+import { planAutoSchedule, type AutoOptions, type PlanChange } from "@/lib/schedule";
 import { loadHistory, loadWeek } from "@/lib/schedule-data";
+import { findShiftClash } from "@/lib/support";
 
 /* Xếp ca theo tuần (spec 3.2.1): duyệt đăng ký, xếp tay, xếp tự động. Gọi trực tiếp từ client. */
 
@@ -40,22 +41,11 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
     if (!isYmd(date)) return { error: "Ngày không hợp lệ" };
     const tpl = await ShiftTemplate.findOne({ _id: tplId, storeId }).lean();
     if (!tpl) return { error: "Ca không thuộc cơ sở này" };
-    const user = await User.findOne({ _id: userId, status: "ACTIVE" }).select("name").lean();
+    const user = await User.findOne({ _id: userId, status: "ACTIVE" }).select("name storeId").lean();
     if (!user) return { error: "Nhân viên không hợp lệ" };
-    // cảnh báo trùng giờ với ca khác đã duyệt cùng ngày / ngày trước (ca qua đêm)
-    const week = await loadWeek(storeId, weekStartOf(date));
-    const t = week.templates.find((x) => x.id === tplId);
-    if (t) {
-      const [s, e] = slotInterval(week.days, date, t);
-      const clash = week.entries.some((x) => {
-        if (x.userId !== userId || x.status !== "APPROVED" || (x.tplId === tplId && x.date === date)) return false;
-        const o = week.templates.find((y) => y.id === x.tplId);
-        if (!o) return false;
-        const [a, b] = slotInterval(week.days, x.date, o);
-        return s < b && a < e;
-      });
-      if (clash) return { error: `${user.name} đã có ca khác trùng giờ` };
-    }
+    // không xếp trùng giờ với ca đã duyệt khác – ở cơ sở này hoặc cơ sở khác (đi hỗ trợ)
+    const clash = await findShiftClash(userId, date, tpl.startTime, tpl.endTime, { tplId, date });
+    if (clash) return { error: `${user.name} đã có ca trùng giờ: ${clash}` };
     await ShiftAssignment.updateOne(
       { userId, date, shiftTemplateId: tplId },
       {
@@ -64,7 +54,11 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
       },
       { upsert: true },
     );
-    await audit(actor, "schedule.add", { type: "ShiftTemplate", id: tplId }, null, { userId, date });
+    await audit(actor, "schedule.add", { type: "ShiftTemplate", id: tplId }, null, {
+      userId,
+      date,
+      ...(String(user.storeId) !== storeId ? { support: true, fromStoreId: String(user.storeId) } : {}),
+    });
     revalidatePath(path(storeId));
     return { ok: true };
   } catch (e) {
@@ -113,7 +107,7 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
     if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
     const week = await loadWeek(storeId, weekStart);
     const history = await loadHistory(storeId, weekStart);
-    const plan = planAutoSchedule({ days: week.days, templates: week.templates, staff: week.staff, entries: week.entries, history, opts });
+    const plan = planAutoSchedule({ days: week.days, templates: week.templates, staff: week.staff, entries: week.entries, history, opts, external: week.external });
     const tplName = (id: string) => week.templates.find((t) => t.id === id)?.name ?? "?";
     const view: PlanView = {
       changes: plan.changes.map((c) => ({ ...c, userName: week.names[c.userId] ?? "?", tplName: tplName(c.tplId) })),

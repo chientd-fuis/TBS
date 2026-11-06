@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, WageHistory } from "./models";
 import { computePay } from "./calc";
+import { payStoreFilter } from "./attendance";
 import { localDate, localMonth, nextMonth, prevMonth } from "./time";
 
 /* Bảng lương tháng – spec 3.7 */
@@ -20,8 +21,11 @@ export async function generatePayroll(storeId: string, month: string) {
   if (!payroll) payroll = await Payroll.create({ storeId, month, status: "DRAFT" });
   if (payroll.status !== "DRAFT") return payroll;
 
-  const atts = await Attendance.find({ storeId, month, status: "COMPLETED" }).lean();
+  const atts = await Attendance.find({ month, status: "COMPLETED", ...payStoreFilter(storeId) }).lean();
   const bps = await BonusPenalty.find({ storeId, month }).lean();
+  const supportStores = new Map(
+    (await Store.find({ _id: { $in: [...new Set(atts.filter((a) => String(a.storeId) !== storeId).map((a) => a.storeId))] } }).select("name").lean()).map((s) => [String(s._id), s.name]),
+  );
   const userIds = new Set<string>([...atts.map((a) => String(a.userId)), ...bps.map((b) => String(b.userId))]);
   // nhân viên đang làm tại cơ sở cũng có dòng (0 giờ)
   const staff = await User.find({ storeId, status: "ACTIVE" }).select("_id").lean();
@@ -29,6 +33,15 @@ export async function generatePayroll(storeId: string, month: string) {
 
   const existing = await PayrollItem.find({ payrollId: payroll._id }).lean();
   const keep = new Map(existing.map((i) => [String(i.userId), i]));
+
+  // giờ đi hỗ trợ cơ sở khác (vẫn do cơ sở gốc trả lương)
+  const support = (list: typeof atts) => {
+    const by = new Map<string, number>();
+    for (const a of list) if (String(a.storeId) !== storeId) by.set(String(a.storeId), (by.get(String(a.storeId)) ?? 0) + (a.roundedHours || 0));
+    const supportHours = [...by.values()].reduce((x, y) => x + y, 0);
+    const supportNote = [...by].map(([id, h]) => `${supportStores.get(id) ?? "?"} ${h}h`).join(", ");
+    return { supportHours, supportNote };
+  };
 
   for (const uid of userIds) {
     const user = await User.findById(uid).lean();
@@ -60,6 +73,7 @@ export async function generatePayroll(storeId: string, month: string) {
           advance,
           lateCount: myAtts.filter((a) => (a.lateMinutes || 0) > 0).length,
           earlyCount: myAtts.filter((a) => (a.earlyMinutes || 0) > 0).length,
+          ...support(myAtts),
         },
       },
       { upsert: true },

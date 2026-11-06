@@ -8,6 +8,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui";
 import { submitAdjustment } from "../actions";
 import TimeInput from "@/components/TimeInput";
+import { labelSupport } from "@/lib/support";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const { month: m } = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : localMonth(new Date(), tz);
   const today = localDate(new Date(), tz);
-  const rows = await Attendance.find({ userId: user._id, month }).sort({ checkInAt: 1 }).lean();
+  const rows = await labelSupport(await Attendance.find({ userId: user._id, month }).sort({ checkInAt: 1 }).lean());
   const sum = summarize(rows);
   const requests = await AdjustmentRequest.find({ userId: user._id }).sort({ createdAt: -1 }).limit(10).lean();
 

@@ -25,7 +25,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   const thisWeek = weekStartOf(today);
   return (
     <>
-      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · đỏ = thiếu người · vàng = ít người">
+      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · đỏ = thiếu người · vàng = ít người · xanh dương = hỗ trợ từ cơ sở khác">
         <Link href="/admin/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
       <div className="flex flex-wrap items-center gap-2">
@@ -57,6 +57,9 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           entries={data.entries}
           staff={data.staff}
           names={data.names}
+          supportFrom={data.supportFrom}
+          external={data.external}
+          otherStaff={data.otherStaff}
           isPast={addDays(ws, 6) < today}
         />
       )}
