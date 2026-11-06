@@ -6,9 +6,9 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 
 | Nhóm | Chức năng | Spec |
 |---|---|---|
-| Nhân viên | Đăng nhập Google, đăng ký cơ sở + chụp ảnh khuôn mặt mẫu, chờ duyệt | 4.1 |
+| Nhân viên | Đăng nhập Google, đăng ký cơ sở (không cần ảnh khuôn mặt), chờ duyệt | 4.1 |
 | | Ràng buộc thiết bị (deviceId cookie + localStorage + fingerprint), yêu cầu đổi thiết bị | 4.1.1 |
-| | Chấm công: kiểm tra thiết bị → GPS (bán kính, sai số) → camera + chớp mắt (liveness) + so khớp khuôn mặt → giờ server | 4.2 |
+| | Chấm công: kiểm tra thiết bị → GPS (bán kính, sai số) → camera: có khuôn mặt trong khung (vòng xanh) là tự chụp – không so khớp ảnh mẫu → giờ server | 4.2 |
 | | Làm tròn giờ công (bước 0,5h, làm tròn xuống, có tuỳ chọn dung sai), cảnh báo đi muộn / về sớm theo ca | 4.3, 4.4 |
 | | Xem chấm công tháng, lịch ca, bảng lương (sau khi công bố), gửi yêu cầu điều chỉnh, khiếu nại lương | 4.5, 4.6 |
 | | Đăng ký ca theo tuần (chỉ tuần tương lai), xem lịch của mình dạng bảng ca × ngày theo tuần / tháng | 4.7 |
@@ -28,7 +28,7 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 ## Cài đặt
 
 ### 1. Yêu cầu
-- Node.js **20.9+** (khuyến nghị 22 LTS – đã test 22). Kiểm tra: `node -v`
+- Node.js **22 LTS** (bắt buộc 22.x – file `.nvmrc`). Kiểm tra: `node -v`. Dùng nvm-windows: `nvm install 22` → `nvm use 22`
 - MongoDB Atlas (hoặc MongoDB 6+)
 - Google Cloud project
 
@@ -99,7 +99,7 @@ public/models/         # model nhận diện khuôn mặt (face-api) – tự ho
 ```
 
 ## Ghi chú kỹ thuật
-- **Nhận diện khuôn mặt** chạy trên trình duyệt (`@vladmandic/face-api`: TinyFaceDetector + 68 landmarks + FaceRecognitionNet). Server so khoảng cách descriptor với ảnh mẫu (ngưỡng mặc định 0,5). Liveness: bắt buộc chớp mắt (EAR). Không có chức năng upload ảnh.
+- **Khuôn mặt** chỉ dùng để *phát hiện có người* trong khung, chạy trên trình duyệt (`@vladmandic/face-api` – TinyFaceDetector). Không đăng ký ảnh mẫu, không so khớp, không bắt chớp mắt. Khuôn mặt ở trong khung ~0,8s → tự chụp; ảnh lưu Drive để admin đối chiếu. Không có chức năng upload ảnh.
 - **Chống chấm trùng**: unique partial index "1 lượt OPEN / nhân viên" + check-out dùng `findOneAndUpdate` có điều kiện + chặn check-out trong N phút sau check-in.
 - **Làm tròn**: mặc định làm tròn xuống tuyệt đối (14h55' → 14,5). Dữ liệu sheet cũ có dung sai ~5 phút (14h55' → 15) → chỉnh "Dung sai làm tròn" trong Cài đặt nếu muốn giữ cách cũ.
 - **Khoá tháng**: bảng lương đã công bố/đã trả → không chấm hộ, sửa chấm công, thêm/xoá thưởng phạt cho tháng đó. Mở khoá thì cron ngày 5 không tự công bố lại.

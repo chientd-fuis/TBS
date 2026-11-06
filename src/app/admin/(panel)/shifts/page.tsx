@@ -5,6 +5,7 @@ import { addDays, localDate, viDate } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { assignShifts, copyPrevWeek, removeAssignment, saveShiftTemplate } from "../../actions/ops";
+import TimeInput from "@/components/TimeInput";
 
 export const dynamic = "force-dynamic";
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -50,8 +51,8 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
                   <input type="hidden" name="id" value={String(t._id)} />
                   <input type="hidden" name="storeId" value={String(store._id)} />
                   <Input name="name" defaultValue={t.name} className="w-28" />
-                  <Input type="time" name="startTime" defaultValue={t.startTime} className="w-28" />
-                  <Input type="time" name="endTime" defaultValue={t.endTime} className="w-28" />
+                  <TimeInput name="startTime" defaultValue={t.startTime} className="w-28" />
+                  <TimeInput name="endTime" defaultValue={t.endTime} className="w-28" />
                   <Select name="active" defaultValue={t.active ? "on" : "off"} className="w-24">
                     <option value="on">Dùng</option>
                     <option value="off">Ẩn</option>
@@ -65,8 +66,8 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
             <input type="hidden" name="storeId" value={String(store._id)} />
             <Field label="Tên ca"><Input name="name" placeholder="VD: Ca sáng" required /></Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Bắt đầu"><Input type="time" name="startTime" required /></Field>
-              <Field label="Kết thúc"><Input type="time" name="endTime" required /></Field>
+              <Field label="Bắt đầu"><TimeInput name="startTime" required /></Field>
+              <Field label="Kết thúc"><TimeInput name="endTime" required /></Field>
             </div>
           </ActionForm>
         </Card>

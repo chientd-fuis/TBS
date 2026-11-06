@@ -39,7 +39,7 @@ export function Card({ className, children, title, actions }: { className?: stri
 }
 
 const inputCls =
-  "w-full rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 text-sm outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary/40";
+  "block w-full min-w-0 max-w-full rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 text-sm outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary/40";
 export function Input(p: ComponentProps<"input">) {
   return <input {...p} className={cn(inputCls, p.className)} />;
 }
@@ -51,7 +51,7 @@ export function Textarea(p: ComponentProps<"textarea">) {
 }
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
-    <label className="block space-y-1">
+    <label className="block min-w-0 space-y-1">
       <span className="text-xs font-semibold text-accent">{label}</span>
       {children}
       {hint && <span className="block text-xs text-ink/60">{hint}</span>}

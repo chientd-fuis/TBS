@@ -63,9 +63,7 @@ export default function CheckInWidget({ openSince, storeName }: { openSince: str
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
-          descriptor: c.descriptor,
           photo: c.photo,
-          blinked: true,
           fingerprint: await fingerprint().catch(() => undefined),
         }),
       });

@@ -11,6 +11,7 @@ import { Alert, Badge, Card, Empty, Field, Input, LinkButton, PageTitle, Select,
 import { manualAttendance } from "../../actions/ops";
 import QuickEdit from "./QuickEdit";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
+import TimeInput from "@/components/TimeInput";
 
 export const dynamic = "force-dynamic";
 
@@ -123,8 +124,8 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
                 </Select>
               </Field>
               <Field label="Ngày"><Input type="date" name="date" defaultValue={localDate(new Date(), tz)} required /></Field>
-              <Field label="Giờ vào"><Input type="time" name="inTime" step={1} required /></Field>
-              <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><Input type="time" name="outTime" step={1} /></Field>
+              <Field label="Giờ vào"><TimeInput seconds name="inTime" required /></Field>
+              <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><TimeInput seconds name="outTime" /></Field>
             </div>
             <Field label="Lý do (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
           </ActionForm>

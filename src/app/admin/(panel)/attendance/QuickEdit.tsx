@@ -3,6 +3,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Alert, Button, Field, Input, Textarea } from "@/components/ui";
 import { editAttendance } from "../../actions/ops";
+import TimeInput from "@/components/TimeInput";
 
 /**
  * Sửa nhanh giờ vào / giờ ra ngay trên bảng chấm công (spec 7.1).
@@ -53,8 +54,8 @@ export default function QuickEdit({
             <input type="hidden" name="id" value={id} />
             <Field label="Ngày"><Input type="date" name="date" defaultValue={date} /></Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Giờ vào"><Input type="time" step={1} name="inTime" defaultValue={inTime} required /></Field>
-              <Field label="Giờ ra"><Input type="time" step={1} name="outTime" defaultValue={outTime} autoFocus={missingOut} /></Field>
+              <Field label="Giờ vào"><TimeInput seconds name="inTime" defaultValue={inTime} required /></Field>
+              <Field label="Giờ ra"><TimeInput seconds name="outTime" defaultValue={outTime} autoFocus={missingOut} /></Field>
             </div>
             <p className="text-[11px] text-ink/60">Giờ ra nhỏ hơn giờ vào = ca qua đêm (tự cộng sang ngày hôm sau).</p>
             <Field label="Lý do sửa (bắt buộc)"><Textarea name="reason" rows={2} required placeholder="VD: NV quên check-out, ra về lúc 22:00" /></Field>

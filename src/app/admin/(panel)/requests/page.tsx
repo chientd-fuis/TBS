@@ -4,6 +4,7 @@ import { viDate, viDateTime, viMonth } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
 import { replyFeedback, resolveAdjustment } from "../../actions/ops";
+import TimeInput from "@/components/TimeInput";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +38,8 @@ export default async function RequestsPage() {
                   <ActionForm action={resolveAdjustment} submitLabel="Duyệt & ghi nhận" variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
                     <input type="hidden" name="id" value={String(r._id)} />
                     <input type="hidden" name="op" value="approve" />
-                    <Input type="time" name="inTime" defaultValue={r.checkInTime} className="w-28" title="Giờ vào" />
-                    <Input type="time" name="outTime" defaultValue={r.checkOutTime} className="w-28" title="Giờ ra" />
+                    <TimeInput name="inTime" defaultValue={r.checkInTime} className="w-28" title="Giờ vào" />
+                    <TimeInput name="outTime" defaultValue={r.checkOutTime} className="w-28" title="Giờ ra" />
                     <Input name="reply" placeholder="Ghi chú" className="w-40" />
                   </ActionForm>
                   <ActionForm action={resolveAdjustment} submitLabel="Từ chối" variant="outline" successText="" className="flex items-end gap-1">

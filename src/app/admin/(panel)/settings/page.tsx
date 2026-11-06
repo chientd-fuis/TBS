@@ -78,7 +78,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <Field label="Chặn check-out trong (phút) sau check-in"><Input name="minCheckoutMinutes" defaultValue={s.minCheckoutMinutes} /></Field>
               <Field label="Coi là quên check-out sau (giờ)"><Input name="missingCheckoutHours" defaultValue={s.missingCheckoutHours} /></Field>
               <Field label="Số thiết bị tối đa / nhân viên"><Input name="maxDevicesPerUser" defaultValue={s.maxDevicesPerUser} /></Field>
-              <Field label="Ngưỡng khớp khuôn mặt" hint="Khoảng cách tối đa, nhỏ hơn = chặt hơn (0,5)"><Input name="faceMatchThreshold" defaultValue={s.faceMatchThreshold} /></Field>
               <Field label="Sai số GPS tối đa (m)"><Input name="maxGpsAccuracyM" defaultValue={s.maxGpsAccuracyM} /></Field>
               <Field label="Phiên admin hết hạn sau (ngày)"><Input name="adminSessionDays" defaultValue={s.adminSessionDays} /></Field>
             </fieldset>

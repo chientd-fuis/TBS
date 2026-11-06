@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
-import { FaceProfile, Store, User } from "@/lib/models";
+import { Store, User } from "@/lib/models";
 import { encrypt } from "@/lib/crypto";
-import { savePhoto } from "@/lib/drive";
-import { localMonth } from "@/lib/time";
-import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
+import { HttpError, jsonError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 
 const Body = z.object({
@@ -15,8 +13,6 @@ const Body = z.object({
   bankName: z.string().trim().max(60).default(""),
   bankAccount: z.string().trim().max(30).default(""),
   consent: z.literal(true),
-  descriptor: z.array(z.number()).length(128),
-  photo: z.string(),
 });
 
 /** Đăng ký vào cửa hàng lần đầu (spec 4.1). */
@@ -46,19 +42,6 @@ export async function POST(req: Request) {
         },
         $unset: { rejectReason: 1 },
       },
-    );
-    const photo = await savePhoto(dataUrlToBuffer(b.photo), {
-      storeId: String(store._id),
-      userId: String(user._id),
-      userFolderName: b.name,
-      month: "Ảnh đăng ký",
-      fileName: `face_${localMonth(new Date(), store.timezone || undefined)}_${user._id}.jpg`,
-      target: `face:${user._id}`,
-    });
-    await FaceProfile.updateOne(
-      { userId: user._id },
-      { $set: { descriptor: b.descriptor, imageDriveId: photo.driveId, pendingPhotoId: photo.pendingId } },
-      { upsert: true },
     );
     await audit({ kind: "USER", name: user.email }, "user.register", { type: "User", id: String(user._id) }, null, {
       storeId: String(store._id),

@@ -23,12 +23,12 @@ export default async function ApprovalsPage() {
           return (
             <Card key={String(u._id)}>
               <div className="flex gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <div className="relative shrink-0">
-                  <img src={`/api/photo?face=${u._id}`} alt="Ảnh khuôn mặt" className="h-24 w-24 rounded-xl bg-cream object-cover" />
-                  {u.avatar && (
+                <div className="shrink-0">
+                  {u.avatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={u.avatar} alt="Avatar Google" title="Avatar Google" className="absolute -right-2 -bottom-2 h-9 w-9 rounded-full ring-2 ring-white" />
+                    <img src={u.avatar} alt="Avatar Google" title="Avatar Google" className="h-16 w-16 rounded-full bg-cream object-cover" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-cream text-2xl font-bold">{u.name?.[0] ?? "?"}</div>
                   )}
                 </div>
                 <div className="min-w-0 text-sm">

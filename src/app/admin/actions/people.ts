@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
-import { Device, FaceProfile, Store, User, WageHistory } from "@/lib/models";
+import { Device, Store, User, WageHistory } from "@/lib/models";
 import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { approveDevice } from "@/lib/device";
@@ -102,20 +102,6 @@ export async function setWage(_: FormState, fd: FormData): Promise<FormState> {
     await user.save();
     await audit(adminActor(admin), "user.wage", { type: "User", id: String(user._id) }, { hourlyWage: before }, { hourlyWage: wage, effectiveFrom: from });
     revalidatePath(`/admin/employees/${user._id}`);
-    return { ok: true };
-  } catch (e) {
-    return errMsg(e);
-  }
-}
-
-export async function resetFace(_: FormState, fd: FormData): Promise<FormState> {
-  try {
-    const admin = await assertAdmin();
-    const userId = str(fd.get("userId"));
-    await FaceProfile.deleteOne({ userId });
-    await User.updateOne({ _id: userId }, { $set: { status: "NEW" } });
-    await audit(adminActor(admin), "user.face.reset", { type: "User", id: userId });
-    revalidatePath(`/admin/employees/${userId}`);
     return { ok: true };
   } catch (e) {
     return errMsg(e);

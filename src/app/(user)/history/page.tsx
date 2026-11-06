@@ -1,12 +1,13 @@
 import { requireActiveUser } from "@/lib/guards";
 import { AdjustmentRequest, Attendance, Store } from "@/lib/models";
-import { localMonth, viDate } from "@/lib/time";
+import { localDate, localMonth, viDate } from "@/lib/time";
 import { hoursVi } from "@/lib/format";
 import { AttendanceTable, summarize } from "@/components/AttendanceTable";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui";
 import { submitAdjustment } from "../actions";
+import TimeInput from "@/components/TimeInput";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   const { month: m } = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : localMonth(new Date(), tz);
+  const today = localDate(new Date(), tz);
   const rows = await Attendance.find({ userId: user._id, month }).sort({ checkInAt: 1 }).lean();
   const sum = summarize(rows);
   const requests = await AdjustmentRequest.find({ userId: user._id }).sort({ createdAt: -1 }).limit(10).lean();
@@ -37,10 +39,10 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
       <Card title="Gửi yêu cầu điều chỉnh">
         <ActionForm action={submitAdjustment} submitLabel="Gửi yêu cầu" successText="Đã gửi – chờ admin duyệt">
           <p className="text-xs text-ink/70">Dùng khi quên chấm công, quên check-out, GPS/camera lỗi…</p>
-          <Field label="Ngày"><Input type="date" name="workDate" required /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Giờ vào"><Input type="time" name="checkInTime" /></Field>
-            <Field label="Giờ ra"><Input type="time" name="checkOutTime" /></Field>
+          <Field label="Ngày"><Input type="date" name="workDate" required defaultValue={today} max={today} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Giờ vào"><TimeInput name="checkInTime" /></Field>
+            <Field label="Giờ ra"><TimeInput name="checkOutTime" /></Field>
           </div>
           <Field label="Lý do"><Textarea name="reason" rows={2} required /></Field>
         </ActionForm>

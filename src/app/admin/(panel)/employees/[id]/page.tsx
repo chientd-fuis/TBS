@@ -8,7 +8,7 @@ import { localDate, viDate, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { DeviceActions } from "../../devices/DeviceActions";
-import { resetFace, setWage, updateEmployee } from "../../../actions/people";
+import { setWage, updateEmployee } from "../../../actions/people";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +32,15 @@ export default async function EmployeeDetail({ params }: { params: Promise<{ id:
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Thông tin cơ bản">
           <div className="mb-3 flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/photo?face=${u._id}`} alt="" className="h-20 w-20 rounded-xl bg-cream object-cover" />
+            {u.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={u.avatar} alt="" className="h-16 w-16 rounded-full bg-cream object-cover" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-cream text-2xl font-bold">{u.name?.[0] ?? "?"}</div>
+            )}
             <div className="text-xs text-ink/70">
               <p>Vào làm: {u.joinedAt ? viDateTime(u.joinedAt).slice(0, 10) : "—"}</p>
-              <p>Đồng ý thu thập khuôn mặt: {u.consentFaceAt ? viDateTime(u.consentFaceAt) : "—"}</p>
+              <p>Đồng ý điều khoản chấm công: {u.consentFaceAt ? viDateTime(u.consentFaceAt) : "—"}</p>
             </div>
           </div>
           <ActionForm action={updateEmployee}>
@@ -72,11 +76,6 @@ export default async function EmployeeDetail({ params }: { params: Promise<{ id:
               <li key={String(w._id)}>Từ {viDate(w.effectiveFrom)}: <b>{vnd(w.hourlyWage)}</b> <span className="text-xs text-ink/60">({w.createdBy})</span></li>
             ))}
           </ul>
-          <div className="mt-4 border-t border-[#f1e6c8] pt-3">
-            <ActionForm action={resetFace} submitLabel="Reset ảnh khuôn mặt" variant="outline" successText="Đã reset – nhân viên sẽ đăng ký lại" confirm="Nhân viên sẽ phải chụp lại ảnh mẫu và chờ duyệt lại. Tiếp tục?">
-              <input type="hidden" name="userId" value={String(u._id)} />
-            </ActionForm>
-          </div>
         </Card>
         <Card title="Thiết bị">
           <ul className="space-y-3 text-sm">

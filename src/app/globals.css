@@ -53,3 +53,32 @@ table.tbs td {
 table.tbs tr.row-late td { background: #fff1e6; }
 table.tbs tr.row-missing td { background: #fde8e8; }
 table.tbs tr.row-manual td { background: #ecf7ee; }
+
+/* ===== Ô nhập trên mobile (iOS Safari) =====
+   - date/month/time native có độ rộng tối thiểu riêng → tràn khung, cần bỏ appearance + min-width
+   - font < 16px khiến iOS tự phóng to khi chạm vào ô → dùng 16px trên màn nhỏ */
+input[type="date"],
+input[type="month"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  display: block;
+  min-height: 2.625rem;
+  text-align: left;
+}
+input::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.5em;
+}
+input::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+}
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

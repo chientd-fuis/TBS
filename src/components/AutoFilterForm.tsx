@@ -41,7 +41,7 @@ export function AutoFilterForm({
       }}
       onChange={(e) => {
         const form = e.currentTarget;
-        const el = e.target as HTMLInputElement;
+        const el = e.target as unknown as HTMLInputElement;
         if (el.tagName === "INPUT" && ["text", "search", "email", "tel"].includes(el.type)) {
           if (timer.current) clearTimeout(timer.current);
           timer.current = setTimeout(() => apply(form, el.name), 400);

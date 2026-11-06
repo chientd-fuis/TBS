@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
-import { Attendance, Device, FaceProfile, Store } from "@/lib/models";
+import { Attendance, Device, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { checkDeviceForAttendance } from "@/lib/device";
-import { distanceMeters, faceDistance } from "@/lib/calc";
+import { distanceMeters } from "@/lib/calc";
 import { assertNotLocked, computeFields, findShiftFor, isStaleOpen, openAttendance } from "@/lib/attendance";
 import { audit } from "@/lib/audit";
 import { savePhoto } from "@/lib/drive";
@@ -16,9 +16,7 @@ const Body = z.object({
   lat: z.number(),
   lng: z.number(),
   accuracy: z.number(),
-  descriptor: z.array(z.number()).length(128),
   photo: z.string(),
-  blinked: z.boolean(),
   fingerprint: z.string().max(128).optional(),
 });
 
@@ -78,16 +76,7 @@ export async function POST(req: Request) {
         distance,
       });
 
-    // 3. Khuôn mặt (liveness + so khớp)
-    if (!b.blinked) throw new HttpError(400, "Chưa xác nhận người thật (chớp mắt)", { code: "LIVENESS" });
-    const face = await FaceProfile.findOne({ userId: user._id }).lean();
-    if (!face) throw new HttpError(400, "Chưa có ảnh khuôn mặt mẫu – liên hệ admin", { code: "FACE" });
-    const fd = faceDistance(b.descriptor, face.descriptor);
-    if (fd > settings.faceMatchThreshold)
-      throw new HttpError(400, "Khuôn mặt không khớp với ảnh đã đăng ký. Thử lại ở nơi đủ sáng.", {
-        code: "FACE_MISMATCH",
-      });
-    const faceScore = Math.round((1 - fd) * 100) / 100;
+    // 3. Khuôn mặt: trình duyệt chỉ cho chụp khi phát hiện có khuôn mặt trong khung (không so khớp ảnh mẫu)
 
     const tz = store.timezone || "Asia/Ho_Chi_Minh";
     const now = new Date(); // giờ server
@@ -134,7 +123,7 @@ export async function POST(req: Request) {
             checkOutPhotoId: photo.driveId,
             checkOutPendingPhotoId: photo.pendingId,
             checkOutDeviceId: dev.deviceId,
-            faceScoreOut: faceScore,
+            
             status: "COMPLETED",
           },
         },
@@ -182,7 +171,7 @@ export async function POST(req: Request) {
         checkInPhotoId: photo.driveId,
         checkInPendingPhotoId: photo.pendingId,
         checkInDeviceId: dev.deviceId,
-        faceScoreIn: faceScore,
+        
         source: "SELF",
         status: "OPEN",
       });

@@ -8,6 +8,7 @@ import { AttendanceTable, type AttRow } from "@/components/AttendanceTable";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Card, Field, Input, PageTitle, Textarea } from "@/components/ui";
 import { deleteAttendance, editAttendance } from "../../../actions/ops";
+import TimeInput from "@/components/TimeInput";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,8 @@ export default async function EditAttendance({ params }: { params: Promise<{ id:
               <input type="hidden" name="id" value={id} />
               <div className="grid grid-cols-3 gap-2">
                 <Field label="Ngày"><Input type="date" name="date" defaultValue={a.workDate} /></Field>
-                <Field label="Giờ vào"><Input type="time" step={1} name="inTime" defaultValue={localTime(a.checkInAt, tz)} /></Field>
-                <Field label="Giờ ra"><Input type="time" step={1} name="outTime" defaultValue={a.checkOutAt ? localTime(a.checkOutAt, tz) : ""} /></Field>
+                <Field label="Giờ vào"><TimeInput seconds name="inTime" defaultValue={localTime(a.checkInAt, tz)} /></Field>
+                <Field label="Giờ ra"><TimeInput seconds name="outTime" defaultValue={a.checkOutAt ? localTime(a.checkOutAt, tz) : ""} /></Field>
               </div>
               <Field label="Lý do sửa (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
             </ActionForm>
