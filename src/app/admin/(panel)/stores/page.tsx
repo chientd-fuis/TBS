@@ -1,0 +1,60 @@
+import { requireAdmin } from "@/lib/guards";
+import { Store, User } from "@/lib/models";
+import { Badge, Card, PageTitle } from "@/components/ui";
+import StoreForm from "./StoreForm";
+import { ActionForm } from "@/components/ActionForm";
+import { testTelegram } from "../../actions/closing";
+
+export const dynamic = "force-dynamic";
+
+/** Quản lý cơ sở (spec 1.2, 3.4) */
+export default async function StoresPage() {
+  await requireAdmin();
+  const stores = await Store.find().sort({ name: 1 }).lean();
+  const counts = await User.aggregate<{ _id: string; n: number }>([{ $match: { status: "ACTIVE" } }, { $group: { _id: "$storeId", n: { $sum: 1 } } }]);
+  const cnt = new Map(counts.map((c) => [String(c._id), c.n]));
+  return (
+    <>
+      <PageTitle sub="Cơ sở chưa có toạ độ thì nhân viên chưa chấm công được">Cơ sở</PageTitle>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {stores.map((s) => (
+          <Card
+            key={String(s._id)}
+            title={s.name}
+            actions={
+              <div className="flex gap-1">
+                <Badge>{s.code}</Badge>
+                <Badge tone="green">{cnt.get(String(s._id)) || 0} NV</Badge>
+                {!s.active && <Badge tone="red">Đã ẩn</Badge>}
+                {(s.lat == null || s.lng == null) && <Badge tone="orange">Chưa có toạ độ</Badge>}
+              </div>
+            }
+          >
+            <div className="mb-3 flex justify-end">
+              <ActionForm action={testTelegram} submitLabel="📨 Gửi thử Telegram" variant="outline" successText="Đã gửi tin nhắn thử vào nhóm" className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="storeId" value={String(s._id)} />
+              </ActionForm>
+            </div>
+            <StoreForm
+              store={{
+                id: String(s._id),
+                code: s.code,
+                name: s.name,
+                address: s.address || "",
+                lat: s.lat ?? null,
+                lng: s.lng ?? null,
+                radiusM: s.radiusM || 100,
+                timezone: s.timezone || "Asia/Ho_Chi_Minh",
+                telegramChatId: s.telegramChatId || "",
+                active: s.active !== false,
+              }}
+            />
+          </Card>
+        ))}
+        <Card title="➕ Thêm cơ sở mới" className="border-2 border-dashed border-primary">
+          <StoreForm store={null} />
+        </Card>
+      </div>
+    </>
+  );
+}

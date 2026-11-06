@@ -1,0 +1,63 @@
+import { requireAdmin } from "@/lib/guards";
+import { Device, Store, User } from "@/lib/models";
+import { viDateTime } from "@/lib/time";
+import { ActionForm } from "@/components/ActionForm";
+import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
+import { approveUser, rejectUser } from "../../actions/people";
+
+export const dynamic = "force-dynamic";
+
+/** Duyệt đăng ký nhân viên (spec 3.1) */
+export default async function ApprovalsPage() {
+  await requireAdmin();
+  const users = await User.find({ status: "PENDING" }).sort({ registeredAt: 1 }).lean();
+  const stores = new Map((await Store.find().lean()).map((s) => [String(s._id), s.name]));
+  const devices = await Device.find({ userId: { $in: users.map((u) => u._id) } }).lean();
+  return (
+    <>
+      <PageTitle sub="Duyệt tài khoản đồng thời duyệt thiết bị đầu tiên">Duyệt đăng ký</PageTitle>
+      {users.length === 0 && <Card><Empty>Không có đăng ký nào đang chờ</Empty></Card>}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {users.map((u) => {
+          const dev = devices.filter((d) => String(d.userId) === String(u._id));
+          return (
+            <Card key={String(u._id)}>
+              <div className="flex gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <div className="relative shrink-0">
+                  <img src={`/api/photo?face=${u._id}`} alt="Ảnh khuôn mặt" className="h-24 w-24 rounded-xl bg-cream object-cover" />
+                  {u.avatar && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={u.avatar} alt="Avatar Google" title="Avatar Google" className="absolute -right-2 -bottom-2 h-9 w-9 rounded-full ring-2 ring-white" />
+                  )}
+                </div>
+                <div className="min-w-0 text-sm">
+                  <p className="font-bold">{u.name}</p>
+                  {u.googleName && u.googleName !== u.name && <p className="text-xs">Tên Google: {u.googleName}</p>}
+                  <p className="truncate text-xs text-ink/70">{u.email}</p>
+                  <p>📞 {u.phone}</p>
+                  <p>🏪 {stores.get(String(u.storeId))}</p>
+                  <p className="text-xs text-ink/60">Đăng ký: {viDateTime(u.registeredAt)}</p>
+                </div>
+              </div>
+              <div className="mt-2 text-xs">
+                Thiết bị: {dev.map((d) => <Badge key={String(d._id)}>{d.model || d.os} · {d.browser}</Badge>)}
+                {!dev.length && <span className="text-danger">chưa ghi nhận</span>}
+              </div>
+              <div className="mt-3 grid gap-2">
+                <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex items-end gap-2">
+                  <input type="hidden" name="userId" value={String(u._id)} />
+                  <Input name="hourlyWage" inputMode="numeric" placeholder="Lương giờ (VND)" className="flex-1" />
+                </ActionForm>
+                <ActionForm action={rejectUser} submitLabel="Từ chối" successText="Đã từ chối" variant="outline" className="flex items-end gap-2">
+                  <input type="hidden" name="userId" value={String(u._id)} />
+                  <Input name="reason" placeholder="Lý do từ chối" className="flex-1" />
+                </ActionForm>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </>
+  );
+}

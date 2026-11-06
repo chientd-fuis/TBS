@@ -1,0 +1,7 @@
+{
+  "regions": ["hkg1"],
+  "crons": [
+    { "path": "/api/cron/publish-payroll", "schedule": "0 17 4 * *" },
+    { "path": "/api/cron/hourly", "schedule": "0 18 * * *" }
+  ]
+}

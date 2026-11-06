@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* Bảng màu Tiệm Bơ Sầu – spec 1.1 */
+@theme {
+  --color-primary: #fccc18;
+  --color-primary-dark: #e4b414;
+  --color-primary-light: #fff4cc;
+  --color-secondary: #3c9c54;
+  --color-secondary-dark: #18783c;
+  --color-accent: #783c3c;
+  --color-ink: #542424;
+  --color-cream: #fcf8ec;
+  --color-blush: #f0b4a8;
+  --color-warn: #e8590c;
+  --color-danger: #d64545;
+  --color-bonus: #3c9c54;
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --radius-xl: 14px;
+}
+
+html,
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+table.tbs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+table.tbs th {
+  background: var(--color-primary);
+  color: var(--color-ink);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+table.tbs td {
+  padding: 0.45rem 0.625rem;
+  border-bottom: 1px solid #f1e6c8;
+  vertical-align: top;
+}
+table.tbs tr.row-late td { background: #fff1e6; }
+table.tbs tr.row-missing td { background: #fde8e8; }
+table.tbs tr.row-manual td { background: #ecf7ee; }
