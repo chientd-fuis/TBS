@@ -72,3 +72,40 @@ export function computePay(i: PayrollInput) {
   const netPay = basePay + i.allowance + i.totalBonus - i.totalPenalty - i.advance;
   return { totalHours, basePay, netPay };
 }
+
+/* ---------- Làm liền nhiều ca (VD ca 1 + ca 2: vào đầu ca 1, ra cuối ca 2) ---------- */
+export type Segment = { start: Date; end: Date; name?: string | null };
+
+/** Khoảng nghỉ tối đa giữa 2 ca để coi là làm liền (phút). */
+export const CONTIGUOUS_GAP_MIN = 30;
+
+/**
+ * Gộp ca gốc với các ca liền kề phía sau (ca sau bắt đầu trước khi ca trước kết thúc + gapMin).
+ * Trả về khối ca liền: start = đầu ca gốc, end = cuối ca liền cuối cùng, segments theo thứ tự.
+ */
+export function mergeShiftBlock(base: Segment, others: Segment[], gapMin = CONTIGUOUS_GAP_MIN) {
+  const segments: Segment[] = [base];
+  let end = base.end;
+  const rest = [...others].filter((o) => o.start.getTime() > base.start.getTime()).sort((a, b) => a.start.getTime() - b.start.getTime());
+  for (const o of rest) {
+    if (o.start.getTime() > end.getTime() + gapMin * 60000) break; // có khoảng nghỉ dài → hết khối
+    if (o.end.getTime() <= end.getTime()) continue; // ca nằm trong khối (trùng giờ)
+    segments.push(o);
+    end = o.end;
+  }
+  return { start: base.start, end, segments };
+}
+
+/**
+ * Về sớm khi làm nhiều ca liền: so với GIỜ KẾT THÚC của ca đang làm lúc check-out.
+ * - Ra cuối ca 2 (hoặc muộn hơn)            → 0
+ * - Ra đúng hết ca 1 (nghỉ, check-in lại ca 2) → 0
+ * - Ra giữa ca 2                             → số phút còn thiếu của ca 2
+ * Check-out ở khoảng nghỉ giữa 2 ca → 0.
+ */
+export function earlyMinutesInBlock(checkOut: Date, segments: Segment[], thresholdMin: number) {
+  const t = checkOut.getTime();
+  // (start, end]: ra đúng giờ hết ca 1 → thuộc ca 1 → không tính về sớm của ca 2
+  const seg = segments.find((s) => t > s.start.getTime() && t <= s.end.getTime());
+  return seg ? earlyMinutes(checkOut, seg.end, thresholdMin) : 0;
+}

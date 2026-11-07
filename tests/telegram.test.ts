@@ -85,3 +85,20 @@ test("caption có doanh thu ca", async () => {
   assert.match(cap, /Thu chi 50\.000đ \(30k sữa chua \+ 20k ship\)/);
   assert.match(cap, /✅ Âm\/Dương: 0đ/);
 });
+
+test("thông báo chấm công: check-in muộn, check-out sớm", async () => {
+  const { formatAttendanceCaption } = await import("../src/lib/attendance-notify");
+  const tz = "Asia/Ho_Chi_Minh";
+  const at = (hh: number, mm: number) => new Date(Date.UTC(2026, 10, 7, hh - 7, mm));
+  const cin = formatAttendanceCaption({
+    action: "CHECK_IN", storeName: "TBS Văn Phú", employeeName: "Tuấn Anh", tz, workDate: "2026-11-07",
+    checkInAt: at(8, 12), shiftLabel: "S 08:00–13:00", lateMinutes: 12,
+  });
+  assert.equal(cin, "✅ CHECK-IN\n🏪 Cơ sở: Văn Phú\n👤 Nhân viên: Tuấn Anh\n📅 Ngày: 07/11 (Thứ 7)\n🕐 Vào: 08:12\n⏰ Ca: S 08:00–13:00\n⚠️ Đi muộn 12 phút");
+  const cout = formatAttendanceCaption({
+    action: "CHECK_OUT", storeName: "TBS Văn Phú", employeeName: "Tuấn Anh", tz, workDate: "2026-11-07",
+    checkInAt: at(8, 12), checkOutAt: at(12, 50), roundedHours: 4.5, earlyMinutes: 10, outOfShift: false,
+  });
+  assert.match(cout, /🕐 Vào: 08:12 · Ra: 12:50 · 4,5h công/);
+  assert.match(cout, /⚠️ Về sớm 10 phút/);
+});

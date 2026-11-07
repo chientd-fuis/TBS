@@ -26,8 +26,11 @@ export async function testTelegram(_: FormState, fd: FormData): Promise<FormStat
   try {
     await assertAdmin();
     const store = await Store.findById(str(fd.get("storeId"))).lean();
-    const chatId = str(fd.get("chatId")) || store?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "";
-    await sendTelegramText(chatId, `✅ Tiệm Bơ Sầu – kết nối nhóm chốt ca cho ${store?.name ?? "cơ sở"} thành công.`);
+    const attendance = str(fd.get("kind")) === "attendance";
+    const chatId = attendance
+      ? store?.telegramAttendanceChatId || process.env.TELEGRAM_ATTENDANCE_CHAT_ID || ""
+      : str(fd.get("chatId")) || store?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "";
+    await sendTelegramText(chatId, `✅ Tiệm Bơ Sầu – kết nối nhóm ${attendance ? "chấm công" : "chốt ca"} cho ${store?.name ?? "cơ sở"} thành công.`);
     return { ok: true };
   } catch (e) {
     return errMsg(e);

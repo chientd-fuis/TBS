@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
-import { ShiftAssignment, ShiftTemplate, Store } from "@/lib/models";
-import { addDays, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekdayVi, weekStartOf } from "@/lib/time";
-import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
-import { Alert, Badge, Card, LinkButton } from "@/components/ui";
+import { ShiftAssignment, Store } from "@/lib/models";
+import { addDays, daysOfMonth, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekdayVi, weekStartOf } from "@/lib/time";
+import { Alert, Card, LinkButton } from "@/components/ui";
 import { cn } from "@/lib/format";
 import { WeekNav } from "./WeekNav";
+import MonthShiftBoard from "@/app/admin/(panel)/attendance/MonthShiftBoard";
+import { loadMonthBoard } from "@/app/admin/(panel)/attendance/month-board-data";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,18 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : localMonth(new Date(), tz);
 
+  // chế độ tháng: 1 bảng ca × ngày cả tháng (chỉ của mình) – ngày đã qua hiện kết quả chấm công
+  // bảng ca × ngày kèm cảnh báo chấm công (tuần: 7 ngày, tháng: cả tháng) – chỉ của mình
+  const board = user.storeId
+    ? await loadMonthBoard(
+        String(user.storeId),
+        view === "month" ? month : ws.slice(0, 7),
+        tz,
+        await Store.find().select("name createdAt").lean(),
+        String(user._id),
+        view === "week" ? weekDays(ws) : undefined,
+      )
+    : null;
   // các tuần cần hiển thị
   const weeks: string[] = [];
   if (view === "week") weeks.push(ws);
@@ -30,9 +43,6 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const from = weeks[0];
   const to = addDays(weeks[weeks.length - 1], 6);
   const mine = await ShiftAssignment.find({ userId: user._id, date: { $gte: from, $lte: to } }).lean();
-  const tplDocs = await ShiftTemplate.find({ storeId: user.storeId, $or: [{ active: true }, { _id: { $in: mine.map((m) => m.shiftTemplateId) } }] })
-    .sort({ startTime: 1 })
-    .lean();
   // ca được xếp đi hỗ trợ cơ sở khác (không nằm trong bảng ca của cơ sở gốc)
   const supportShifts = mine
     .filter((m) => String(m.storeId) !== String(user.storeId) && m.status !== "REJECTED")
@@ -57,39 +67,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       </div>
     );
   };
-  const templates: GridTpl[] = tplDocs.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }));
-  const at = (tplId: string, d: string) => mine.find((m) => String(m.shiftTemplateId) === tplId && m.date === d);
   const approvedCount = (days: string[]) => mine.filter((m) => days.includes(m.date) && (m.status ?? "APPROVED") === "APPROVED").length;
   const pendingCount = mine.filter((m) => m.status === "PENDING").length;
   const nextWeek = addDays(weekStartOf(today), 7);
-
-  const grid = (w: string) => {
-    const days = weekDays(w);
-    return (
-      <WeekGrid
-        templates={templates}
-        days={days}
-        today={today}
-        renderCell={(t, d) => {
-          const m = at(t.id, d);
-          if (!m) return null;
-          const st = m.status ?? "APPROVED";
-          return (
-            <div
-              className={cn(
-                "rounded-md px-1.5 py-1 text-center text-xs font-bold",
-                st === "APPROVED" && "bg-secondary text-white",
-                st === "PENDING" && "bg-[#ffd8b8] text-warn ring-1 ring-warn/40",
-                st === "REJECTED" && "bg-white/60 text-danger line-through",
-              )}
-            >
-              {st === "APPROVED" ? `✓ ${user.name}` : st === "PENDING" ? "Chờ duyệt" : "Bị từ chối"}
-            </div>
-          );
-        }}
-      />
-    );
-  };
 
   return (
     <>
@@ -109,7 +89,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       {view === "week" ? (
         <>
           <WeekNav ws={ws} href={(w) => `/schedule?week=${w}`} label={ws === weekStartOf(today) ? "Tuần này" : ws === nextWeek ? "Tuần sau" : undefined} />
-          {templates.length === 0 ? <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert> : grid(ws)}
+          {!board || board.templates.length === 0 ? (
+            <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert>
+          ) : (
+            <Card>
+              <MonthShiftBoard month={ws.slice(0, 7)} today={today} {...board} compactLegend linkable={false} />
+            </Card>
+          )}
           {supportList(weekDays(ws))}
           <p className="text-center text-sm">Tuần này bạn có <b>{approvedCount(weekDays(ws))}</b> ca đã duyệt.</p>
         </>
@@ -120,19 +106,19 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <span className="text-sm font-bold">Tháng {viMonth(month)}</span>
             <Link href={`/schedule?view=month&month=${nextMonth(month)}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">›</Link>
           </div>
-          {weeks.map((w) => (
-            <Card key={w} title={<span className="text-sm">Tuần {w.slice(8)}/{w.slice(5, 7)} – {addDays(w, 6).slice(8)}/{addDays(w, 6).slice(5, 7)}</span>} actions={<Badge tone="green">{approvedCount(weekDays(w))} ca</Badge>}>
-              {grid(w)}
-              {supportList(weekDays(w))}
+          {board && board.templates.length ? (
+            <Card>
+              <MonthShiftBoard month={month} today={today} {...board} compactLegend linkable={false} />
+              <p className="mt-2 text-center text-sm">
+                Tháng này bạn có <b>{approvedCount(daysOfMonth(month))}</b> ca đã duyệt.
+              </p>
             </Card>
-          ))}
+          ) : (
+            <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert>
+          )}
+          {supportList(daysOfMonth(month))}
         </>
       )}
-      <div className="flex flex-wrap justify-center gap-2 text-xs">
-        <span className="rounded bg-secondary px-2 py-0.5 font-bold text-white">✓ Đã duyệt</span>
-        <span className="rounded bg-[#ffd8b8] px-2 py-0.5 font-bold text-warn">Chờ duyệt</span>
-        <span className="rounded bg-white px-2 py-0.5 text-danger line-through">Bị từ chối</span>
-      </div>
     </>
   );
 }

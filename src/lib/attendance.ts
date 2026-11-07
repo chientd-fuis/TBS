@@ -2,8 +2,8 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { APPROVED_SHIFT, Attendance, Payroll, ShiftAssignment, Store, type AttendanceDoc } from "./models";
 import { getSettings } from "./settings";
-import { addDays, DEFAULT_TZ, localDate, localMonth, zonedToDate } from "./time";
-import { earlyMinutes, lateMinutes, roundedHours, totalHours } from "./calc";
+import { addDays, DEFAULT_TZ, localDate, localMonth, localTime, zonedToDate } from "./time";
+import { earlyMinutesInBlock, lateMinutes, mergeShiftBlock, roundedHours, totalHours, type Segment } from "./calc";
 
 type Id = string | Types.ObjectId;
 
@@ -71,6 +71,33 @@ export async function findShiftForClosing(userId: Id, at: Date, tz: string, atte
   return best;
 }
 
+/**
+ * Khối ca liền: ca được gắn + các ca đã duyệt LIỀN SAU của cùng nhân viên ở cùng cơ sở
+ * (VD ca 1 08–16 + ca 2 16–20 → 08–20). Dùng để không báo về sớm / quên check-out sai khi làm liền 2–3 ca.
+ */
+export async function shiftBlock(shiftAssignmentId: Id, tz: string) {
+  const a = await ShiftAssignment.findById(shiftAssignmentId).lean();
+  if (!a?.startTime || !a.endTime) return null;
+  const base: Segment = { ...shiftWindow(a.date, a.startTime, a.endTime, tz), name: a.shiftName };
+  const list = await ShiftAssignment.find({
+    _id: { $ne: a._id },
+    userId: a.userId,
+    storeId: a.storeId,
+    date: { $in: [a.date, addDays(a.date, 1)] },
+    ...APPROVED_SHIFT,
+  }).lean();
+  const others: Segment[] = list
+    .filter((x) => x.startTime && x.endTime)
+    .map((x) => ({ ...shiftWindow(x.date, x.startTime!, x.endTime!, tz), name: x.shiftName }));
+  const block = mergeShiftBlock(base, others);
+  const hm = (d: Date) => localTime(d, tz).slice(0, 5);
+  const label =
+    block.segments.length > 1
+      ? `${block.segments.map((x) => x.name).join("+")} ${hm(block.start)}–${hm(block.end)}`
+      : `${a.shiftName} ${a.startTime}–${a.endTime}`;
+  return { ...block, label };
+}
+
 /** Tính lại các trường tổng giờ / làm tròn / muộn / sớm của 1 bản ghi. */
 export async function computeFields(att: {
   storeId: Id;
@@ -86,19 +113,19 @@ export async function computeFields(att: {
     lateMinutes: 0,
     earlyMinutes: 0,
   };
-  let shift: { start: Date; end: Date } | null = null;
-  if (att.shiftAssignmentId) {
-    const a = await ShiftAssignment.findById(att.shiftAssignmentId).lean();
-    if (a?.startTime && a.endTime) shift = shiftWindow(a.date, a.startTime, a.endTime, tz);
+  // làm liền nhiều ca → đi muộn so với đầu ca đầu tiên, về sớm so với ca đang làm lúc ra (xem earlyMinutesInBlock)
+  const block = att.shiftAssignmentId ? await shiftBlock(att.shiftAssignmentId, tz) : null;
+  if (block) {
+    out.lateMinutes = lateMinutes(att.checkInAt, block.start, settings.lateThresholdMinutes);
+    out.shiftLabel = block.label;
   }
-  if (shift) out.lateMinutes = lateMinutes(att.checkInAt, shift.start, settings.lateThresholdMinutes);
   if (att.checkOutAt) {
     out.totalHours = totalHours(att.checkInAt, att.checkOutAt);
     out.roundedHours = roundedHours(att.checkInAt, att.checkOutAt, {
       stepHours: settings.roundStepHours,
       graceMinutes: settings.roundGraceMinutes,
     });
-    if (shift) out.earlyMinutes = earlyMinutes(att.checkOutAt, shift.end, settings.earlyThresholdMinutes);
+    if (block) out.earlyMinutes = earlyMinutesInBlock(att.checkOutAt, block.segments, settings.earlyThresholdMinutes);
   }
   return out;
 }
@@ -138,11 +165,9 @@ export async function isStaleOpen(
 ) {
   if (now - a.checkInAt.getTime() > missingCheckoutHours * 3600_000) return true;
   if (a.shiftAssignmentId) {
-    const s = await ShiftAssignment.findById(a.shiftAssignmentId).lean();
-    if (s?.startTime && s.endTime) {
-      const { end } = shiftWindow(s.date, s.startTime, s.endTime, await storeTz(a.storeId));
-      return now > end.getTime() + 4 * 3600_000;
-    }
+    // hết cả khối ca liền + 4h mới coi là quên check-out (làm ca 1+2 ra cuối ca 2 vẫn check-out bình thường)
+    const block = await shiftBlock(a.shiftAssignmentId as Id, await storeTz(a.storeId));
+    if (block) return now > block.end.getTime() + 4 * 3600_000;
   }
   return false;
 }

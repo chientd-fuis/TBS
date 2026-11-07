@@ -43,9 +43,11 @@ export async function saveStore(_: FormState, fd: FormData): Promise<FormState> 
       radiusM: num(fd.get("radiusM"), 100) || 100,
       timezone: str(fd.get("timezone")) || "Asia/Ho_Chi_Minh",
       telegramChatId: str(fd.get("telegramChatId")),
+      telegramAttendanceChatId: str(fd.get("telegramAttendanceChatId")),
       revenueSheetId: extractSheetId(str(fd.get("revenueSheetId"))),
       revenueTabPattern: str(fd.get("revenueTabPattern")) || "T{m}",
       revenueFirstRow: Math.max(1, num(fd.get("revenueFirstRow"), 3) || 3),
+      revenueSheetLayout: str(fd.get("revenueSheetLayout")) === "LEGACY" ? "LEGACY" : "GRAB_COL",
       active: fd.get("active") === "on",
     };
     if (str(fd.get("revenueSheetId")) && !data.revenueSheetId) return { error: "Link Google Sheet không hợp lệ" };
@@ -231,7 +233,7 @@ async function upsertAttendance(
     checkOutAt,
     status,
     shiftAssignmentId,
-    shiftLabel: shift ? `${shift.a.shiftName} ${shift.a.startTime}–${shift.a.endTime}` : null,
+    shiftLabel: fields.shiftLabel ?? null,
     outOfShift: !shift,
     ...(checkOutAt ? {} : { totalHours: null, roundedHours: null, earlyMinutes: 0 }),
   };

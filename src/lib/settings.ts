@@ -2,9 +2,9 @@ import { connectDB } from "./db";
 import { Settings, Store } from "./models";
 
 export const DEFAULT_STORES = [
-  { code: "TBS-GLX", name: "TBS Geleximco" },
-  { code: "TBS-VP", name: "TBS Văn Phú" },
-  { code: "TBS-DN", name: "TBS Đô Nghĩa" },
+  { code: "TBS-GLX", name: "TBS Geleximco", revenueSheetLayout: "GRAB_COL" },
+  { code: "TBS-VP", name: "TBS Văn Phú", revenueSheetLayout: "LEGACY" },
+  { code: "TBS-DN", name: "TBS Đô Nghĩa", revenueSheetLayout: "LEGACY" },
 ];
 
 let seeded = false;

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { notifyAttendance } from "@/lib/attendance-notify";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
@@ -172,6 +173,29 @@ export async function POST(req: Request) {
         { returnDocument: "after" },
       );
       if (!updated) throw new HttpError(409, "Lượt chấm công đã được check-out");
+      // thông báo nhóm chấm công (chạy sau khi đã trả kết quả cho nhân viên)
+      after(() =>
+        notifyAttendance(
+          store._id,
+          {
+            action: "CHECK_OUT",
+            storeName: store.name,
+            employeeName: user.name || user.email,
+            tz,
+            workDate: updated.workDate,
+            checkInAt: updated.checkInAt,
+            checkOutAt: now,
+            shiftLabel: updated.shiftLabel,
+            outOfShift: updated.outOfShift,
+            lateMinutes: updated.lateMinutes,
+            earlyMinutes: updated.earlyMinutes,
+            totalHours: updated.totalHours,
+            roundedHours: updated.roundedHours,
+            supportFrom: isSupport ? home.name : null,
+          },
+          photoBuf,
+        ),
+      );
       return NextResponse.json({
         action: "CHECK_OUT",
         time: localTime(now, tz),
@@ -207,7 +231,7 @@ export async function POST(req: Request) {
         homeStoreId: home._id,
         ...fields,
         shiftAssignmentId: shift?.a._id,
-        shiftLabel: shift ? `${shift.a.shiftName} ${shift.a.startTime}–${shift.a.endTime}` : undefined,
+        shiftLabel: fields.shiftLabel ?? undefined,
         outOfShift: !shift,
         checkInAt: now,
         checkInLat: b.lat,
@@ -224,11 +248,29 @@ export async function POST(req: Request) {
       if ((e as { code?: number }).code === 11000) throw new HttpError(409, "Bạn đã check-in rồi");
       throw e;
     }
+    after(() =>
+      notifyAttendance(
+        store._id,
+        {
+          action: "CHECK_IN",
+          storeName: store.name,
+          employeeName: user.name || user.email,
+          tz,
+          workDate: fields.workDate!,
+          checkInAt: now,
+          shiftLabel: fields.shiftLabel ?? null,
+          outOfShift: !shift,
+          lateMinutes: fields.lateMinutes,
+          supportFrom: isSupport ? home.name : null,
+        },
+        photoBuf,
+      ),
+    );
     return NextResponse.json({
       action: "CHECK_IN",
       time: localTime(now, tz),
       lateMinutes: fields.lateMinutes,
-      shiftLabel: shift ? `${shift.a.shiftName} ${shift.a.startTime}–${shift.a.endTime}` : null,
+      shiftLabel: fields.shiftLabel ?? null,
       outOfShift: !shift,
       storeName: store.name,
       support: isSupport,

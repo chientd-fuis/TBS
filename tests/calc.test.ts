@@ -61,3 +61,28 @@ test("múi giờ VN", () => {
   assert.equal(localTime(d, "Asia/Ho_Chi_Minh"), "00:00:00");
   assert.equal(addDays("2026-12-31", 1), "2027-01-01");
 });
+
+test("làm liền nhiều ca: gộp khối, không cảnh báo về sớm sai", async () => {
+  const { mergeShiftBlock, earlyMinutesInBlock } = await import("../src/lib/calc");
+  const d = (h: number, m = 0) => new Date(Date.UTC(2026, 10, 7, h, m));
+  const S = { start: d(8), end: d(16), name: "S" };
+  const C = { start: d(16), end: d(20), name: "C" };
+  const T = { start: d(20), end: d(23), name: "T" };
+  const b2 = mergeShiftBlock(S, [C]);
+  assert.equal(b2.end.getTime(), d(20).getTime());
+  assert.deepEqual(b2.segments.map((s) => s.name), ["S", "C"]);
+  const b3 = mergeShiftBlock(S, [T, C]);
+  assert.deepEqual(b3.segments.map((s) => s.name), ["S", "C", "T"]);
+  assert.equal(b3.end.getTime(), d(23).getTime());
+  // ca sau cách quá 30 phút → không gộp
+  assert.deepEqual(mergeShiftBlock(S, [{ start: d(17), end: d(21), name: "X" }]).segments.map((s) => s.name), ["S"]);
+  // nghỉ 20 phút giữa 2 ca → vẫn gộp
+  assert.equal(mergeShiftBlock(S, [{ start: d(16, 20), end: d(20), name: "C" }]).segments.length, 2);
+  // về sớm
+  assert.equal(earlyMinutesInBlock(d(20), b2.segments, 5), 0); // ra cuối ca 2
+  assert.equal(earlyMinutesInBlock(d(21), b2.segments, 5), 0); // ra muộn
+  assert.equal(earlyMinutesInBlock(d(16), b2.segments, 5), 0); // ra đúng hết ca 1
+  assert.equal(earlyMinutesInBlock(d(19, 30), b2.segments, 5), 30); // ra giữa ca 2
+  assert.equal(earlyMinutesInBlock(d(15, 30), b2.segments, 5), 30); // ra giữa ca 1
+  assert.equal(earlyMinutesInBlock(d(19, 57), b2.segments, 5), 0); // trong ngưỡng
+});

@@ -98,7 +98,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
             </table>
           </div>
         )}
-        <p className="mt-2 text-xs text-ink/60">Tự ghi Google Sheet khi chốt <b>ca cuối ngày</b>; ngày nào chưa ghi được sẽ được cron đêm ghi lại. Ghi vào cột DT, Tài khoản, Tiền mặt, CP trong két (= Thu chi), Shopee (= Shopee + Grab, ghi rõ ở Ghi chú), Ghi chú – cột Chênh lệch / DT thực tế giữ công thức của sheet.</p>
+        <p className="mt-2 text-xs text-ink/60">Tự ghi Google Sheet khi chốt <b>ca cuối ngày</b>; ngày nào chưa ghi được sẽ được cron đêm ghi lại. Cột ghi theo “Mẫu cột sheet” của từng cơ sở (mục Cơ sở); cột Chênh lệch / DT thực tế giữ công thức của sheet.</p>
       </Card>
 
       <Card>

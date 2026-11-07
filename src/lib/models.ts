@@ -45,10 +45,13 @@ const StoreSchema = new Schema(
     timezone: { type: String, default: "Asia/Ho_Chi_Minh" },
     driveFolderId: { type: String, default: "" },
     telegramChatId: { type: String, default: "" }, // nhóm Telegram nhận ảnh chốt ca (trống → dùng TELEGRAM_CHAT_ID)
+    telegramAttendanceChatId: { type: String, default: "" }, // nhóm chấm công: báo check-in/out (trống → TELEGRAM_ATTENDANCE_CHAT_ID)
     // Google Sheet doanh thu (template: Ngày | DT | Tài khoản | Tiền mặt | CP trong két | Shopee | Chênh lệch | DT thực tế | Ghi chú)
     revenueSheetId: { type: String, default: "" },
     revenueTabPattern: { type: String, default: "T{m}" }, // tên tab theo tháng: {m} {mm} {yyyy}
     revenueFirstRow: { type: Number, default: 3 }, // dòng của ngày 1
+    // mẫu cột: GRAB_COL (B–G + ghi chú J, mặc định cơ sở mới) | LEGACY (B–F, Grab gộp Shopee, ghi chú I)
+    revenueSheetLayout: { type: String, enum: ["GRAB_COL", "LEGACY"], default: "GRAB_COL" },
     active: { type: Boolean, default: true },
   },
   { timestamps: true },

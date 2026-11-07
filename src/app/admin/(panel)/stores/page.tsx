@@ -4,6 +4,7 @@ import { Badge, Card, PageTitle } from "@/components/ui";
 import StoreForm from "./StoreForm";
 import { ActionForm } from "@/components/ActionForm";
 import { testRevenueSheet, testTelegram } from "../../actions/closing";
+import { sheetLayoutOf } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,12 @@ export default async function StoresPage() {
               <ActionForm action={testTelegram} submitLabel="📨 Gửi thử Telegram" variant="outline" successText="Đã gửi tin nhắn thử vào nhóm" className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="storeId" value={String(s._id)} />
               </ActionForm>
+              {(s.telegramAttendanceChatId || process.env.TELEGRAM_ATTENDANCE_CHAT_ID) && (
+                <ActionForm action={testTelegram} submitLabel="📨 Gửi thử nhóm chấm công" variant="outline" successText="Đã gửi tin nhắn thử vào nhóm chấm công" className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="storeId" value={String(s._id)} />
+                  <input type="hidden" name="kind" value="attendance" />
+                </ActionForm>
+              )}
               {s.revenueSheetId && (
                 <ActionForm action={testRevenueSheet} submitLabel="📊 Kiểm tra Google Sheet" variant="outline" successText="Ghi được Google Sheet, có tab tháng này" className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="storeId" value={String(s._id)} />
@@ -51,9 +58,11 @@ export default async function StoresPage() {
                 radiusM: s.radiusM || 100,
                 timezone: s.timezone || "Asia/Ho_Chi_Minh",
                 telegramChatId: s.telegramChatId || "",
+                telegramAttendanceChatId: s.telegramAttendanceChatId || "",
                 revenueSheetId: s.revenueSheetId || "",
                 revenueTabPattern: s.revenueTabPattern || "T{m}",
                 revenueFirstRow: s.revenueFirstRow || 3,
+                revenueSheetLayout: sheetLayoutOf(s),
                 active: s.active !== false,
               }}
             />

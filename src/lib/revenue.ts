@@ -175,3 +175,35 @@ export function defaultClosingShift(hour: number): ClosingShiftKey {
 export function closingWorkDate(key: ClosingShiftKey, today: string, hour: number, addDaysFn: (d: string, n: number) => string) {
   return key === "T" && hour < 8 ? addDaysFn(today, -1) : today;
 }
+
+/* ---------- Mẫu cột Google Sheet theo cơ sở ---------- */
+/**
+ * GRAB_COL (mặc định cơ sở mới, Geleximco): B DT · C TK · D TM · E CP · F Shopee · G Grab · (H, I công thức) · J Ghi chú
+ * LEGACY  (Văn Phú, Đô Nghĩa – mẫu cũ):      B DT · C TK · D TM · E CP · F Shopee (+ Grab) · (G, H công thức) · I Ghi chú
+ */
+export type SheetLayout = "GRAB_COL" | "LEGACY";
+export const SHEET_LAYOUTS: { value: SheetLayout; label: string }[] = [
+  { value: "GRAB_COL", label: "Có cột Grab (B–G, ghi chú J)" },
+  { value: "LEGACY", label: "Mẫu cũ (B–F, Grab gộp Shopee, ghi chú I)" },
+];
+
+/** Cơ sở chưa chọn mẫu (dữ liệu cũ): Geleximco dùng mẫu có cột Grab, các cơ sở cũ khác dùng mẫu cũ. */
+export function sheetLayoutOf(store: { revenueSheetLayout?: string | null; name?: string | null }): SheetLayout {
+  if (store.revenueSheetLayout === "GRAB_COL" || store.revenueSheetLayout === "LEGACY") return store.revenueSheetLayout;
+  return /geleximco/i.test(store.name ?? "") ? "GRAB_COL" : "LEGACY";
+}
+
+/** Các ô cần ghi cho 1 ngày theo mẫu cột. Trả về [{col range (không gồm tab), values}]. */
+export function sheetRowCells(layout: SheetLayout, row: number, r: Revenue, note: string) {
+  if (layout === "LEGACY") {
+    const n = [r.grab ? `Shopee ${r.shopee.toLocaleString("vi-VN")} + Grab ${r.grab.toLocaleString("vi-VN")}` : "", note].filter(Boolean).join(" | ");
+    return [
+      { range: `B${row}:F${row}`, values: [[r.dt, r.tk, r.tm, r.cp, r.shopee + r.grab]] },
+      { range: `I${row}`, values: [[n]] },
+    ];
+  }
+  return [
+    { range: `B${row}:G${row}`, values: [[r.dt, r.tk, r.tm, r.cp, r.shopee, r.grab]] },
+    { range: `J${row}`, values: [[note]] },
+  ];
+}

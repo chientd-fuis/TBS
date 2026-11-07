@@ -66,3 +66,19 @@ test("ca chốt mặc định theo giờ + ngày doanh thu", async () => {
   assert.equal(closingWorkDate("T", "2026-11-07", 22, addDays), "2026-11-07");
   assert.equal(closingWorkDate("S", "2026-11-07", 9, addDays), "2026-11-07");
 });
+
+test("mẫu cột Google Sheet theo cơ sở", async () => {
+  const { sheetLayoutOf, sheetRowCells } = await import("../src/lib/revenue");
+  assert.equal(sheetLayoutOf({ name: "TBS Geleximco" }), "GRAB_COL");
+  assert.equal(sheetLayoutOf({ name: "TBS Văn Phú" }), "LEGACY");
+  assert.equal(sheetLayoutOf({ name: "TBS Văn Phú", revenueSheetLayout: "GRAB_COL" }), "GRAB_COL");
+  const r = { dt: 1000, tk: 500, tm: 300, cp: 50, shopee: 100, grab: 50 };
+  assert.deepEqual(sheetRowCells("GRAB_COL", 9, r, "ok"), [
+    { range: "B9:G9", values: [[1000, 500, 300, 50, 100, 50]] },
+    { range: "J9", values: [["ok"]] },
+  ]);
+  assert.deepEqual(sheetRowCells("LEGACY", 9, r, "ok"), [
+    { range: "B9:F9", values: [[1000, 500, 300, 50, 150]] },
+    { range: "I9", values: [["Shopee 100 + Grab 50 | ok"]] },
+  ]);
+});

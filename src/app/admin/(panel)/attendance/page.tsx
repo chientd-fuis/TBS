@@ -11,6 +11,8 @@ import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Empty, Field, Input, LinkButton, PageTitle, Select, Textarea } from "@/components/ui";
 import { manualAttendance } from "../../actions/ops";
 import QuickEdit from "./QuickEdit";
+import MonthShiftBoard from "./MonthShiftBoard";
+import { loadMonthBoard } from "./month-board-data";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import TimeInput from "@/components/TimeInput";
 
@@ -42,6 +44,8 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
         String(store._id),
       )
     : [];
+  // ===== Bảng chấm công theo ca cả tháng (giống bảng xếp ca – chế độ xem) =====
+  const board = store ? await loadMonthBoard(String(store._id), month, tz, stores) : null;
   const visitorNames = new Map(
     (await User.find({ _id: { $in: visitors.map((v) => v.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]),
   );
@@ -120,6 +124,15 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
         </Card>
       ) : (
         <>
+          {board && (
+            <Card title={`Chấm công theo ca – tháng ${month.slice(5)}/${month.slice(0, 4)}`}>
+              {board.templates.length ? (
+                <MonthShiftBoard month={month} today={localDate(new Date(), tz)} {...board} />
+              ) : (
+                <p className="text-sm text-ink/60">Cơ sở chưa có ca làm việc.</p>
+              )}
+            </Card>
+          )}
           <Card title="Tổng hợp tháng">
             <SummaryTable rows={rows} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
             {rows.some((r) => r.supportLabel) && <p className="mt-2 text-xs text-ink/60">Đã gồm giờ nhân viên đi hỗ trợ cơ sở khác (lương do {store?.name} trả).</p>}

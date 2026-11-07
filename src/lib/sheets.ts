@@ -1,11 +1,11 @@
 import { auth, sheets as sheetsApi } from "@googleapis/sheets";
-import { sheetRowOf, sheetTabName, type Revenue } from "./revenue";
+import { sheetLayoutOf, sheetRowCells, sheetRowOf, sheetTabName, type Revenue } from "./revenue";
 
 /*
  * Ghi doanh thu ngày vào Google Sheet của cơ sở bằng SERVICE ACCOUNT
  * (share file sheet cho email service account với quyền Người chỉnh sửa).
  * Env: GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY (dán nguyên private_key trong file JSON, giữ "\n").
- * Chỉ ghi các cột B–F (DT, Tài khoản, Tiền mặt, CP trong két = Thu chi, Shopee = Shopee + Grab) và I (Ghi chú);
+ * Mẫu cột theo cơ sở – xem sheetRowCells (revenue.ts). Các cột công thức (Chênh lệch, DT thực tế) không ghi.
  * cột G (Chênh lệch), H (DT thực tế) giữ công thức sẵn có trong sheet.
  */
 
@@ -66,7 +66,13 @@ function client() {
   return sheetsApi({ version: "v4", auth: jwt });
 }
 
-type SheetCfg = { revenueSheetId?: string | null; revenueTabPattern?: string | null; revenueFirstRow?: number | null };
+type SheetCfg = {
+  revenueSheetId?: string | null;
+  revenueTabPattern?: string | null;
+  revenueFirstRow?: number | null;
+  revenueSheetLayout?: string | null;
+  name?: string | null;
+};
 
 export function dayRange(cfg: SheetCfg, date: string) {
   const tab = sheetTabName(cfg.revenueTabPattern || "T{m}", date.slice(0, 7));
@@ -80,18 +86,16 @@ export async function writeDayRow(cfg: SheetCfg, date: string, r: Revenue, note:
   const { tab, row } = dayRange(cfg, date);
   const api = client();
   const q = `'${tab.replace(/'/g, "''")}'`;
+  // mẫu cột theo cơ sở (Geleximco / cơ sở mới có cột Grab; cơ sở cũ dùng mẫu cũ)
+  const cells = sheetRowCells(sheetLayoutOf(cfg), row, r, note);
   await api.spreadsheets.values.batchUpdate({
     spreadsheetId: cfg.revenueSheetId,
     requestBody: {
       valueInputOption: "USER_ENTERED",
-      data: [
-        // template chưa có cột Grab → gộp vào cột Shopee (ghi rõ trong Ghi chú) để công thức Chênh lệch của sheet vẫn đúng
-        { range: `${q}!B${row}:F${row}`, values: [[r.dt, r.tk, r.tm, r.cp, r.shopee + r.grab]] },
-        { range: `${q}!I${row}`, values: [[note]] },
-      ],
+      data: cells.map((c) => ({ range: `${q}!${c.range}`, values: c.values })),
     },
   });
-  return `${q}!B${row}:F${row}`;
+  return `${q}!${cells[0].range}`;
 }
 
 /** Kiểm tra quyền + tab của tháng hiện tại (nút "Kiểm tra" ở trang Cơ sở). */

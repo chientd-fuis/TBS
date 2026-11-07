@@ -22,9 +22,8 @@ export async function recomputeDay(storeId: Id, date: string) {
     .select("revenue revenueInput note shiftName employeeName")
     .lean();
   const total = sumRevenue(list.map((c) => (c.revenue ?? {}) as Partial<Revenue>));
-  // Ghi chú ngày: chi tiết thu chi (nếu có mô tả) + ghi chú của từng ca; Grab gộp cột Shopee nên ghi rõ
+  // Ghi chú ngày (cột J): chi tiết thu chi (nếu có mô tả) + ghi chú của từng ca
   const note = [
-    ...(total.grab ? [`Shopee ${total.shopee.toLocaleString("vi-VN")} + Grab ${total.grab.toLocaleString("vi-VN")}`] : []),
     ...list
       .map((c) => {
         const who = c.shiftName ? `Ca ${c.shiftName}` : c.employeeName;

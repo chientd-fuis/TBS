@@ -16,10 +16,12 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Dashboard hôm nay, duyệt đăng ký (+ thiết bị đầu tiên), nhân viên (lương giờ có ngày hiệu lực), thiết bị + cảnh báo nghi chấm hộ | 3.1, 3.3 |
 | | Cơ sở (3 cơ sở tạo sẵn), ca mẫu (hỗ trợ qua đêm), xếp ca hàng loạt, copy tuần trước | 1.2, 3.2, 3.4 |
 | | **Xếp ca tự động**: lịch tuần theo mẫu, duyệt đăng ký (từng ca / từng người / tất cả), xếp tay, định mức người/ca, xếp tự động có xem trước (ít ca nhất, hay làm ca, hay làm cùng), tổng hợp số ca & cảnh báo thiếu người | 3.2.1 |
+| | **Chấm công theo ca cả tháng** (trang Chấm công, chế độ tổng hợp): bảng ca × ngày giống bảng xếp ca, cuộn ngang; icon ⏰ đi muộn/về sớm, ⊕ làm thêm ca, ↪ quên check-out, nhãn xanh CS1/CS2… đi hỗ trợ / từ cơ sở khác sang, tên bôi xám gạch ngang = bỏ ca; bấm tên → bảng chấm công chi tiết | – |
 | | Bảng chấm công theo mẫu, tổng hợp tháng, chấm hộ, sửa / xoá có lịch sử, "Thêm phạt" từ dòng muộn/sớm | 5, 3.5, 7.1 |
 | | Thưởng / phạt nhập tự do (VND), bảng lương (phụ cấp, tạm ứng), công bố sớm / tự công bố 00:00 ngày 5, khoá tháng, mở khoá | 3.6, 3.7 |
 | | Xuất Excel 7 loại báo cáo (header vàng/nâu, freeze, filter, dòng tổng, tô màu) + audit log | 3.8 |
 | | **Yêu cầu đăng ký ca**: ở bảng tổng hợp tuần (tuần sau trở đi) admin bấm "Yêu cầu đăng ký" từng người hoặc tất cả NV chưa có ca → nhân viên thấy cảnh báo "chưa đăng ký ca tuần …" + nút **Đăng ký ca** (hoặc "Tuần này tôi nghỉ"); trạng thái Đã yêu cầu / Đã đăng ký / Báo nghỉ hiện cho admin | – |
+| | **Thông báo chấm công**: mỗi lần check-in / check-out, bot gửi vào **nhóm chấm công** ảnh + cơ sở, nhân viên, ngày, giờ vào/ra, giờ công, cảnh báo đi muộn / về sớm / ngoài ca (chat ID theo cơ sở hoặc `TELEGRAM_ATTENDANCE_CHAT_ID`) | – |
 | | **Hỗ trợ cơ sở khác**: admin gọi nhân viên cơ sở khác sang (chọn ở ô "＋ Thêm…" → nhóm "Gọi hỗ trợ từ …"), chặn trùng giờ giữa các cơ sở; nhân viên chỉ chấm công được ở cơ sở khác khi có **ca hỗ trợ đã duyệt** đúng giờ (app tự nhận cơ sở theo GPS); giờ hỗ trợ tính vào **bảng lương cơ sở gốc** (ghi chú "hỗ trợ: TBS … Xh"); chốt ca gửi vào nhóm Telegram của cơ sở đang làm | – |
 | | **Doanh thu chốt ca**: chụp ảnh + nhập Doanh thu máy, Tiền mặt, Tài khoản, Thu chi, Grab, Shopee (gõ được phép cộng "10000 + 20k", "30k sữa chua + 20k ship" → rời ô hiện tổng); Âm/Dương = DT máy − (TM + TK + Thu chi + Grab + Shopee), khác 0 bắt buộc ghi chú → gửi nhóm Telegram; ca cuối ngày cộng các ca & ghi dòng ngày lên Google Sheet; admin xem doanh thu ngày, sửa số, ghi lại sheet | – |
 | | **Chốt ca**: nhân viên chụp ảnh cuối ca (camera sau, tối đa 4 ảnh) → gửi album vào nhóm Telegram của cơ sở; admin xem / gửi lại; webhook cho hệ thống phân tích ảnh | – |
@@ -80,7 +82,7 @@ Camera & GPS cần **HTTPS** (localhost được miễn). Test trên điện tho
 ### 5c. Doanh thu chốt ca → Google Sheet
 Nhân viên nhập tay số liệu ca (gõ được phép cộng). Mỗi lần chốt ca gửi ảnh + số vào nhóm Telegram; **ca cuối ngày** (ca mẫu có giờ bắt đầu muộn nhất) cộng các ca trong ngày và ghi lên sheet.
 
-**Google Sheet** (mỗi cơ sở 1 file, mỗi tháng 1 tab `T11`, dòng 3 = ngày 1, cột B–I như template):
+**Google Sheet** (mỗi cơ sở 1 file, mỗi tháng 1 tab `T11`, dòng 3 = ngày 1):
 1. Google Cloud (cùng project) → **IAM & Admin → Service Accounts → Create** → vào service account → **Keys → Add key → JSON** → tải file.
 2. **APIs & Services → Library** → bật **Google Sheets API**.
 3. Vercel: tạo biến **`GOOGLE_SA_JSON`** và dán **nguyên nội dung file JSON** (cách dễ nhất, không lo lỗi định dạng key).
@@ -88,7 +90,9 @@ Nhân viên nhập tay số liệu ca (gõ được phép cộng). Mỗi lần c
 4. Mở từng file sheet → **Chia sẻ** → thêm email service account, quyền **Người chỉnh sửa**.
 5. Admin → **Cơ sở** → dán link sheet, tên tab (`T{m}`), dòng ngày 1 (`3`) → Lưu → **Kiểm tra Google Sheet**.
 
-App ghi cột **B** DT máy, **C** Tài khoản, **D** Tiền mặt, **E** CP trong két (= Thu chi), **F** Shopee (= Shopee + Grab vì template chưa có cột Grab; Ghi chú ghi rõ "Shopee … + Grab …"), **I** Ghi chú (chi tiết thu chi + ghi chú từng ca); cột G/H giữ công thức của sheet. Ngày chưa ghi được → cron đêm ghi lại, hoặc admin bấm **Ghi sheet** ở mục Chốt ca. Tab tháng mới cần tạo sẵn theo mẫu.
+App ghi theo **mẫu cột của từng cơ sở** (Admin → Cơ sở → *Mẫu cột sheet*):
+- **Có cột Grab** (Geleximco, mặc định cho cơ sở mới): **B** DT · **C** Tài khoản · **D** Tiền mặt · **E** CP trong két (= Thu chi) · **F** Shopee · **G** Grab · **J** Ghi chú; cột H, I giữ công thức.
+- **Mẫu cũ** (Văn Phú, Đô Nghĩa): **B–E** như trên · **F** Shopee + Grab · **I** Ghi chú (ghi rõ "Shopee … + Grab …"); cột G, H giữ công thức. Ngày chưa ghi được → cron đêm ghi lại, hoặc admin bấm **Ghi sheet** ở mục Chốt ca. Tab tháng mới cần tạo sẵn theo mẫu.
 
 ### 6. Deploy Vercel
 - `vercel.json`: chạy hàm ở **Hong Kong (`hkg1`)** cho gần MongoDB Atlas (ap-east-1); 2 cron:
@@ -119,5 +123,6 @@ public/models/         # model nhận diện khuôn mặt (face-api) – tự ho
 - **Khuôn mặt** chỉ dùng để *phát hiện có người* trong khung, chạy trên trình duyệt (`@vladmandic/face-api` – TinyFaceDetector). Không đăng ký ảnh mẫu, không so khớp, không bắt chớp mắt. Khuôn mặt ở trong khung ~0,8s → tự chụp; ảnh lưu Drive để admin đối chiếu. Không có chức năng upload ảnh.
 - **Chống chấm trùng**: unique partial index "1 lượt OPEN / nhân viên" + check-out dùng `findOneAndUpdate` có điều kiện + chặn check-out trong N phút sau check-in.
 - **Làm tròn**: mặc định làm tròn xuống tuyệt đối (14h55' → 14,5). Dữ liệu sheet cũ có dung sai ~5 phút (14h55' → 15) → chỉnh "Dung sai làm tròn" trong Cài đặt nếu muốn giữ cách cũ.
+- **Làm liền nhiều ca**: các ca đã duyệt liền nhau (nghỉ ≤ 30 phút, cùng cơ sở) được gộp thành 1 khối – VD ca 1 08–16 + ca 2 16–20 → check-in đầu ca 1, check-out cuối ca 2 = 1 lượt 12h, không báo về sớm, không bị coi là quên check-out. Đi muộn tính theo đầu ca đầu tiên; về sớm tính theo ca đang làm lúc ra (ra đúng hết ca 1 để nghỉ / check-in lại ca 2 → không báo về sớm).
 - **Khoá tháng**: bảng lương đã công bố/đã trả → không chấm hộ, sửa chấm công, thêm/xoá thưởng phạt cho tháng đó. Mở khoá thì cron ngày 5 không tự công bố lại.
 - **Ảnh**: upload Drive của Chủ theo `/TBS Chấm công/{Cơ sở}/{Nhân viên}/{YYYY-MM}/`. Mất kết nối → giữ tạm trong MongoDB, cron upload lại.
