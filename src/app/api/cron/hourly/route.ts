@@ -5,6 +5,7 @@ import { retryPendingPhotos } from "@/lib/drive";
 import { autoPublishPayrolls, ensureDraftPayrolls } from "@/lib/payroll";
 import { connectDB } from "@/lib/db";
 import { retryFailedClosings } from "@/lib/closing";
+import { syncPendingDays } from "@/lib/day-revenue";
 
 /** Hằng giờ: đánh dấu quên check-out, upload lại ảnh chờ, tạo bảng lương nháp, công bố nếu đã qua ngày 5. */
 export async function GET(req: Request) {
@@ -15,5 +16,6 @@ export async function GET(req: Request) {
   await ensureDraftPayrolls();
   const published = await autoPublishPayrolls(); // dự phòng nếu cron ngày 5 bị lỡ
   const closingsResent = await retryFailedClosings(); // gửi lại ảnh chốt ca lên Telegram
-  return NextResponse.json({ missing, uploaded, published, closingsResent });
+  const sheetDays = await syncPendingDays(); // ghi Google Sheet các ngày chưa ghi được
+  return NextResponse.json({ missing, uploaded, published, closingsResent, sheetDays });
 }

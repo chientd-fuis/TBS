@@ -1,14 +1,15 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Check, Loader2, Settings2, Sparkles, X, Zap } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, Loader2, Settings2, Sparkles, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
 import { slotLevel, type AutoOptions, type Entry, type TplInfo } from "@/lib/schedule";
 import { viDate, weekdayVi } from "@/lib/time";
 import ExportImage from "./ExportImage";
-import { addToSlot, autoSchedule, decideShifts, removeFromSlot, saveStaffing, type PlanView } from "../../../actions/schedule";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { addToSlot, autoSchedule, decideShifts, removeFromSlot, requestRegistration, saveStaffing, type PlanView } from "../../../actions/schedule";
 
 type Props = {
   storeId: string;
@@ -26,6 +27,10 @@ type Props = {
   external: { userId: string; date: string; startTime: string; endTime: string; shiftName: string; storeName: string }[];
   /** nhân viên các cơ sở khác (để gọi sang hỗ trợ) */
   otherStaff: { id: string; name: string; storeName: string }[];
+  /** userId → yêu cầu đăng ký ca của tuần (OPEN / DONE / OFF) */
+  regRequests: Record<string, { status: string; requestedAt: number }>;
+  /** tuần sau trở đi mới gửi yêu cầu đăng ký được */
+  canRequest: boolean;
   isPast: boolean;
 };
 
@@ -41,6 +46,8 @@ export default function ScheduleBoard(p: Props) {
   const [showAuto, setShowAuto] = useState(false);
   const [showStaffing, setShowStaffing] = useState(false);
   const [plan, setPlan] = useState<PlanView | null>(null);
+  const [confirmApply, setConfirmApply] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; tpl: string; date: string } | null>(null);
   const [opts, setOpts] = useState<AutoOptions>({
     approvePending: true,
     fillTo: "min",
@@ -95,6 +102,14 @@ export default function ScheduleBoard(p: Props) {
       })
       .sort((a, b) => b.ok - a.ok || a.name.localeCompare(b.name));
   }, [p]);
+  const homeIds = new Set(p.staff.map((x) => x.id));
+  // nhân viên cơ sở chưa có ca nào trong tuần (không tính người đã báo nghỉ / đang được yêu cầu)
+  const unregistered = summary.filter((x) => homeIds.has(x.id) && x.ok + x.wait === 0 && !x.away.length && !["OPEN", "OFF"].includes(p.regRequests[x.id]?.status ?? ""));
+  const fmtTime = (t: number) => {
+    const d = new Date(t);
+    const z = (n: number) => String(n).padStart(2, "0");
+    return `${z(d.getHours())}:${z(d.getMinutes())} ${z(d.getDate())}/${z(d.getMonth() + 1)}`;
+  };
   const avg = summary.length ? summary.reduce((s, x) => s + x.ok, 0) / summary.length : 0;
 
   const warnings = p.days.flatMap((d) =>
@@ -183,7 +198,18 @@ export default function ScheduleBoard(p: Props) {
           <p className="mt-2 text-xs text-ink/60">Luôn ưu tiên người đang có <b>ít ca nhất</b> trong tuần; không xếp trùng giờ; không xếp người đã bị từ chối ca đó.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="outline" disabled={pending} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => setPlan(r.plan ?? null))}>Xem trước</Button>
-            <Button disabled={pending} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, true), () => setPlan(null))}>Áp dụng</Button>
+            <Button
+              disabled={pending}
+              onClick={() =>
+                // luôn tính lại bản xem trước để hộp xác nhận hiện đúng số ca sẽ thay đổi
+                run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => {
+                  setPlan(r.plan ?? null);
+                  setConfirmApply(true);
+                })
+              }
+            >
+              Áp dụng
+            </Button>
           </div>
           {plan && (
             <div className="mt-3 rounded-xl bg-cream p-3 text-sm">
@@ -200,6 +226,52 @@ export default function ScheduleBoard(p: Props) {
           )}
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmApply}
+        title="Áp dụng xếp ca tự động?"
+        confirmLabel="Áp dụng"
+        busy={pending}
+        onCancel={() => setConfirmApply(false)}
+        onConfirm={() =>
+          run(() => autoSchedule(p.storeId, p.weekStart, opts, true), () => {
+            setPlan(null);
+            setConfirmApply(false);
+          })
+        }
+      >
+        <p>
+          Tuần <b>{viDate(p.days[0]).slice(0, 5)} – {viDate(p.days[6]).slice(0, 5)}</b> · {p.storeName}
+        </p>
+        {plan && plan.changes.length ? (
+          <ul className="list-disc pl-5">
+            <li>Duyệt <b>{plan.changes.filter((c) => c.kind === "approve").length}</b> đăng ký đang chờ</li>
+            <li>Xếp thêm <b>{plan.changes.filter((c) => c.kind === "add").length}</b> ca cho nhân viên</li>
+          </ul>
+        ) : (
+          <p className="text-ink/70">Không có thay đổi nào theo tuỳ chọn hiện tại.</p>
+        )}
+        {plan && plan.shortages.some((x) => x.level === "short") && (
+          <p className="text-danger">Sau khi áp dụng vẫn còn {plan.shortages.filter((x) => x.level === "short").length} ca thiếu người.</p>
+        )}
+        <p className="text-xs text-ink/60">Ca xếp tự động có thể bỏ từng ca trên bảng sau khi áp dụng.</p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        danger
+        title="Bỏ nhân viên khỏi ca?"
+        confirmLabel="Bỏ khỏi ca"
+        busy={pending}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={() => removeTarget && run(() => removeFromSlot(p.storeId, removeTarget.id), () => setRemoveTarget(null))}
+      >
+        {removeTarget && (
+          <p>
+            <b>{removeTarget.name}</b> – ca {removeTarget.tpl}, {weekdayVi(removeTarget.date)} {viDate(removeTarget.date).slice(0, 5)}
+          </p>
+        )}
+      </ConfirmDialog>
 
       {/* Bảng lịch theo mẫu */}
       <WeekGrid
@@ -253,7 +325,15 @@ export default function ScheduleBoard(p: Props) {
                       <button title="Từ chối" disabled={pending} onClick={() => run(() => decideShifts(p.storeId, [e.id], "REJECTED"))} className="rounded bg-danger px-0.5 text-white"><X size={12} /></button>
                     </>
                   ) : (
-                    <button title="Bỏ khỏi ca" disabled={pending} onClick={() => run(() => removeFromSlot(p.storeId, e.id))} className="hidden rounded px-0.5 text-danger group-hover:block"><X size={12} /></button>
+                    <button
+                      title="Bỏ khỏi ca"
+                      aria-label={`Bỏ ${p.names[e.userId] ?? ""} khỏi ca`}
+                      disabled={pending}
+                      onClick={() => setRemoveTarget({ id: e.id, name: p.names[e.userId] ?? "?", tpl: t.name, date: d })}
+                      className="shrink-0 rounded p-0.5 text-danger/60 hover:bg-danger hover:text-white disabled:opacity-40"
+                    >
+                      <X size={12} />
+                    </button>
                   )}
                 </div>
               ))}
@@ -326,7 +406,23 @@ export default function ScheduleBoard(p: Props) {
       )}
 
       {/* Tổng hợp số ca */}
-      <Card title="Tổng hợp số ca của nhân viên trong tuần">
+      <Card
+        title="Tổng hợp số ca của nhân viên trong tuần"
+        actions={
+          p.canRequest ? (
+            <Button
+              variant="outline"
+              disabled={pending || !unregistered.length}
+              onClick={() => run(() => requestRegistration(p.storeId, p.weekStart, unregistered.map((x) => x.id)))}
+              title="Gửi yêu cầu đăng ký ca cho tất cả nhân viên chưa có ca tuần này"
+            >
+              <BellRing size={16} /> Yêu cầu NV chưa có ca đăng ký ({unregistered.length})
+            </Button>
+          ) : (
+            <span className="text-xs text-ink/60">Yêu cầu đăng ký ca chỉ gửi được cho tuần sau trở đi</span>
+          )
+        }
+      >
         <div className="overflow-x-auto">
           <table className="tbs">
             <thead>
@@ -337,11 +433,12 @@ export default function ScheduleBoard(p: Props) {
                 <th className="text-right">Giờ dự kiến</th>
                 <th className="text-right">Chờ duyệt</th>
                 <th>Ghi chú</th>
+                <th className="text-center">Đăng ký ca</th>
               </tr>
             </thead>
             <tbody>
               {summary.map((s) => (
-                <tr key={s.id} className={s.ok === 0 && !s.away.length ? "row-missing" : ""}>
+                <tr key={s.id} className={s.ok === 0 && !s.wait && !s.away.length && p.regRequests[s.id]?.status !== "OFF" ? "row-missing" : ""}>
                   <td className="font-semibold">
                     {s.name}
                     {s.from && <span className="ml-1 rounded bg-[#dbeafe] px-1 text-[10px] font-normal text-[#1e40af]">hỗ trợ từ {s.from}</span>}
@@ -351,13 +448,35 @@ export default function ScheduleBoard(p: Props) {
                   <td className="text-right">{s.h ? s.h.toFixed(1) : ""}</td>
                   <td className="text-right text-warn">{s.wait || ""}</td>
                   <td className="text-xs">
-                    {s.ok === 0 && !s.away.length && <Badge tone="red">Chưa có ca</Badge>}{" "}
+                    {s.ok === 0 && !s.wait && !s.away.length && p.regRequests[s.id]?.status !== "OFF" && <Badge tone="red">Chưa có ca</Badge>}{" "}
                     {s.ok > 0 && avg > 0 && s.ok >= avg * 1.5 && <Badge tone="orange">Nhiều ca</Badge>}{" "}
                     {s.ok > 0 && avg > 0 && s.ok <= avg * 0.5 && <Badge tone="yellow">Ít ca</Badge>}{" "}
                     {s.rej > 0 && <span className="text-ink/60">{s.rej} ca bị từ chối</span>}{" "}
                     {s.away.map(([st, n]) => (
                       <span key={st} className="mr-1 rounded bg-[#dbeafe] px-1 text-[#1e40af]">⇄ {n} ca ở {st}</span>
                     ))}
+                  </td>
+                  <td className="whitespace-nowrap text-center text-xs">
+                    {homeIds.has(s.id) && (() => {
+                      const rq = p.regRequests[s.id];
+                      if (rq?.status === "DONE") return <Badge tone="green">Đã đăng ký</Badge>;
+                      if (rq?.status === "OFF") return <Badge tone="gray">Báo nghỉ tuần này</Badge>;
+                      return (
+                        <span className="inline-flex items-center gap-1">
+                          {rq?.status === "OPEN" && <Badge tone="orange">Đã yêu cầu {fmtTime(rq.requestedAt)}</Badge>}
+                          {p.canRequest && (
+                            <button
+                              disabled={pending}
+                              onClick={() => run(() => requestRegistration(p.storeId, p.weekStart, [s.id]))}
+                              className="inline-flex items-center gap-1 rounded-lg bg-primary px-2 py-0.5 font-bold hover:bg-primary-dark disabled:opacity-50"
+                              title="Nhân viên sẽ thấy cảnh báo và nút Đăng ký ca"
+                            >
+                              <BellRing size={12} /> {rq?.status === "OPEN" ? "Nhắc lại" : "Yêu cầu đăng ký"}
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -368,6 +487,7 @@ export default function ScheduleBoard(p: Props) {
                 <td className="text-right font-bold">{summary.reduce((a, s) => a + s.h, 0).toFixed(1)}</td>
                 <td className="text-right font-bold text-warn">{pendingAll.length || ""}</td>
                 <td className="text-xs">TB {avg.toFixed(1)} ca/người</td>
+                <td />
               </tr>
             </tbody>
           </table>

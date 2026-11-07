@@ -27,9 +27,25 @@ export type CaptionData = {
   coworkers?: string[];
   note?: string | null;
   supportFrom?: string;
+  revenue?: { dt?: number | null; tm?: number | null; tk?: number | null; cp?: number | null; grab?: number | null; shopee?: number | null } | null;
+  revenueInput?: { cp?: string | null } | null;
 };
 
 /** Nội dung tin nhắn Telegram của 1 lượt chốt ca (thuần – có unit test). */
+const money = (n?: number | null) => `${Math.round(n ?? 0).toLocaleString("vi-VN")}đ`;
+function revenueLines(r: CaptionData["revenue"], input?: CaptionData["revenueInput"]) {
+  if (!r || r.dt == null) return [];
+  const diff = (r.dt ?? 0) - ((r.tm ?? 0) + (r.tk ?? 0) + (r.cp ?? 0) + (r.grab ?? 0) + (r.shopee ?? 0));
+  const tcDetail = input?.cp && /[a-zA-ZÀ-ỹ+]/.test(input.cp) ? ` (${input.cp.trim()})` : "";
+  return [
+    `💰 Doanh thu máy: ${money(r.dt)}`,
+    `   Tiền mặt ${money(r.tm)} · Tài khoản ${money(r.tk)}`,
+    `   Thu chi ${money(r.cp)}${tcDetail}`,
+    `   Grab ${money(r.grab)} · Shopee ${money(r.shopee)}`,
+    `${diff === 0 ? "✅" : "⚠️"} Âm/Dương: ${diff > 0 ? "+" : ""}${money(diff)}`,
+  ];
+}
+
 export function formatCaption(d: CaptionData) {
   const hhmm = (x?: Date | null) => (x ? localTime(new Date(x), d.tz).slice(0, 5) : "");
   const endAt = d.checkOutAt ? new Date(d.checkOutAt) : d.createdAt;
@@ -40,14 +56,16 @@ export function formatCaption(d: CaptionData) {
       ? `⏰ Ca ${d.shiftLabel}`
       : "⏰ Ngoài ca (không có ca được xếp)";
   return [
-    `🧾 CHỐT CA – ${d.storeName}`,
-    `📅 ${weekdayVi(d.workDate)}, ${viDate(d.workDate)}`,
+    `🧾 CHỐT CA`,
+    `📅 Ngày: ${viDate(d.workDate).slice(0, 5)} (${weekdayVi(d.workDate)})`,
+    `🏪 Cơ sở: ${d.storeName.replace(/^TBS\s+/i, "")}`,
+    `👤 Thu ngân: ${d.employeeName}${d.employeePhone ? ` · ${d.employeePhone}` : ""}${d.supportFrom ? ` (hỗ trợ từ ${d.supportFrom})` : ""}`,
     shiftLine,
-    `👤 Người chốt: ${d.employeeName}${d.employeePhone ? ` · ${d.employeePhone}` : ""}${d.supportFrom ? ` (hỗ trợ từ ${d.supportFrom})` : ""}`,
     d.checkInAt
       ? `🕐 Vào ca ${hhmm(d.checkInAt)}${d.checkOutAt ? ` · Ra ca ${hhmm(d.checkOutAt)}` : ""} · Chốt lúc ${hhmm(d.createdAt)} (${worked}h)`
       : `🕐 Chốt lúc ${hhmm(d.createdAt)} (chưa có lượt check-in)`,
     d.coworkers?.length ? `👥 Cùng ca: ${d.coworkers.join(", ")}` : "",
+    ...revenueLines(d.revenue, d.revenueInput),
     d.note ? `📝 ${d.note}` : "",
     `#chotca #${hashtag(d.storeCode || "TBS")}${d.shiftName ? ` #ca_${hashtag(d.shiftName)}` : ""}`,
   ]
@@ -75,6 +93,8 @@ export async function buildCaption(closingId: string) {
     checkOutAt: c.checkOutAt,
     coworkers: c.coworkers,
     note: c.note,
+    revenue: c.revenue,
+    revenueInput: c.revenueInput,
     supportFrom: user?.storeId && String(user.storeId) !== String(c.storeId) ? ((await Store.findById(user.storeId).select("name").lean())?.name ?? undefined) : undefined,
   });
 }
@@ -126,6 +146,7 @@ export async function deliverClosing(closingId: string, photoBufs?: Buffer[]) {
           shift: { label: c.shiftLabel, name: c.shiftName, start: c.shiftStart, end: c.shiftEnd, checkInAt: c.checkInAt, checkOutAt: c.checkOutAt, coworkers: c.coworkers },
           caption: await buildCaption(String(c._id)),
           note: c.note,
+          revenue: c.revenue,
           createdAt: c.createdAt,
           telegram: { chatId, messageIds: c.telegram?.messageIds ?? [] },
           photos: bufs.map((b) => `data:image/jpeg;base64,${b.toString("base64")}`),

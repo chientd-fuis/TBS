@@ -20,7 +20,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const days = weekDays(ws);
   const [tpls, mine] = await Promise.all([
     ShiftTemplate.find({ storeId: user.storeId, active: true }).sort({ startTime: 1 }).lean(),
-    ShiftAssignment.find({ userId: user._id, date: { $gte: days[0], $lte: days[6] } }).lean(),
+    ShiftAssignment.find({ userId: user._id, storeId: user.storeId, date: { $gte: days[0], $lte: days[6] } }).lean(),
   ]);
   return (
     <>

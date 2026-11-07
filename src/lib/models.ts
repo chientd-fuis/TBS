@@ -45,6 +45,10 @@ const StoreSchema = new Schema(
     timezone: { type: String, default: "Asia/Ho_Chi_Minh" },
     driveFolderId: { type: String, default: "" },
     telegramChatId: { type: String, default: "" }, // nhóm Telegram nhận ảnh chốt ca (trống → dùng TELEGRAM_CHAT_ID)
+    // Google Sheet doanh thu (template: Ngày | DT | Tài khoản | Tiền mặt | CP trong két | Shopee | Chênh lệch | DT thực tế | Ghi chú)
+    revenueSheetId: { type: String, default: "" },
+    revenueTabPattern: { type: String, default: "T{m}" }, // tên tab theo tháng: {m} {mm} {yyyy}
+    revenueFirstRow: { type: Number, default: 3 }, // dòng của ngày 1
     active: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -166,6 +170,24 @@ export const ShiftAssignment = getModel("ShiftAssignment", ShiftAssignmentSchema
 /** Điều kiện lọc ca chính thức (đã duyệt) – dùng cho chấm công, dashboard, xuất Excel. */
 export const APPROVED_SHIFT = { status: { $nin: ["PENDING", "REJECTED"] } } as const;
 
+/* ---------- Yêu cầu đăng ký ca (admin nhắc nhân viên đăng ký ca cho 1 tuần) ---------- */
+const ShiftRegRequestSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    weekStart: { type: String, required: true }, // YYYY-MM-DD (thứ 2)
+    // OPEN = đang chờ nhân viên đăng ký · DONE = đã gửi đăng ký · OFF = nhân viên báo nghỉ cả tuần
+    status: { type: String, enum: ["OPEN", "DONE", "OFF"], default: "OPEN" },
+    requestedBy: String,
+    requestedAt: { type: Date, default: Date.now },
+    respondedAt: Date,
+  },
+  { timestamps: true },
+);
+ShiftRegRequestSchema.index({ userId: 1, weekStart: 1 }, { unique: true });
+ShiftRegRequestSchema.index({ storeId: 1, weekStart: 1 });
+export const ShiftRegRequest = getModel("ShiftRegRequest", ShiftRegRequestSchema);
+
 /* ---------- Attendance (bảng chấm công) ---------- */
 const AttendanceSchema = new Schema(
   {
@@ -203,6 +225,7 @@ const AttendanceSchema = new Schema(
     manualReason: String,
     status: { type: String, enum: ["OPEN", "COMPLETED", "MISSING_CHECKOUT"], default: "OPEN" },
     note: String,
+    photosPurgedAt: Date, // ảnh check-in/out đã bị xoá khi dọn dữ liệu cũ
   },
   { timestamps: true },
 );
@@ -269,6 +292,7 @@ const ShiftClosingSchema = new Schema(
     distanceM: Number,
     deviceId: String,
     photos: [{ driveId: String, pendingId: { type: Schema.Types.ObjectId, ref: "PendingPhoto" } }],
+    photosPurgedAt: Date, // ảnh đã bị xoá khi dọn dữ liệu cũ
     telegram: {
       status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED"], default: "PENDING" },
       chatId: String,
@@ -278,11 +302,50 @@ const ShiftClosingSchema = new Schema(
       sentAt: Date,
     },
     webhook: { status: String, error: String },
+    // doanh thu ca (nhân viên xác nhận / sửa sau khi bot đọc ảnh)
+    revenue: { dt: Number, tm: Number, tk: Number, cp: Number, grab: Number, shopee: Number },
+    // nội dung nhân viên gõ ở từng ô (VD thu chi "30k sữa chua + 20k ship") – hiển thị lại / gửi Telegram
+    revenueInput: { dt: String, tm: String, tk: String, cp: String, grab: String, shopee: String },
+    ocr: {
+      status: { type: String, enum: ["NONE", "OK", "FAILED"], default: "NONE" },
+      values: { dt: Number, tm: Number, tk: Number, cp: Number, grab: Number, shopee: Number }, // bot đọc được (để so với số nhân viên sửa)
+      error: String,
+    },
+    isDayEnd: { type: Boolean, default: false }, // ca cuối ngày → ghi Google Sheet
+    revenueEditedBy: String, // admin sửa số liệu
   },
   { timestamps: true },
 );
 ShiftClosingSchema.index({ storeId: 1, createdAt: -1 });
 ShiftClosingSchema.index({ "telegram.status": 1 });
+/* ---------- Doanh thu theo ngày (cộng các lượt chốt ca) + trạng thái ghi Google Sheet ---------- */
+const DayRevenueSchema = new Schema(
+  {
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true }, // YYYY-MM-DD
+    month: { type: String, required: true },
+    dt: { type: Number, default: 0 },
+    tk: { type: Number, default: 0 },
+    tm: { type: Number, default: 0 },
+    cp: { type: Number, default: 0 },
+    grab: { type: Number, default: 0 },
+    shopee: { type: Number, default: 0 },
+    closings: { type: Number, default: 0 },
+    note: String,
+    sheet: {
+      status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED"], default: "PENDING" },
+      error: String,
+      range: String,
+      attempts: { type: Number, default: 0 },
+      syncedAt: Date,
+    },
+  },
+  { timestamps: true },
+);
+DayRevenueSchema.index({ storeId: 1, date: 1 }, { unique: true });
+DayRevenueSchema.index({ "sheet.status": 1, date: 1 });
+export const DayRevenue = getModel("DayRevenue", DayRevenueSchema);
+
 export const ShiftClosing = getModel("ShiftClosing", ShiftClosingSchema);
 
 /* ---------- Ảnh chờ upload Drive (khi mất kết nối) ---------- */

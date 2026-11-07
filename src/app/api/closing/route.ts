@@ -2,20 +2,40 @@ import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
-import { APPROVED_SHIFT, Attendance, ShiftAssignment, ShiftClosing, Store, User } from "@/lib/models";
-import { findShiftForClosing } from "@/lib/attendance";
+import { APPROVED_SHIFT, ShiftAssignment, ShiftClosing, User } from "@/lib/models";
 import { checkDeviceForAttendance } from "@/lib/device";
 import { distanceMeters } from "@/lib/calc";
 import { savePhoto } from "@/lib/drive";
 import { deliverClosing } from "@/lib/closing";
-import { localDate, localMonth, localTime } from "@/lib/time";
+import { resolveClosingContext } from "@/lib/closing-context";
+import { afterClosing, isDayEndShift } from "@/lib/day-revenue";
+import { revenueDiff } from "@/lib/revenue";
+import { localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 
 export const maxDuration = 60;
 
+const Money = z.number().int().min(0).max(1_000_000_000);
+const Raw = z.string().max(300);
 const Body = z.object({
   photos: z.array(z.string()).min(1).max(4),
   note: z.string().max(500).optional(),
+  // doanh thu ca (bot đọc ảnh → nhân viên kiểm tra / sửa)
+  revenue: z.object({
+    dt: Money,
+    tm: Money,
+    tk: Money,
+    cp: z.number().int().min(-1_000_000_000).max(1_000_000_000), // thu chi (có thể âm nếu là khoản thu)
+    grab: Money.default(0),
+    shopee: Money,
+  }),
+  revenueInput: z
+    .object({ dt: Raw, tm: Raw, tk: Raw, cp: Raw, grab: Raw, shopee: Raw })
+    .partial()
+    .optional(),
+  ocr: z
+    .object({ status: z.enum(["NONE", "OK", "FAILED"]), values: z.record(z.string(), z.number()).optional(), error: z.string().max(300).optional() })
+    .optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
 });
@@ -27,29 +47,16 @@ export async function POST(req: Request) {
     if (!user) throw new HttpError(401, "Chưa đăng nhập");
     if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");
     const parsed = Body.safeParse(await req.json());
-    if (!parsed.success) throw new HttpError(400, "Cần 1–4 ảnh chụp");
+    if (!parsed.success) throw new HttpError(400, "Cần 1–4 ảnh chụp và nhập đủ số liệu doanh thu");
+    if (revenueDiff(parsed.data.revenue) !== 0 && !parsed.data.note?.trim()) throw new HttpError(400, "Âm/Dương khác 0 – cần ghi lý do ở ghi chú");
     const b = parsed.data;
 
     const dev = await checkDeviceForAttendance(user._id);
     if (!dev.ok) throw new HttpError(403, dev.error);
-    const home = await Store.findById(user.storeId).lean();
-    if (!home) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
-    const homeTz = home.timezone || "Asia/Ho_Chi_Minh";
+    const ctx = await resolveClosingContext(user, new Date());
+    if (!ctx) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
+    const { store, tz, today, att, shift } = ctx;
     const now = new Date();
-    const homeToday = localDate(now, homeTz);
-
-    // gắn với lượt chấm công đang mở, hoặc lượt gần nhất hôm nay
-    const att =
-      (await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean()) ??
-      (await Attendance.findOne({ userId: user._id, workDate: homeToday }).sort({ checkInAt: -1 }).lean());
-
-    // ca đang chốt (có thể là ca hỗ trợ ở cơ sở khác) + những người cùng ca
-    const shift = await findShiftForClosing(user._id, now, homeTz, att?.shiftAssignmentId);
-    // chốt ca gửi về nhóm của cơ sở đang làm (lượt chấm công → ca → cơ sở gốc)
-    const storeId = att?.storeId ?? shift?.storeId ?? home._id;
-    const store = String(storeId) === String(home._id) ? home : ((await Store.findById(storeId).lean()) ?? home);
-    const tz = store.timezone || homeTz;
-    const today = localDate(now, tz);
     let coworkers: string[] = [];
     if (shift) {
       const mates = await ShiftAssignment.find({
@@ -78,6 +85,8 @@ export async function POST(req: Request) {
       });
       photos.push({ driveId: r.driveId, pendingId: r.pendingId });
     }
+    const workDate = shift?.date ?? today;
+    const isDayEnd = await isDayEndShift(store._id, shift?.startTime);
     const distanceM =
       b.lat != null && b.lng != null && store.lat != null && store.lng != null ? distanceMeters(b.lat, b.lng, store.lat, store.lng) : undefined;
     await ShiftClosing.create({
@@ -85,7 +94,7 @@ export async function POST(req: Request) {
       userId: user._id,
       storeId: store._id,
       attendanceId: att?._id,
-      workDate: shift?.date ?? today,
+      workDate,
       shiftLabel: shift ? `${shift.shiftName} ${shift.startTime}–${shift.endTime}` : att?.shiftLabel?.replace(/^Ca\s*/i, ""),
       shiftAssignmentId: shift?._id,
       shiftName: shift?.shiftName,
@@ -102,17 +111,30 @@ export async function POST(req: Request) {
       distanceM,
       deviceId: dev.deviceId,
       photos,
+      revenue: b.revenue,
+      revenueInput: b.revenueInput,
+      ocr: b.ocr ?? { status: "NONE" },
+      isDayEnd,
     });
     const status = await deliverClosing(String(id), bufs);
+    // cộng doanh thu ngày; ca cuối ngày → ghi Google Sheet
+    const sheet = await afterClosing(store._id, workDate, isDayEnd).catch(() => "FAILED" as const);
     return NextResponse.json({
       ok: true,
       telegram: status,
+      sheet,
       message:
         status === "SENT"
           ? "Đã chốt ca và gửi ảnh vào nhóm Telegram."
           : status === "DISABLED"
             ? "Đã lưu chốt ca (chưa cấu hình nhóm Telegram – báo admin)."
             : "Đã lưu chốt ca, gửi Telegram chưa được – hệ thống sẽ tự gửi lại.",
+      sheetMessage:
+        sheet === "SENT"
+          ? "Đã ghi doanh thu cả ngày lên Google Sheet."
+          : sheet === "FAILED"
+            ? "Ghi Google Sheet chưa được – hệ thống sẽ tự ghi lại, admin xem ở mục Chốt ca."
+            : null,
     });
   } catch (e) {
     return jsonError(e);

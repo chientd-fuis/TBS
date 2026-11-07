@@ -47,3 +47,22 @@ export async function disconnectDrive(_: FormState): Promise<FormState> {
     return errMsg(e);
   }
 }
+
+/* ===== Dọn dữ liệu cũ (chỉ Chủ) ===== */
+export type CleanupResult = { ok?: boolean; error?: string; counts?: import("@/lib/cleanup").CleanupCounts };
+
+export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, apply: boolean): Promise<CleanupResult> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Chủ được dọn dữ liệu" };
+    const { previewCleanup, runCleanup } = await import("@/lib/cleanup");
+    if (!apply) return { ok: true, counts: await previewCleanup(opts) };
+    const counts = await runCleanup(opts);
+    // ghi nhật ký SAU khi xoá (để không bị xoá mất)
+    await audit(adminActor(admin), "data.cleanup", { type: "Settings" }, null, { opts, counts });
+    revalidatePath("/admin/settings");
+    return { ok: true, counts };
+  } catch (e) {
+    return { error: (e as Error).message || "Lỗi hệ thống" };
+  }
+}

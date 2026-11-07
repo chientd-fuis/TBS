@@ -1,0 +1,52 @@
+"use client";
+import { useEffect, type ReactNode } from "react";
+import { Loader2, TriangleAlert } from "lucide-react";
+import { Button } from "@/components/ui";
+
+/** Hộp thoại xác nhận (thay cho window.confirm) – Esc / bấm nền để huỷ. */
+export function ConfirmDialog({
+  open,
+  title,
+  children,
+  confirmLabel = "Xác nhận",
+  cancelLabel = "Huỷ",
+  danger = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: ReactNode;
+  children?: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onCancel]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => !busy && onCancel()}>
+      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="flex items-center gap-2 text-base font-bold text-accent">
+          {danger && <TriangleAlert size={18} className="text-danger" />}
+          {title}
+        </h3>
+        {children && <div className="mt-3 space-y-2 text-sm">{children}</div>}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" disabled={busy} onClick={onCancel}>{cancelLabel}</Button>
+          <Button variant={danger ? "danger" : "secondary"} disabled={busy} onClick={onConfirm}>
+            {busy && <Loader2 size={16} className="animate-spin" />} {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

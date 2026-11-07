@@ -23,6 +23,7 @@ import { assertNotLocked, computeFields, findShiftFor, payStoreOf, storeTz } fro
 import { addDays, localMonth, zonedToDate } from "@/lib/time";
 import { generatePayroll, publishPayroll, updateItemExtras } from "@/lib/payroll";
 import { errMsg, num, str, type FormState } from "./types";
+import { extractSheetId } from "@/lib/revenue";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,8 +43,12 @@ export async function saveStore(_: FormState, fd: FormData): Promise<FormState> 
       radiusM: num(fd.get("radiusM"), 100) || 100,
       timezone: str(fd.get("timezone")) || "Asia/Ho_Chi_Minh",
       telegramChatId: str(fd.get("telegramChatId")),
+      revenueSheetId: extractSheetId(str(fd.get("revenueSheetId"))),
+      revenueTabPattern: str(fd.get("revenueTabPattern")) || "T{m}",
+      revenueFirstRow: Math.max(1, num(fd.get("revenueFirstRow"), 3) || 3),
       active: fd.get("active") === "on",
     };
+    if (str(fd.get("revenueSheetId")) && !data.revenueSheetId) return { error: "Link Google Sheet không hợp lệ" };
     if (!data.code || !data.name) return { error: "Nhập mã và tên cơ sở" };
     if ((data.lat != null && !Number.isFinite(data.lat)) || (data.lng != null && !Number.isFinite(data.lng)))
       return { error: "Toạ độ không hợp lệ" };

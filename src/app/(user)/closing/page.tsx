@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
-import { Attendance, ShiftClosing, Store } from "@/lib/models";
-import { localDate, localTime, viDate } from "@/lib/time";
+import { ShiftClosing } from "@/lib/models";
+import { localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import ClosingForm from "./ClosingForm";
-import { findShiftForClosing } from "@/lib/attendance";
+import { resolveClosingContext } from "@/lib/closing-context";
+import { isDayEndShift } from "@/lib/day-revenue";
+import { revenueDiff, type Revenue } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +15,19 @@ const TG = { SENT: ["Đã gửi Telegram", "green"], FAILED: ["Gửi lỗi – �
 /** Chốt ca: chụp ảnh cuối ca → gửi nhóm Telegram */
 export default async function ClosingPage() {
   const user = await requireActiveUser();
-  const store = await Store.findById(user.storeId).lean();
-  const tz = store?.timezone || "Asia/Ho_Chi_Minh";
-  const today = localDate(new Date(), tz);
-  const att =
-    (await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean()) ??
-    (await Attendance.findOne({ userId: user._id, workDate: today }).sort({ checkInAt: -1 }).lean());
-  const shift = await findShiftForClosing(user._id, new Date(), tz, att?.shiftAssignmentId);
+  const ctx = await resolveClosingContext(user);
+  const tz = ctx?.tz || "Asia/Ho_Chi_Minh";
+  const att = ctx?.att;
+  const shift = ctx?.shift;
+  const isDayEnd = ctx ? await isDayEndShift(ctx.store._id, shift?.startTime) : false;
+  // các ca đã chốt trước trong ngày (ca cuối thấy tổng ngày trước khi ghi sheet)
+  const dayBefore = ctx
+    ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: ctx.workDate, "revenue.dt": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
+        label: `${c.shiftName ? `Ca ${c.shiftName}` : "Ngoài ca"} · ${c.employeeName ?? ""}`,
+        dt: c.revenue?.dt ?? 0,
+        diff: revenueDiff((c.revenue ?? {}) as Partial<Revenue>),
+      }))
+    : [];
   const recent = await ShiftClosing.find({ userId: user._id }).sort({ createdAt: -1 }).limit(5).lean();
   return (
     <>
@@ -31,6 +39,9 @@ export default async function ClosingPage() {
         shiftLabel={shift ? `${shift.shiftName} (${shift.startTime}–${shift.endTime})` : "Ngoài ca"}
         checkIn={att ? localTime(att.checkInAt, tz).slice(0, 5) : null}
         employee={`${user.name}${user.phone ? ` · ${user.phone}` : ""}`}
+        storeName={ctx?.store.name}
+        isDayEnd={isDayEnd}
+        dayBefore={dayBefore}
       />
       {recent.length > 0 && (
         <Card title="Lần chốt ca gần đây">
@@ -43,6 +54,7 @@ export default async function ClosingPage() {
                   <img src={`/api/photo?closing=${c._id}&i=0`} alt="" className="h-12 w-12 rounded-lg bg-cream object-cover" />
                   <span className="flex-1">
                     {viDate(c.workDate)} {c.createdAt ? localTime(new Date(c.createdAt), tz).slice(0, 5) : ""} · {c.photos.length} ảnh
+                    {c.revenue?.dt != null && <> · DT <b>{c.revenue.dt.toLocaleString("vi-VN")} đ</b></>}
                     {c.note && <span className="block truncate text-xs text-ink/60">{c.note}</span>}
                   </span>
                   <Badge tone={st[1]}>{st[0]}</Badge>

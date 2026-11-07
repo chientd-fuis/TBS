@@ -2,19 +2,27 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { AdminLoginLog, AuditLog, PendingPhoto } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
-import { viDateTime } from "@/lib/time";
+import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
 import { changeAdminPassword } from "../../actions/auth";
 import { disconnectDrive, saveConfig } from "../../actions/settings";
+import CleanupCard from "./CleanupCard";
+import { latestCutoff } from "@/lib/cleanup";
 
 export const dynamic = "force-dynamic";
+
+// dọn dữ liệu (xoá thư mục Drive) có thể chạy lâu
+export const maxDuration = 60;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ drive?: string; msg?: string }> }) {
   const admin = await requireAdmin();
   const isOwner = admin.kind === "OWNER";
   const sp = await searchParams;
   const s = await getSettings();
+  // tháng mốc để dọn: từ (tháng này − 2) lùi về 24 tháng
+  const cleanupMonths: string[] = [];
+  for (let m = latestCutoff(), i = 0; i < 24; i++, m = prevMonth(m)) cleanupMonths.push(m);
   const [logs, audits, pending] = isOwner
     ? await Promise.all([
         AdminLoginLog.find().sort({ createdAt: -1 }).limit(30).lean(),
@@ -97,6 +105,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Card>
         )}
       </div>
+      {isOwner && <CleanupCard months={cleanupMonths} />}
       {isOwner && (
         <Card title="Nhật ký thao tác (50 gần nhất)">
           <div className="max-h-96 overflow-auto">

@@ -216,3 +216,35 @@ export async function readPhoto(opts: { driveId?: string | null; pendingId?: str
   }
   return null;
 }
+
+/**
+ * Dọn ảnh cũ trên Drive: chuyển vào THÙNG RÁC (khôi phục được 30 ngày) các thư mục tháng
+ * "YYYY-MM" (ảnh chấm công) và "Chốt ca YYYY-MM" có tháng < beforeMonth.
+ * Chỉ thấy thư mục do app tạo (quyền drive.file). Dừng khi hết thời gian → trả về số còn lại.
+ */
+export async function trashOldPhotoFolders(beforeMonth: string, deadline: number) {
+  const d = await getDrive();
+  if (!d) return { trashed: 0, remaining: 0, connected: false };
+  const old: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const r = await d.files.list({
+      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      fields: "nextPageToken, files(id, name)",
+      pageSize: 1000,
+      pageToken,
+    });
+    for (const f of r.data.files ?? []) {
+      const m = /^(?:Chốt ca )?(\d{4}-\d{2})$/.exec(f.name ?? "");
+      if (m && m[1] < beforeMonth && f.id) old.push(f.id);
+    }
+    pageToken = r.data.nextPageToken ?? undefined;
+  } while (pageToken && Date.now() < deadline);
+  let trashed = 0;
+  for (const id of old) {
+    if (Date.now() > deadline) break;
+    await d.files.update({ fileId: id, requestBody: { trashed: true } });
+    trashed++;
+  }
+  return { trashed, remaining: old.length - trashed, connected: true };
+}

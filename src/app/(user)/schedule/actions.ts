@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
-import { ShiftAssignment, ShiftTemplate, Store } from "@/lib/models";
+import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store } from "@/lib/models";
 import { addDays, localDate, weekDays, weekStartOf, isYmd } from "@/lib/time";
 
 export type RegResult = { ok?: boolean; error?: string; message?: string };
@@ -34,7 +34,8 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
       }),
     );
 
-    const existing = await ShiftAssignment.find({ userId: user._id, date: { $gte: days[0], $lte: days[6] } }).lean();
+    // chỉ đăng ký của cơ sở gốc (không đụng ca hỗ trợ cơ sở khác do admin xếp)
+    const existing = await ShiftAssignment.find({ userId: user._id, storeId: store._id, date: { $gte: days[0], $lte: days[6] } }).lean();
     let added = 0;
     let removed = 0;
     for (const e of existing) {
@@ -59,8 +60,24 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
       );
       added++;
     }
-    revalidatePath("/schedule", "layout");
+    // có đăng ký ca trong tuần → hoàn tất yêu cầu đăng ký của admin (nếu có)
+    if (wanted.size > 0)
+      await ShiftRegRequest.updateOne({ userId: user._id, weekStart, status: "OPEN" }, { $set: { status: "DONE", respondedAt: new Date() } });
+    revalidatePath("/", "layout");
     return { ok: true, message: `Đã gửi đăng ký: thêm ${added}, bỏ ${removed} ca. Chờ admin duyệt.` };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Nhân viên báo nghỉ cả tuần → đóng yêu cầu đăng ký ca của admin. */
+export async function declareWeekOff(weekStart: string): Promise<RegResult> {
+  const user = await requireActiveUser();
+  try {
+    const r = await ShiftRegRequest.updateOne({ userId: user._id, weekStart, status: "OPEN" }, { $set: { status: "OFF", respondedAt: new Date() } });
+    if (!r.modifiedCount) return { error: "Không có yêu cầu đăng ký nào cho tuần này" };
+    revalidatePath("/", "layout");
+    return { ok: true, message: "Đã báo admin: bạn nghỉ tuần này" };
   } catch (e) {
     return { error: (e as Error).message };
   }

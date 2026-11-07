@@ -60,6 +60,8 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           supportFrom={data.supportFrom}
           external={data.external}
           otherStaff={data.otherStaff}
+          regRequests={data.regRequests}
+          canRequest={ws >= addDays(thisWeek, 7)}
           isPast={addDays(ws, 6) < today}
         />
       )}

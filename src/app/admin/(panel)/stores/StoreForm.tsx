@@ -4,7 +4,7 @@ import { Crosshair, MapPinned } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { saveStore } from "../../actions/ops";
 
-type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; active: boolean };
+type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; active: boolean };
 
 export default function StoreForm({ store }: { store: S | null }) {
   const [state, action, pending] = useActionState(saveStore, null);
@@ -54,6 +54,17 @@ export default function StoreForm({ store }: { store: S | null }) {
       <Field label="Telegram chat ID nhóm chốt ca" hint="VD: -1001234567890. Để trống = dùng nhóm mặc định (TELEGRAM_CHAT_ID). Bấm 'Lưu' rồi 'Gửi thử' để kiểm tra.">
         <Input name="telegramChatId" defaultValue={store?.telegramChatId ?? ""} placeholder="-100…" />
       </Field>
+      <div className="grid gap-3 sm:grid-cols-[1fr_8rem_6rem]">
+        <Field label="Google Sheet doanh thu" hint="Dán link file sheet của cơ sở. Share file cho email service account (quyền Người chỉnh sửa).">
+          <Input name="revenueSheetId" defaultValue={store?.revenueSheetId ? `https://docs.google.com/spreadsheets/d/${store.revenueSheetId}` : ""} placeholder="https://docs.google.com/spreadsheets/d/…" />
+        </Field>
+        <Field label="Tên tab tháng" hint="{m} = số tháng">
+          <Input name="revenueTabPattern" defaultValue={store?.revenueTabPattern || "T{m}"} />
+        </Field>
+        <Field label="Dòng ngày 1">
+          <Input name="revenueFirstRow" type="number" min={1} defaultValue={store?.revenueFirstRow || 3} />
+        </Field>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={useHere}><Crosshair size={16} /> Dùng vị trí hiện tại</Button>
         {lat && lng && (

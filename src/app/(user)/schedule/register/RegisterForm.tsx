@@ -21,8 +21,11 @@ export default function RegisterForm({
   existing: { key: string; status: St }[];
 }) {
   const router = useRouter();
-  const status = useMemo(() => new Map(existing.map((e) => [e.key, e.status])), [existing]);
-  const [sel, setSel] = useState<Set<string>>(() => new Set(existing.filter((e) => e.status !== "REJECTED").map((e) => e.key)));
+  // chỉ xét các ô có trên bảng (ca đang hoạt động của cơ sở × 7 ngày) – bỏ ca hỗ trợ cơ sở khác, ca mẫu đã tắt
+  const visible = useMemo(() => new Set(days.flatMap((d) => templates.map((t) => `${d}|${t.id}`))), [days, templates]);
+  const mine = useMemo(() => existing.filter((e) => visible.has(e.key)), [existing, visible]);
+  const status = useMemo(() => new Map(mine.map((e) => [e.key, e.status])), [mine]);
+  const [sel, setSel] = useState<Set<string>>(() => new Set(mine.filter((e) => e.status !== "REJECTED").map((e) => e.key)));
   const [msg, setMsg] = useState<{ tone: "green" | "red"; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -41,9 +44,11 @@ export default function RegisterForm({
     });
 
   const changed = useMemo(() => {
-    const before = new Set(existing.filter((e) => e.status !== "REJECTED").map((e) => e.key));
+    const before = new Set(mine.filter((e) => e.status !== "REJECTED").map((e) => e.key));
     return before.size !== sel.size || [...sel].some((k) => !before.has(k));
-  }, [existing, sel]);
+  }, [mine, sel]);
+  const picked = [...sel].filter((k) => status.get(k) !== "APPROVED").length; // ca nhân viên tự chọn (mới / chờ duyệt)
+  const approved = [...sel].filter((k) => status.get(k) === "APPROVED").length;
 
   return (
     <div className="space-y-3">
@@ -83,7 +88,10 @@ export default function RegisterForm({
       />
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm">Đã chọn <b>{sel.size}</b> ca</span>
+        <span className="text-sm">
+          Đã chọn <b>{picked}</b> ca
+          {approved > 0 && <span className="text-ink/60"> · {approved} ca đã duyệt</span>}
+        </span>
         <Button onClick={submit} disabled={pending || !changed} className="px-6">
           {pending && <Loader2 size={16} className="animate-spin" />} Gửi đăng ký
         </Button>

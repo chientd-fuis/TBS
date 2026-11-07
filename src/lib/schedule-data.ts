@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
-import { APPROVED_SHIFT, ShiftAssignment, ShiftTemplate, Store, User } from "./models";
+import { APPROVED_SHIFT, ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store, User } from "./models";
 import { addDays, weekDays } from "./time";
 import { buildHistory, type Entry, type TplInfo } from "./schedule";
 import { externalShifts, otherStoreStaff } from "./support";
@@ -48,6 +48,13 @@ export async function loadWeek(storeId: string, weekStart: string) {
   // ca của nhân viên cơ sở này đang đi hỗ trợ nơi khác (tránh xếp trùng, hiện ghi chú)
   const external = await externalShifts(staff.map((x) => x.id), days, storeId);
   const otherStaff = await otherStoreStaff(storeId);
+  // trạng thái yêu cầu đăng ký ca của tuần này
+  const regRequests: Record<string, { status: string; requestedAt: number }> = Object.fromEntries(
+    (await ShiftRegRequest.find({ storeId, weekStart }).select("userId status requestedAt").lean()).map((r) => [
+      String(r.userId),
+      { status: r.status, requestedAt: r.requestedAt ? new Date(r.requestedAt).getTime() : 0 },
+    ]),
+  );
   return {
     store: { id: String(store._id), name: store.name, timezone: store.timezone || "Asia/Ho_Chi_Minh" },
     days,
@@ -58,6 +65,7 @@ export async function loadWeek(storeId: string, weekStart: string) {
     supportFrom,
     external,
     otherStaff,
+    regRequests,
   };
 }
 

@@ -33,3 +33,70 @@ export async function testTelegram(_: FormState, fd: FormData): Promise<FormStat
     return errMsg(e);
   }
 }
+
+/** Ghi lại doanh thu 1 ngày lên Google Sheet (admin bấm tay). */
+export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const storeId = str(fd.get("storeId"));
+    const date = str(fd.get("date"));
+    const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
+    await recomputeDay(storeId, date);
+    const st = await syncDaySheet(storeId, date);
+    await audit(adminActor(admin), "revenue.sheetSync", { type: "Store", id: storeId }, null, { date, status: st });
+    revalidatePath("/admin/closings");
+    return st === "SENT" ? { ok: true } : { error: "Chưa ghi được – xem lỗi ở cột Google Sheet" };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Admin sửa số liệu doanh thu của 1 lượt chốt ca → cộng lại ngày (ngày đã ghi sheet thì ghi lại). */
+export async function editClosingRevenue(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const id = str(fd.get("id"));
+    const { ShiftClosing } = await import("@/lib/models");
+    const { evalMoneyExpr, REVENUE_KEYS } = await import("@/lib/revenue");
+    const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
+    const c = await ShiftClosing.findById(id);
+    if (!c) return { error: "Không tìm thấy lượt chốt ca" };
+    const before = c.toObject().revenue;
+    const revenue: Record<string, number> = {};
+    const revenueInput: Record<string, string> = {};
+    for (const k of REVENUE_KEYS) {
+      const raw = str(fd.get(k));
+      const r = evalMoneyExpr(raw);
+      if (!r.ok) return { error: `Ô ${k} có khoản không có số tiền` };
+      if (k !== "cp" && r.value < 0) return { error: "Số tiền không được âm" };
+      revenue[k] = r.value;
+      revenueInput[k] = raw;
+    }
+    c.set({ revenue, revenueInput, revenueEditedBy: adminActor(admin).name });
+    await c.save();
+    await audit(adminActor(admin), "closing.revenue.edit", { type: "ShiftClosing", id }, before, revenue);
+    const { wasSynced, changed } = await recomputeDay(c.storeId, c.workDate);
+    if (wasSynced && changed) await syncDaySheet(c.storeId, c.workDate);
+    revalidatePath("/admin/closings");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Kiểm tra quyền ghi Google Sheet + tab tháng hiện tại của cơ sở. */
+export async function testRevenueSheet(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    await assertAdmin();
+    const store = await Store.findById(str(fd.get("storeId"))).lean();
+    if (!store) return { error: "Không tìm thấy cơ sở" };
+    const { checkSheet } = await import("@/lib/sheets");
+    const { localMonth } = await import("@/lib/time");
+    const r = await checkSheet(store, localMonth(new Date(), store.timezone || undefined));
+    if (!r.hasTab) return { error: `Kết nối được file "${r.title}" nhưng chưa có tab "${r.tab}" (đang có: ${r.tabs.join(", ")})` };
+    return { ok: true };
+  } catch (e) {
+    const msg = (e as Error).message;
+    return { error: /permission|403/i.test(msg) ? "Service account chưa được share quyền chỉnh sửa file sheet" : msg };
+  }
+}

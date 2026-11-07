@@ -1,10 +1,10 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { ShiftAssignment, ShiftTemplate, User } from "@/lib/models";
+import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store, User } from "@/lib/models";
 import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
-import { isYmd, weekStartOf } from "@/lib/time";
+import { addDays, isYmd, localDate, weekStartOf } from "@/lib/time";
 import { planAutoSchedule, type AutoOptions, type PlanChange } from "@/lib/schedule";
 import { loadHistory, loadWeek } from "@/lib/schedule-data";
 import { findShiftClash } from "@/lib/support";
@@ -144,6 +144,33 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
       plan: view,
       message: `Đã duyệt ${approved} đăng ký, tự xếp thêm ${added} ca.${short ? ` Còn ${short} ca thiếu người (không đủ nhân viên phù hợp).` : ""}`,
     };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Yêu cầu nhân viên đăng ký ca cho 1 tuần (tuần sau trở đi) – nhân viên thấy cảnh báo + nút Đăng ký ca. */
+export async function requestRegistration(storeId: string, weekStart: string, userIds: string[]): Promise<Result> {
+  try {
+    const admin = await assertAdmin();
+    const actor = adminActor(admin);
+    if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
+    const store = await Store.findById(storeId).select("timezone").lean();
+    if (!store) return { error: "Không tìm thấy cơ sở" };
+    const nextWeek = addDays(weekStartOf(localDate(new Date(), store.timezone || "Asia/Ho_Chi_Minh")), 7);
+    if (weekStart < nextWeek) return { error: "Nhân viên chỉ đăng ký được ca từ tuần sau trở đi – hãy chuyển sang tuần sau để gửi yêu cầu" };
+    // chỉ nhân viên đang làm của chính cơ sở này
+    const users = await User.find({ _id: { $in: userIds }, storeId, status: "ACTIVE" }).select("_id").lean();
+    if (!users.length) return { error: "Không có nhân viên hợp lệ" };
+    for (const u of users)
+      await ShiftRegRequest.updateOne(
+        { userId: u._id, weekStart },
+        { $set: { storeId, status: "OPEN", requestedBy: actor.name, requestedAt: new Date() }, $unset: { respondedAt: 1 } },
+        { upsert: true },
+      );
+    await audit(actor, "schedule.requestRegistration", { type: "Store", id: storeId }, null, { weekStart, userIds: users.map((u) => String(u._id)) });
+    revalidatePath(path(storeId));
+    return { ok: true, message: `Đã gửi yêu cầu đăng ký ca cho ${users.length} nhân viên` };
   } catch (e) {
     return fail(e);
   }

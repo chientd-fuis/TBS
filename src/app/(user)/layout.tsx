@@ -2,10 +2,11 @@ import { requireActiveUser } from "@/lib/guards";
 import { Store } from "@/lib/models";
 import { Logo } from "@/components/Logo";
 import BottomNav from "@/components/user/BottomNav";
+import RegRequestAlert from "@/components/user/RegRequestAlert";
 
 export default async function UserLayout({ children }: { children: React.ReactNode }) {
   const user = await requireActiveUser();
-  const store = await Store.findById(user.storeId).select("name").lean();
+  const store = await Store.findById(user.storeId).select("name timezone").lean();
   return (
     <div className="mx-auto min-h-screen max-w-lg pb-24">
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-primary px-4 py-2 shadow-sm">
@@ -15,7 +16,10 @@ export default async function UserLayout({ children }: { children: React.ReactNo
           <p className="truncate text-xs">{store?.name}</p>
         </div>
       </header>
-      <main className="space-y-4 p-4">{children}</main>
+      <main className="space-y-4 p-4">
+        <RegRequestAlert userId={user._id} tz={store?.timezone || "Asia/Ho_Chi_Minh"} />
+        {children}
+      </main>
       <BottomNav />
     </div>
   );

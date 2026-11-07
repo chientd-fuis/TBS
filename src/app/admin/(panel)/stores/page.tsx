@@ -3,7 +3,7 @@ import { Store, User } from "@/lib/models";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import StoreForm from "./StoreForm";
 import { ActionForm } from "@/components/ActionForm";
-import { testTelegram } from "../../actions/closing";
+import { testRevenueSheet, testTelegram } from "../../actions/closing";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +30,15 @@ export default async function StoresPage() {
               </div>
             }
           >
-            <div className="mb-3 flex justify-end">
+            <div className="mb-3 flex flex-wrap justify-end gap-2">
               <ActionForm action={testTelegram} submitLabel="📨 Gửi thử Telegram" variant="outline" successText="Đã gửi tin nhắn thử vào nhóm" className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="storeId" value={String(s._id)} />
               </ActionForm>
+              {s.revenueSheetId && (
+                <ActionForm action={testRevenueSheet} submitLabel="📊 Kiểm tra Google Sheet" variant="outline" successText="Ghi được Google Sheet, có tab tháng này" className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="storeId" value={String(s._id)} />
+                </ActionForm>
+              )}
             </div>
             <StoreForm
               store={{
@@ -46,6 +51,9 @@ export default async function StoresPage() {
                 radiusM: s.radiusM || 100,
                 timezone: s.timezone || "Asia/Ho_Chi_Minh",
                 telegramChatId: s.telegramChatId || "",
+                revenueSheetId: s.revenueSheetId || "",
+                revenueTabPattern: s.revenueTabPattern || "T{m}",
+                revenueFirstRow: s.revenueFirstRow || 3,
                 active: s.active !== false,
               }}
             />

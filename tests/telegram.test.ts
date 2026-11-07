@@ -57,11 +57,31 @@ test("nội dung chốt ca: người chốt + ca + cùng ca", async () => {
     note: "Tiền mặt 2.350.000",
   });
   console.log(text);
-  assert.match(text, /CHỐT CA – TBS Văn Phú/);
-  assert.match(text, /Thứ 6, 06\/11\/2026/);
+  assert.match(text, /^🧾 CHỐT CA\n📅 Ngày: 06\/11 \(Thứ 6\)\n🏪 Cơ sở: Văn Phú\n👤 Thu ngân: Tuấn Anh/);
   assert.match(text, /Ca C \(13:00–18:00\)/);
-  assert.match(text, /Người chốt: Tuấn Anh · 0957513908/);
+  assert.match(text, /Thu ngân: Tuấn Anh · 0957513908/);
   assert.match(text, /Vào ca 12:58 · Chốt lúc 18:05 \(5,1h\)/);
   assert.match(text, /Cùng ca: Bích Hằng, Ngọc Thanh/);
   assert.match(text, /#chotca #TBS_VP #ca_C/);
+});
+
+test("caption có doanh thu ca", async () => {
+  const { formatCaption } = await import("../src/lib/closing");
+  const cap = formatCaption({
+    storeName: "TBS Geleximco",
+    storeCode: "TBS_GL",
+    tz: "Asia/Ho_Chi_Minh",
+    workDate: "2026-11-06",
+    createdAt: new Date("2026-11-06T15:30:00Z"),
+    shiftName: "T",
+    shiftStart: "18:00",
+    shiftEnd: "22:30",
+    employeeName: "Tuấn Anh",
+    revenue: { dt: 7060000, tm: 1328000, tk: 5610000, cp: 50000, grab: 72000, shopee: 0 },
+    revenueInput: { cp: "30k sữa chua + 20k ship" },
+  });
+  assert.match(cap, /Doanh thu máy: 7\.060\.000đ/);
+  assert.match(cap, /Tiền mặt 1\.328\.000đ · Tài khoản 5\.610\.000đ/);
+  assert.match(cap, /Thu chi 50\.000đ \(30k sữa chua \+ 20k ship\)/);
+  assert.match(cap, /✅ Âm\/Dương: 0đ/);
 });

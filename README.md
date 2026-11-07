@@ -19,8 +19,11 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Bảng chấm công theo mẫu, tổng hợp tháng, chấm hộ, sửa / xoá có lịch sử, "Thêm phạt" từ dòng muộn/sớm | 5, 3.5, 7.1 |
 | | Thưởng / phạt nhập tự do (VND), bảng lương (phụ cấp, tạm ứng), công bố sớm / tự công bố 00:00 ngày 5, khoá tháng, mở khoá | 3.6, 3.7 |
 | | Xuất Excel 7 loại báo cáo (header vàng/nâu, freeze, filter, dòng tổng, tô màu) + audit log | 3.8 |
+| | **Yêu cầu đăng ký ca**: ở bảng tổng hợp tuần (tuần sau trở đi) admin bấm "Yêu cầu đăng ký" từng người hoặc tất cả NV chưa có ca → nhân viên thấy cảnh báo "chưa đăng ký ca tuần …" + nút **Đăng ký ca** (hoặc "Tuần này tôi nghỉ"); trạng thái Đã yêu cầu / Đã đăng ký / Báo nghỉ hiện cho admin | – |
 | | **Hỗ trợ cơ sở khác**: admin gọi nhân viên cơ sở khác sang (chọn ở ô "＋ Thêm…" → nhóm "Gọi hỗ trợ từ …"), chặn trùng giờ giữa các cơ sở; nhân viên chỉ chấm công được ở cơ sở khác khi có **ca hỗ trợ đã duyệt** đúng giờ (app tự nhận cơ sở theo GPS); giờ hỗ trợ tính vào **bảng lương cơ sở gốc** (ghi chú "hỗ trợ: TBS … Xh"); chốt ca gửi vào nhóm Telegram của cơ sở đang làm | – |
+| | **Doanh thu chốt ca**: chụp ảnh + nhập Doanh thu máy, Tiền mặt, Tài khoản, Thu chi, Grab, Shopee (gõ được phép cộng "10000 + 20k", "30k sữa chua + 20k ship" → rời ô hiện tổng); Âm/Dương = DT máy − (TM + TK + Thu chi + Grab + Shopee), khác 0 bắt buộc ghi chú → gửi nhóm Telegram; ca cuối ngày cộng các ca & ghi dòng ngày lên Google Sheet; admin xem doanh thu ngày, sửa số, ghi lại sheet | – |
 | | **Chốt ca**: nhân viên chụp ảnh cuối ca (camera sau, tối đa 4 ảnh) → gửi album vào nhóm Telegram của cơ sở; admin xem / gửi lại; webhook cho hệ thống phân tích ảnh | – |
+| | **Dọn dữ liệu cũ** (Chủ, ở Cài đặt): chọn mốc tháng (chỉ dữ liệu cũ hơn 2 tháng) → xoá lịch sử đăng nhập, nhật ký thao tác, lịch sử sửa chấm công, ảnh check-in/out & chốt ca (tuỳ chọn chuyển thư mục ảnh tháng cũ trên Drive vào thùng rác). Có xem trước số lượng + hộp xác nhận; không xoá chấm công / lương | – |
 | | Cài đặt: kết nối Google Drive, cấu hình làm tròn / ngưỡng / số thiết bị…, lịch sử đăng nhập admin, nhật ký thao tác | 2.1 |
 | Hệ thống | Cron: quên check-out, upload lại ảnh lỗi, tạo bảng lương nháp, công bố ngày 5 | 6.1 |
 
@@ -73,6 +76,18 @@ Camera & GPS cần **HTTPS** (localhost được miễn). Test trên điện tho
    - Bot phân tích nhận ảnh qua **webhook**: đặt `CLOSING_WEBHOOK_URL` (+ `CLOSING_WEBHOOK_SECRET`) – app POST JSON gồm thông tin ca + ảnh base64 + `messageIds` trên Telegram để bot trả lời đúng tin.
    - Hoặc dùng **chính bot phân tích** làm bot gửi (cùng token) và để bot đó tự xử lý ảnh ngay khi app gửi (qua webhook ở trên).
 5. Gửi lỗi (mất mạng, sai chat ID…) → lượt chốt ca vẫn được lưu, cron hằng giờ tự gửi lại; admin bấm **Gửi lại** ở mục **Chốt ca**.
+
+### 5c. Doanh thu chốt ca → Google Sheet
+Nhân viên nhập tay số liệu ca (gõ được phép cộng). Mỗi lần chốt ca gửi ảnh + số vào nhóm Telegram; **ca cuối ngày** (ca mẫu có giờ bắt đầu muộn nhất) cộng các ca trong ngày và ghi lên sheet.
+
+**Google Sheet** (mỗi cơ sở 1 file, mỗi tháng 1 tab `T11`, dòng 3 = ngày 1, cột B–I như template):
+1. Google Cloud (cùng project) → **IAM & Admin → Service Accounts → Create** → vào service account → **Keys → Add key → JSON** → tải file.
+2. **APIs & Services → Library** → bật **Google Sheets API**.
+3. Vercel: `GOOGLE_SA_EMAIL` = `client_email` trong file JSON; `GOOGLE_SA_PRIVATE_KEY` = `private_key` (dán nguyên, gồm `-----BEGIN PRIVATE KEY-----…`).
+4. Mở từng file sheet → **Chia sẻ** → thêm email service account, quyền **Người chỉnh sửa**.
+5. Admin → **Cơ sở** → dán link sheet, tên tab (`T{m}`), dòng ngày 1 (`3`) → Lưu → **Kiểm tra Google Sheet**.
+
+App ghi cột **B** DT máy, **C** Tài khoản, **D** Tiền mặt, **E** CP trong két (= Thu chi), **F** Shopee (= Shopee + Grab vì template chưa có cột Grab; Ghi chú ghi rõ "Shopee … + Grab …"), **I** Ghi chú (chi tiết thu chi + ghi chú từng ca); cột G/H giữ công thức của sheet. Ngày chưa ghi được → cron đêm ghi lại, hoặc admin bấm **Ghi sheet** ở mục Chốt ca. Tab tháng mới cần tạo sẵn theo mẫu.
 
 ### 6. Deploy Vercel
 - `vercel.json`: chạy hàm ở **Hong Kong (`hkg1`)** cho gần MongoDB Atlas (ap-east-1); 2 cron:
