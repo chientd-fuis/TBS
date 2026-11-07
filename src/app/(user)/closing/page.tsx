@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
 import { ShiftClosing } from "@/lib/models";
-import { localTime, viDate } from "@/lib/time";
+import { addDays, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import ClosingForm from "./ClosingForm";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { isDayEndShift } from "@/lib/day-revenue";
-import { revenueDiff, type Revenue } from "@/lib/revenue";
+import { closingWorkDate, defaultClosingShift, revenueDiff, type ClosingShiftKey, type Revenue } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +18,15 @@ export default async function ClosingPage() {
   const tz = ctx?.tz || "Asia/Ho_Chi_Minh";
   const att = ctx?.att;
   const shift = ctx?.shift;
-  const isDayEnd = ctx ? await isDayEndShift(ctx.store._id, shift?.startTime) : false;
-  // các ca đã chốt trước trong ngày (ca cuối thấy tổng ngày trước khi ghi sheet)
+  // ca chốt mặc định theo giờ: 8h–16h Sáng, 16h–20h Chiều, 20h–8h Tối (tối sau nửa đêm tính cho hôm trước)
+  const hour = Number(localTime(new Date(), tz).slice(0, 2));
+  const defaultShift = defaultClosingShift(hour);
+  const today = ctx?.today ?? "";
+  const dateOf = (k: ClosingShiftKey) => (today ? closingWorkDate(k, today, hour, addDays) : "");
+  // các ca đã chốt trước trong ngày của ca Tối (ca cuối thấy tổng ngày trước khi ghi sheet)
+  const nightDate = dateOf("T");
   const dayBefore = ctx
-    ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: ctx.workDate, "revenue.dt": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
+    ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: nightDate, "revenue.dt": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
         label: `${c.shiftName ? `Ca ${c.shiftName}` : "Ngoài ca"} · ${c.employeeName ?? ""}`,
         dt: c.revenue?.dt ?? 0,
         diff: revenueDiff((c.revenue ?? {}) as Partial<Revenue>),
@@ -36,11 +40,12 @@ export default async function ClosingPage() {
         <Link href="/" className="text-sm text-accent underline">← Chấm công</Link>
       </div>
       <ClosingForm
-        shiftLabel={shift ? `${shift.shiftName} (${shift.startTime}–${shift.endTime})` : "Ngoài ca"}
+        scheduledShift={shift ? `${shift.shiftName} (${shift.startTime}–${shift.endTime})` : null}
+        defaultShift={defaultShift}
+        dates={{ S: dateOf("S"), C: dateOf("C"), T: dateOf("T") }}
         checkIn={att ? localTime(att.checkInAt, tz).slice(0, 5) : null}
         employee={`${user.name}${user.phone ? ` · ${user.phone}` : ""}`}
         storeName={ctx?.store.name}
-        isDayEnd={isDayEnd}
         dayBefore={dayBefore}
       />
       {recent.length > 0 && (

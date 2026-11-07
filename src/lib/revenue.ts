@@ -155,3 +155,23 @@ export function extractSheetId(input: string) {
 }
 
 export const vndShort = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} đ`;
+
+/* ---------- Ca chốt (ca thu ngân) – khác ca xếp lịch ---------- */
+export const CLOSING_SHIFTS = [
+  { key: "S", name: "Sáng", start: "08:00", end: "16:00" },
+  { key: "C", name: "Chiều", start: "16:00", end: "20:00" },
+  { key: "T", name: "Tối", start: "20:00", end: "08:00" }, // qua đêm – ca cuối ngày, ghi Google Sheet
+] as const;
+export type ClosingShiftKey = (typeof CLOSING_SHIFTS)[number]["key"];
+
+/** Ca chốt mặc định theo giờ hiện tại (giờ địa phương 0–23): 8h–16h Sáng, 16h–20h Chiều, 20h–8h Tối. */
+export function defaultClosingShift(hour: number): ClosingShiftKey {
+  if (hour >= 8 && hour < 16) return "S";
+  if (hour >= 16 && hour < 20) return "C";
+  return "T";
+}
+
+/** Ngày doanh thu của lượt chốt: ca Tối chốt sau nửa đêm (trước 8h) tính cho NGÀY HÔM TRƯỚC. */
+export function closingWorkDate(key: ClosingShiftKey, today: string, hour: number, addDaysFn: (d: string, n: number) => string) {
+  return key === "T" && hour < 8 ? addDaysFn(today, -1) : today;
+}

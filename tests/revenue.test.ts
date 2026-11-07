@@ -52,3 +52,17 @@ test("vị trí trên Google Sheet", () => {
   assert.equal(extractSheetId("https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit#gid=0"), "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789");
   assert.equal(extractSheetId("not a link"), "");
 });
+
+test("ca chốt mặc định theo giờ + ngày doanh thu", async () => {
+  const { defaultClosingShift, closingWorkDate } = await import("../src/lib/revenue");
+  const { addDays } = await import("../src/lib/time");
+  assert.equal(defaultClosingShift(8), "S");
+  assert.equal(defaultClosingShift(15), "S");
+  assert.equal(defaultClosingShift(16), "C");
+  assert.equal(defaultClosingShift(19), "C");
+  assert.equal(defaultClosingShift(20), "T");
+  assert.equal(defaultClosingShift(1), "T");
+  assert.equal(closingWorkDate("T", "2026-11-07", 1, addDays), "2026-11-06");
+  assert.equal(closingWorkDate("T", "2026-11-07", 22, addDays), "2026-11-07");
+  assert.equal(closingWorkDate("S", "2026-11-07", 9, addDays), "2026-11-07");
+});

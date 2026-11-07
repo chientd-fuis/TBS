@@ -1,30 +1,34 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Send, TriangleAlert } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
+import PhotoCamera from "@/components/user/PhotoCamera";
 import { Alert, Button, Card, Field, Textarea } from "@/components/ui";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { DeviceNotice } from "@/components/user/DeviceNotice";
 import { useDevice } from "@/components/user/useDevice";
-import { evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue, type RevenueKey } from "@/lib/revenue";
+import { CLOSING_SHIFTS, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type ClosingShiftKey, type Revenue, type RevenueKey } from "@/lib/revenue";
+import { viDate } from "@/lib/time";
 
 type Raw = Record<RevenueKey, string>;
 const EMPTY: Raw = { dt: "", tm: "", tk: "", cp: "", grab: "", shopee: "" };
 const HINT: Partial<Record<RevenueKey, string>> = { cp: "VD: 30k sữa chua + 20k ship" };
 
 export default function ClosingForm({
-  shiftLabel,
+  scheduledShift,
+  defaultShift,
+  dates,
   checkIn,
   employee,
   storeName,
-  isDayEnd,
   dayBefore,
 }: {
-  shiftLabel: string | null;
+  scheduledShift: string | null; // ca được xếp lịch (để tham khảo)
+  defaultShift: ClosingShiftKey;
+  dates: Record<ClosingShiftKey, string>; // ngày doanh thu theo từng ca chốt
   checkIn?: string | null;
   employee?: string;
   storeName?: string;
-  isDayEnd: boolean;
   /** các ca đã chốt trước trong ngày (để ca cuối thấy tổng ngày) */
   dayBefore: { label: string; dt: number; diff: number }[];
 }) {
@@ -32,7 +36,10 @@ export default function ClosingForm({
   const device = useDevice();
   const [note, setNote] = useState("");
   const [raw, setRaw] = useState<Raw>(EMPTY);
+  const [shiftKey, setShiftKey] = useState<ClosingShiftKey>(defaultShift);
+  const isDayEnd = shiftKey === "T";
   const [busy, setBusy] = useState(false);
+  const [shooting, setShooting] = useState(false); // đang mở camera chụp ảnh chốt ca
   const [result, setResult] = useState<{ tone: "green" | "orange" | "red"; text: string } | null>(null);
 
   const evals = Object.fromEntries(REVENUE_KEYS.map((k) => [k, evalMoneyExpr(raw[k])])) as Record<RevenueKey, ReturnType<typeof evalMoneyExpr>>;
@@ -45,7 +52,9 @@ export default function ClosingForm({
   const ready = !missing.length && !invalid;
   const dayTotal = dayBefore.reduce((s, x) => s + x.dt, 0) + revenue.dt;
 
-  const submit = async () => {
+  // chụp xong 1 ảnh → gửi luôn (ảnh chỉ gửi vào nhóm Telegram, không lưu)
+  const submit = async (photo?: string) => {
+    setShooting(false);
     setBusy(true);
     setResult(null);
     let pos: GeolocationPosition | null = null;
@@ -55,7 +64,7 @@ export default function ClosingForm({
     const r = await fetch("/api/closing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
+      body: JSON.stringify({ photos: photo ? [photo] : [], closingShift: shiftKey, note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
     });
     const j = await r.json().catch(() => ({ error: "Lỗi mạng" }));
     setBusy(false);
@@ -63,6 +72,7 @@ export default function ClosingForm({
     setResult({ tone: j.telegram === "SENT" && j.sheet !== "FAILED" ? "green" : "orange", text: [j.message, j.sheetMessage].filter(Boolean).join(" ") });
     setNote("");
     setRaw(EMPTY);
+    setShiftKey(defaultShift);
     router.refresh();
   };
 
@@ -79,9 +89,26 @@ export default function ClosingForm({
         <dl className="mb-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
           <dt className="text-ink/60">Cơ sở</dt><dd className="font-semibold">{storeName}</dd>
           <dt className="text-ink/60">Người chốt</dt><dd className="font-semibold">{employee}</dd>
-          <dt className="text-ink/60">Ca</dt><dd className="font-semibold">{shiftLabel || "—"}</dd>
-          <dt className="text-ink/60">Vào ca</dt><dd>{checkIn || "Chưa check-in"}</dd>
+          <dt className="text-ink/60">Vào ca</dt><dd>{checkIn || "Chưa check-in"}{scheduledShift ? ` · lịch: ${scheduledShift}` : ""}</dd>
+          <dt className="text-ink/60">Ngày</dt><dd className="font-semibold">{dates[shiftKey] ? viDate(dates[shiftKey]) : "—"}</dd>
         </dl>
+        <p className="mt-2 mb-1 text-xs font-semibold text-accent">Ca chốt</p>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Ca chốt">
+          {CLOSING_SHIFTS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              role="radio"
+              aria-checked={shiftKey === c.key}
+              onClick={() => setShiftKey(c.key)}
+              className={`rounded-xl px-2 py-2.5 text-center text-sm ring-1 transition ${
+                shiftKey === c.key ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200"
+              }`}
+            >
+              Ca {c.name}
+            </button>
+          ))}
+        </div>
       </Card>
 
       <Card title="Số liệu ca">
@@ -118,8 +145,8 @@ export default function ClosingForm({
         <Field label="Ghi chú (không bắt buộc)">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="VD: thiếu 20k do trả lại khách" />
         </Field>
-        <Button className="mt-3 w-full py-3 text-base" variant="secondary" disabled={busy || !ready || device.state !== "APPROVED"} onClick={submit}>
-          {busy ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} {busy ? "Đang gửi…" : "Chốt ca & gửi nhóm"}
+        <Button className="mt-3 w-full py-3 text-base" variant="secondary" disabled={busy || !ready || device.state !== "APPROVED"} onClick={() => setShooting(true)}>
+          {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />} {busy ? "Đang gửi…" : "Chốt ca & chụp ảnh"}
         </Button>
         {!ready && (
           <p className="mt-1 text-center text-xs text-ink/60">
@@ -128,6 +155,24 @@ export default function ClosingForm({
           </p>
         )}
       </Card>
+
+      {shooting && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-ink p-4">
+          <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-3 overflow-y-auto">
+            <div className="flex items-center justify-between text-white">
+              <p className="font-bold">Chụp ảnh chốt ca</p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => submit()} className="text-xs text-white/80 underline">Gửi không kèm ảnh</button>
+                <button onClick={() => setShooting(false)} className="rounded-full p-1 hover:bg-white/10" aria-label="Huỷ">
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-white/70">Bấm chụp là gửi luôn vào nhóm Telegram cùng số liệu (ảnh không lưu trong app).</p>
+            <PhotoCamera photos={[]} max={1} shootLabel="Chụp & gửi" onChange={(p) => p[0] && submit(p[0])} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

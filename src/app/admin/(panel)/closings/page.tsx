@@ -34,7 +34,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   const days = await DayRevenue.find(dq).sort({ date: -1, storeId: 1 }).lean();
   return (
     <>
-      <PageTitle sub="Ảnh nhân viên chụp khi chốt ca – tự gửi vào nhóm Telegram của cơ sở">Chốt ca</PageTitle>
+      <PageTitle sub="Số liệu nhân viên nhập khi chốt ca – tự gửi (kèm ảnh) vào nhóm Telegram của cơ sở; ảnh không lưu trong app">Chốt ca</PageTitle>
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
       <Card>

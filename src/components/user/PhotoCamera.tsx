@@ -7,7 +7,17 @@ import { Button } from "@/components/ui";
  * Camera chụp ảnh tài liệu / quầy (mặc định camera SAU). Không có chức năng chọn ảnh từ thư viện.
  * Chụp nhiều ảnh (tối đa `max`), mỗi ảnh nén JPEG cạnh dài ≤ 1600px.
  */
-export default function PhotoCamera({ photos, onChange, max = 4 }: { photos: string[]; onChange: (p: string[]) => void; max?: number }) {
+export default function PhotoCamera({
+  photos,
+  onChange,
+  max = 4,
+  shootLabel,
+}: {
+  photos: string[];
+  onChange: (p: string[]) => void;
+  max?: number;
+  shootLabel?: string; // VD "Chụp & gửi"
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [facing, setFacing] = useState<"environment" | "user">("environment");
@@ -73,7 +83,7 @@ export default function PhotoCamera({ photos, onChange, max = 4 }: { photos: str
       </div>
       {status === "error" && <p className="text-center text-sm text-danger">{error}</p>}
       <Button type="button" className="w-full py-3 text-base" disabled={status !== "ready" || photos.length >= max} onClick={shoot}>
-        <Camera size={18} /> {photos.length >= max ? `Đã đủ ${max} ảnh` : `Chụp ảnh (${photos.length}/${max})`}
+        <Camera size={18} /> {shootLabel ?? (photos.length >= max ? `Đã đủ ${max} ảnh` : `Chụp ảnh (${photos.length}/${max})`)}
       </Button>
       {photos.length > 0 && (
         <div className="grid grid-cols-4 gap-2">

@@ -1,13 +1,14 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, BellRing, Check, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, X, Zap } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, Eye, Pencil, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
 import { slotLevel, type AutoOptions, type Entry, type TplInfo } from "@/lib/schedule";
 import { viDate, weekdayVi } from "@/lib/time";
 import ExportImage from "./ExportImage";
+import WeekSheet from "./WeekSheet";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { addToSlot, autoSchedule, decideShifts, removeFromSlot, requestRegistration, saveStaffing, type PlanView } from "../../../actions/schedule";
 
@@ -49,6 +50,7 @@ export default function ScheduleBoard(p: Props) {
   const [showStaffing, setShowStaffing] = useState(false);
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [confirmApply, setConfirmApply] = useState(false);
+  const [mode, setMode] = useState<"view" | "edit">("view"); // mặc định XEM như ảnh lịch tuần
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; tpl: string; date: string } | null>(null);
   const [opts, setOpts] = useState<AutoOptions>({
     approvePending: true,
@@ -141,7 +143,7 @@ export default function ScheduleBoard(p: Props) {
         <Button variant="outline" onClick={() => setShowStaffing((v) => !v)}>
           <Settings2 size={16} /> Định mức người / ca
         </Button>
-        <ExportImage storeName={p.storeName} weekStart={p.weekStart} days={p.days} templates={p.templates} entries={p.entries} names={p.names} />
+        <ExportImage storeName={p.storeName} weekStart={p.weekStart} days={p.days} templates={p.templates} entries={p.entries} names={p.names} supportFrom={p.supportFrom} />
         {pending && <Loader2 className="animate-spin text-accent" size={18} />}
         <div className="ml-auto flex flex-wrap gap-2 text-xs">
           <Badge tone="orange">Chờ duyệt</Badge>
@@ -199,7 +201,7 @@ export default function ScheduleBoard(p: Props) {
           </div>
           <p className="mt-2 text-xs text-ink/60">Luôn ưu tiên người đang có <b>ít ca nhất</b> trong tuần; không xếp trùng giờ; không xếp người đã bị từ chối ca đó.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" disabled={pending} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => setPlan(r.plan ?? null))}>Xem trước</Button>
+            <Button variant="outline" disabled={pending} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => { setPlan(r.plan ?? null); setMode("edit"); })}>Xem trước</Button>
             <Button
               disabled={pending}
               onClick={() =>
@@ -276,7 +278,32 @@ export default function ScheduleBoard(p: Props) {
       </ConfirmDialog>
 
       {/* Bảng lịch theo mẫu */}
-      {p.weekNav}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {p.weekNav}
+        <div className="inline-flex rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]" role="tablist">
+          <button
+            role="tab"
+            aria-selected={mode === "view"}
+            onClick={() => setMode("view")}
+            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "view" ? "bg-primary font-bold" : "hover:bg-primary-light")}
+          >
+            <Eye size={16} /> Chế độ xem
+          </button>
+          <button
+            role="tab"
+            aria-selected={mode === "edit"}
+            onClick={() => setMode("edit")}
+            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "edit" ? "bg-primary font-bold" : "hover:bg-primary-light")}
+          >
+            <Pencil size={16} /> Chế độ sửa
+          </button>
+        </div>
+      </div>
+      {mode === "view" ? (
+        <div className="overflow-x-auto rounded-2xl ring-1 ring-[#f1e6c8]">
+          <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={p.entries} names={p.names} withPending supportFrom={p.supportFrom} width="100%" />
+        </div>
+      ) : (
       <WeekGrid
         templates={p.templates as GridTpl[]}
         days={p.days}
@@ -382,6 +409,7 @@ export default function ScheduleBoard(p: Props) {
           );
         }}
       />
+      )}
 
       {/* Duyệt theo người */}
       {pendingByUser.length > 0 && (

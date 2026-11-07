@@ -5,11 +5,11 @@ import { getCurrentUser } from "@/lib/guards";
 import { APPROVED_SHIFT, ShiftAssignment, ShiftClosing, User } from "@/lib/models";
 import { checkDeviceForAttendance } from "@/lib/device";
 import { distanceMeters } from "@/lib/calc";
-import { savePhoto } from "@/lib/drive";
 import { deliverClosing } from "@/lib/closing";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { afterClosing, isDayEndShift } from "@/lib/day-revenue";
-import { localMonth, localTime } from "@/lib/time";
+import { afterClosing } from "@/lib/day-revenue";
+import { CLOSING_SHIFTS, closingWorkDate, defaultClosingShift } from "@/lib/revenue";
+import { addDays, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 
 export const maxDuration = 60;
@@ -18,6 +18,7 @@ const Money = z.number().int().min(0).max(1_000_000_000);
 const Raw = z.string().max(300);
 const Body = z.object({
   photos: z.array(z.string()).max(4).default([]), // không bắt buộc
+  closingShift: z.enum(["S", "C", "T"]).optional(),
   note: z.string().max(500).optional(),
   // doanh thu ca (bot đọc ảnh → nhân viên kiểm tra / sửa)
   revenue: z.object({
@@ -74,21 +75,14 @@ export async function POST(req: Request) {
 
     const bufs = b.photos.map(dataUrlToBuffer);
     const id = new Types.ObjectId();
-    const stamp = `${today.replace(/-/g, "")}_${localTime(now, tz).replace(/:/g, "")}`;
-    const photos = [];
-    for (let i = 0; i < bufs.length; i++) {
-      const r = await savePhoto(bufs[i], {
-        storeId: String(store._id),
-        userId: String(user._id),
-        userFolderName: `${user.name || user.email}`,
-        month: `Chốt ca ${localMonth(now, tz)}`,
-        fileName: `${stamp}_chotca_${i + 1}.jpg`,
-        target: `closing:${id}:${i}`,
-      });
-      photos.push({ driveId: r.driveId, pendingId: r.pendingId });
-    }
-    const workDate = shift?.date ?? today;
-    const isDayEnd = await isDayEndShift(store._id, shift?.startTime);
+    // ảnh chốt ca KHÔNG lưu (Drive / database) – chỉ gửi thẳng vào nhóm Telegram
+    const photos: { driveId?: string }[] = [];
+    // ca chốt (Sáng 8h–16h / Chiều 16h–20h / Tối 20h–8h): nhân viên chọn, mặc định theo giờ hiện tại
+    const hour = Number(localTime(now, tz).slice(0, 2));
+    const csKey = b.closingShift ?? defaultClosingShift(hour);
+    const cs = CLOSING_SHIFTS.find((x) => x.key === csKey)!;
+    const workDate = closingWorkDate(csKey, today, hour, addDays);
+    const isDayEnd = csKey === "T"; // ca tối = ca cuối ngày → ghi Google Sheet
     const distanceM =
       b.lat != null && b.lng != null && store.lat != null && store.lng != null ? distanceMeters(b.lat, b.lng, store.lat, store.lng) : undefined;
     await ShiftClosing.create({
@@ -97,11 +91,11 @@ export async function POST(req: Request) {
       storeId: store._id,
       attendanceId: att?._id,
       workDate,
-      shiftLabel: shift ? `${shift.shiftName} ${shift.startTime}–${shift.endTime}` : att?.shiftLabel?.replace(/^Ca\s*/i, ""),
+      shiftLabel: `${cs.name} ${cs.start}–${cs.end}`,
       shiftAssignmentId: shift?._id,
-      shiftName: shift?.shiftName,
-      shiftStart: shift?.startTime,
-      shiftEnd: shift?.endTime,
+      shiftName: cs.name,
+      shiftStart: cs.start,
+      shiftEnd: cs.end,
       checkInAt: att?.checkInAt,
       checkOutAt: att?.checkOutAt,
       coworkers,

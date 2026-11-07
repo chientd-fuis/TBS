@@ -2,9 +2,8 @@
 import { useRef, useState } from "react";
 import { Copy, ImageDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ROW_COLORS } from "@/components/WeekGrid";
 import type { Entry, TplInfo } from "@/lib/schedule";
-import { viDate, weekdayVi } from "@/lib/time";
+import WeekSheet from "./WeekSheet";
 
 /**
  * Xuất ẢNH (PNG) lịch làm việc của tuần đang xếp – đúng mẫu bảng S/C/T × Thứ 2…CN,
@@ -17,6 +16,7 @@ export default function ExportImage({
   templates,
   entries,
   names,
+  supportFrom,
 }: {
   storeName: string;
   weekStart: string;
@@ -24,18 +24,13 @@ export default function ExportImage({
   templates: TplInfo[];
   entries: Entry[];
   names: Record<string, string>;
+  supportFrom?: Record<string, string>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [withPending, setWithPending] = useState(false);
   const [busy, setBusy] = useState<"" | "png" | "copy">("");
   const [note, setNote] = useState("");
 
-  const list = (tplId: string, date: string) =>
-    entries
-      .filter((e) => e.tplId === tplId && e.date === date && (e.status === "APPROVED" || (withPending && e.status === "PENDING")))
-      .map((e) => ({ name: names[e.userId] ?? "?", pending: e.status === "PENDING" }))
-      .sort((a, b) => Number(a.pending) - Number(b.pending) || a.name.localeCompare(b.name));
-  const rowsPerTpl = Math.max(3, ...templates.flatMap((t) => days.map((d) => list(t.id, d).length)));
   const fileName = `TBS_LichLamViec_${storeName.replace(/^TBS\s*/i, "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").replace(/\s+/g, "")}_${weekStart}.png`;
 
   const render = async () => {
@@ -79,7 +74,6 @@ export default function ExportImage({
     }
   };
 
-  const cellBorder = "1px solid #9fb3cf";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" onClick={download} disabled={!!busy}>
@@ -96,58 +90,7 @@ export default function ExportImage({
 
       {/* Bảng dùng để chụp – đặt ngoài màn hình */}
       <div style={{ position: "fixed", left: -10000, top: 0, pointerEvents: "none" }} aria-hidden>
-        <div ref={ref} style={{ width: 1100, padding: 24, background: "#fff", fontFamily: "Arial, 'Segoe UI', Roboto, sans-serif", color: "#2b1b1b" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="" width={64} height={64} style={{ borderRadius: 999 }} />
-            <div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: "#783C3C" }}>Lịch làm việc – {storeName}</div>
-              <div style={{ fontSize: 16 }}>
-                Tuần {viDate(days[0])} – {viDate(days[6])}
-              </div>
-            </div>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15, tableLayout: "fixed" }}>
-            <thead>
-              <tr>
-                <th style={{ width: 110, background: "#a9c4ea", border: cellBorder, padding: "8px 4px" }}>Ca làm việc</th>
-                {days.map((d) => (
-                  <th key={d} style={{ background: "#a9c4ea", border: cellBorder, padding: "6px 4px" }}>
-                    <div style={{ fontWeight: 700 }}>{weekdayVi(d)}</div>
-                    <div style={{ fontSize: 12, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {templates.flatMap((t, ti) => {
-                const bg = ROW_COLORS[ti % ROW_COLORS.length];
-                return Array.from({ length: rowsPerTpl }, (_, r) => (
-                  <tr key={`${t.id}-${r}`} style={{ background: bg }}>
-                    {r === 0 && (
-                      <th rowSpan={rowsPerTpl} style={{ border: cellBorder, padding: 6, verticalAlign: "middle" }}>
-                        <div style={{ fontSize: 24, fontWeight: 700 }}>{t.name}</div>
-                        <div style={{ fontSize: 12, fontWeight: 400 }}>{t.startTime}–{t.endTime}</div>
-                      </th>
-                    )}
-                    {days.map((d) => {
-                      const p = list(t.id, d)[r];
-                      return (
-                        <td key={d} style={{ border: cellBorder, padding: "5px 4px", textAlign: "center", height: 30, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: p?.pending ? "#E8590C" : undefined, fontStyle: p?.pending ? "italic" : undefined }}>
-                          {p ? p.name + (p.pending ? " (chờ)" : "") : ""}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ));
-              })}
-            </tbody>
-          </table>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#7a6a5a", display: "flex", justifyContent: "space-between" }}>
-            <span>{templates.map((t) => `${t.name}: ${t.startTime}–${t.endTime}`).join("  ·  ")}{withPending ? "  ·  (chờ) = chưa duyệt" : ""}</span>
-            <span>Tiệm Bơ Sầu · xuất lúc {new Date().toLocaleString("vi-VN")}</span>
-          </div>
-        </div>
+        <WeekSheet ref={ref} storeName={storeName} days={days} templates={templates} entries={entries} names={names} withPending={withPending} supportFrom={supportFrom} />
       </div>
     </div>
   );
