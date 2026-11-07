@@ -23,25 +23,31 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   const data = await loadWeek(storeId, ws);
   const link = (w: string) => `/admin/schedule/${storeId}?week=${w}`;
   const thisWeek = weekStartOf(today);
+  // điều hướng tuần – hiển thị ngay trên bảng xếp ca
+  const weekNav = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href={link(addDays(ws, -7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
+      <span className="min-w-56 text-center font-bold">
+        {viDate(ws)} – {viDate(addDays(ws, 6))}
+        {ws === thisWeek && <span className="ml-1 text-xs font-normal text-secondary-dark">(tuần này)</span>}
+        {ws === addDays(thisWeek, 7) && <span className="ml-1 text-xs font-normal text-warn">(tuần sau)</span>}
+      </span>
+      <Link href={link(addDays(ws, 7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần sau"><ChevronRight size={18} /></Link>
+      {ws !== thisWeek && <Link href={link(thisWeek)} className="text-sm text-accent underline">Về tuần này</Link>}
+    </div>
+  );
   return (
     <>
-      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · đỏ = thiếu người · vàng = ít người · xanh dương = hỗ trợ từ cơ sở khác">
+      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · ⚠ đỏ = thiếu người · ⓘ cam = ít người · xanh dương = hỗ trợ từ cơ sở khác">
         <Link href="/admin/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={link(addDays(ws, -7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
-        <span className="min-w-56 text-center font-bold">
-          {viDate(ws)} – {viDate(addDays(ws, 6))}
-          {ws === thisWeek && <span className="ml-1 text-xs font-normal text-secondary-dark">(tuần này)</span>}
-          {ws === addDays(thisWeek, 7) && <span className="ml-1 text-xs font-normal text-warn">(tuần sau)</span>}
-        </span>
-        <Link href={link(addDays(ws, 7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần sau"><ChevronRight size={18} /></Link>
-        {ws !== thisWeek && <Link href={link(thisWeek)} className="text-sm text-accent underline">Về tuần này</Link>}
         <div className="ml-auto flex gap-2">
           <LinkButton variant="outline" href={`/admin/shifts?store=${storeId}&week=${ws}`}>Ca mẫu & xếp hàng loạt</LinkButton>
           <LinkButton variant="outline" href={`/api/admin/export?type=lichca&store=${storeId}&from=${ws.slice(0, 7)}&to=${addDays(ws, 6).slice(0, 7)}`}>Xuất Excel</LinkButton>
         </div>
       </div>
+      {data.templates.length === 0 && weekNav}
       {data.templates.length === 0 ? (
         <Alert tone="orange">
           Cơ sở chưa có ca mẫu. <Link className="underline" href={`/admin/shifts?store=${storeId}`}>Tạo ca (VD: S 08:00–13:00, C 13:00–18:00, T 18:00–23:00)</Link>
@@ -63,6 +69,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           regRequests={data.regRequests}
           canRequest={ws >= addDays(thisWeek, 7)}
           isPast={addDays(ws, 6) < today}
+          weekNav={weekNav}
         />
       )}
     </>

@@ -9,7 +9,6 @@ import { savePhoto } from "@/lib/drive";
 import { deliverClosing } from "@/lib/closing";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { afterClosing, isDayEndShift } from "@/lib/day-revenue";
-import { revenueDiff } from "@/lib/revenue";
 import { localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 
@@ -18,7 +17,7 @@ export const maxDuration = 60;
 const Money = z.number().int().min(0).max(1_000_000_000);
 const Raw = z.string().max(300);
 const Body = z.object({
-  photos: z.array(z.string()).min(1).max(4),
+  photos: z.array(z.string()).max(4).default([]), // không bắt buộc
   note: z.string().max(500).optional(),
   // doanh thu ca (bot đọc ảnh → nhân viên kiểm tra / sửa)
   revenue: z.object({
@@ -47,8 +46,11 @@ export async function POST(req: Request) {
     if (!user) throw new HttpError(401, "Chưa đăng nhập");
     if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");
     const parsed = Body.safeParse(await req.json());
-    if (!parsed.success) throw new HttpError(400, "Cần 1–4 ảnh chụp và nhập đủ số liệu doanh thu");
-    if (revenueDiff(parsed.data.revenue) !== 0 && !parsed.data.note?.trim()) throw new HttpError(400, "Âm/Dương khác 0 – cần ghi lý do ở ghi chú");
+    if (!parsed.success) throw new HttpError(400, "Số liệu chốt ca chưa hợp lệ");
+    // bắt buộc: Doanh thu máy, Tiền mặt, Tài khoản (nhân viên phải gõ, kể cả 0)
+    const ri = parsed.data.revenueInput;
+    if (ri && (["dt", "tm", "tk"] as const).some((k) => !ri[k]?.trim()))
+      throw new HttpError(400, "Nhập đủ Doanh thu máy, Tiền mặt, Tài khoản");
     const b = parsed.data;
 
     const dev = await checkDeviceForAttendance(user._id);

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 const TG = { SENT: ["Đã gửi Telegram", "green"], FAILED: ["Gửi lỗi – đang thử lại", "orange"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình Telegram", "gray"] } as const;
 
-/** Chốt ca: chụp ảnh cuối ca → gửi nhóm Telegram */
+/** Chốt ca: nhập số liệu cuối ca → gửi nhóm Telegram */
 export default async function ClosingPage() {
   const user = await requireActiveUser();
   const ctx = await resolveClosingContext(user);
@@ -50,10 +50,8 @@ export default async function ClosingPage() {
               const st = TG[(c.telegram?.status ?? "PENDING") as keyof typeof TG];
               return (
                 <li key={String(c._id)} className="flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/photo?closing=${c._id}&i=0`} alt="" className="h-12 w-12 rounded-lg bg-cream object-cover" />
                   <span className="flex-1">
-                    {viDate(c.workDate)} {c.createdAt ? localTime(new Date(c.createdAt), tz).slice(0, 5) : ""} · {c.photos.length} ảnh
+                    {viDate(c.workDate)} {c.createdAt ? localTime(new Date(c.createdAt), tz).slice(0, 5) : ""}{c.shiftName ? ` · Ca ${c.shiftName}` : ""}
                     {c.revenue?.dt != null && <> · DT <b>{c.revenue.dt.toLocaleString("vi-VN")} đ</b></>}
                     {c.note && <span className="block truncate text-xs text-ink/60">{c.note}</span>}
                   </span>

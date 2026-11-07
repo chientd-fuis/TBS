@@ -1,7 +1,7 @@
 import { connectDB } from "./db";
 import { readPhoto } from "./drive";
 import { ShiftClosing, Store, User } from "./models";
-import { sendPhotosToTelegram, telegramConfigured } from "./telegram";
+import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "./telegram";
 import { localTime, viDate, weekdayVi } from "./time";
 
 /* Chốt ca: gửi ảnh vào nhóm Telegram (+ tuỳ chọn gọi webhook phân tích ảnh). */
@@ -122,7 +122,9 @@ export async function deliverClosing(closingId: string, photoBufs?: Buffer[]) {
     c.set("telegram", { ...c.toObject().telegram, status: "DISABLED", error: !telegramConfigured() ? "Chưa cấu hình TELEGRAM_BOT_TOKEN" : "Chưa có Telegram chat ID", chatId });
   } else {
     try {
-      const ids = await sendPhotosToTelegram(chatId, bufs, await buildCaption(closingId));
+      const caption = await buildCaption(closingId);
+      // chốt ca không bắt buộc ảnh → không có ảnh thì gửi tin nhắn chữ
+      const ids = bufs.length ? await sendPhotosToTelegram(chatId, bufs, caption) : [await sendTelegramText(chatId, caption)];
       c.set("telegram", { status: "SENT", chatId, messageIds: ids, error: "", attempts: (c.telegram?.attempts ?? 0) + 1, sentAt: new Date() });
     } catch (e) {
       c.set("telegram", { ...c.toObject().telegram, status: "FAILED", chatId, error: (e as Error).message.slice(0, 300), attempts: (c.telegram?.attempts ?? 0) + 1 });

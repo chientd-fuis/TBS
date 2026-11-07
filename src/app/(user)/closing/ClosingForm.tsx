@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Send, TriangleAlert } from "lucide-react";
 import { Alert, Button, Card, Field, Textarea } from "@/components/ui";
-import PhotoCamera from "@/components/user/PhotoCamera";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { DeviceNotice } from "@/components/user/DeviceNotice";
 import { useDevice } from "@/components/user/useDevice";
@@ -31,7 +30,6 @@ export default function ClosingForm({
 }) {
   const router = useRouter();
   const device = useDevice();
-  const [photos, setPhotos] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [raw, setRaw] = useState<Raw>(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -41,9 +39,10 @@ export default function ClosingForm({
   const revenue = Object.fromEntries(REVENUE_KEYS.map((k) => [k, evals[k].value])) as Revenue;
   const diff = revenueDiff(revenue);
   const hasDt = !!raw.dt.trim();
+  const REQUIRED: RevenueKey[] = ["dt", "tm", "tk"];
+  const missing = REQUIRED.filter((k) => !raw[k].trim());
   const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok);
-  const needNote = hasDt && diff !== 0 && !note.trim();
-  const ready = hasDt && photos.length > 0 && !invalid && !needNote;
+  const ready = !missing.length && !invalid;
   const dayTotal = dayBefore.reduce((s, x) => s + x.dt, 0) + revenue.dt;
 
   const submit = async () => {
@@ -56,13 +55,12 @@ export default function ClosingForm({
     const r = await fetch("/api/closing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ photos, note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
+      body: JSON.stringify({ note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
     });
     const j = await r.json().catch(() => ({ error: "Lỗi mạng" }));
     setBusy(false);
     if (!r.ok) return setResult({ tone: "red", text: j.error || "Chốt ca thất bại" });
     setResult({ tone: j.telegram === "SENT" && j.sheet !== "FAILED" ? "green" : "orange", text: [j.message, j.sheetMessage].filter(Boolean).join(" ") });
-    setPhotos([]);
     setNote("");
     setRaw(EMPTY);
     router.refresh();
@@ -84,16 +82,14 @@ export default function ClosingForm({
           <dt className="text-ink/60">Ca</dt><dd className="font-semibold">{shiftLabel || "—"}</dd>
           <dt className="text-ink/60">Vào ca</dt><dd>{checkIn || "Chưa check-in"}</dd>
         </dl>
-        <p className="mb-3 text-xs text-ink/70">1. Chụp ảnh chốt ca (báo cáo máy, tiền két, hoá đơn chi…), tối đa 4 ảnh.</p>
-        <PhotoCamera photos={photos} onChange={setPhotos} />
       </Card>
 
-      <Card title="2. Số liệu ca">
-        <p className="mb-3 text-xs text-ink/70">Gõ được phép cộng, VD <b>10000 + 20000 + 20k</b>. Rời ô sẽ tự hiện tổng. Bỏ trống = 0.</p>
+      <Card title="Số liệu ca">
+        <p className="mb-3 text-xs text-ink/70">Gõ được phép cộng, VD <b>10000 + 20000 + 20k</b>. Rời ô sẽ tự hiện tổng. Ô có * bắt buộc (không có thì nhập 0), ô khác bỏ trống = 0.</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {REVENUE_KEYS.map((k) => (
             <div key={k} className={k === "dt" || k === "cp" ? "col-span-2" : ""}>
-              <Field label={`${REVENUE_LABEL[k]}${k === "dt" ? " *" : ""}`}>
+              <Field label={`${REVENUE_LABEL[k]}${REQUIRED.includes(k) ? " *" : ""}`}>
                 <ExprMoneyInput value={raw[k]} onChange={(v) => setRaw((o) => ({ ...o, [k]: v }))} placeholder={HINT[k]} aria-label={REVENUE_LABEL[k]} />
               </Field>
             </div>
@@ -119,7 +115,7 @@ export default function ClosingForm({
           </div>
         )}
 
-        <Field label={`Ghi chú${hasDt && diff !== 0 ? " * (bắt buộc khi Âm/Dương ≠ 0)" : " (không bắt buộc)"}`}>
+        <Field label="Ghi chú (không bắt buộc)">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="VD: thiếu 20k do trả lại khách" />
         </Field>
         <Button className="mt-3 w-full py-3 text-base" variant="secondary" disabled={busy || !ready || device.state !== "APPROVED"} onClick={submit}>
@@ -127,10 +123,8 @@ export default function ClosingForm({
         </Button>
         {!ready && (
           <p className="mt-1 text-center text-xs text-ink/60">
-            {!photos.length ? "Cần ít nhất 1 ảnh. " : ""}
-            {!hasDt ? "Nhập Doanh thu máy. " : ""}
-            {invalid ? "Sửa ô bị đỏ. " : ""}
-            {needNote ? "Âm/Dương khác 0 – ghi lý do." : ""}
+            {missing.length ? `Nhập ${missing.map((k) => REVENUE_LABEL[k]).join(", ")}. ` : ""}
+            {invalid ? "Sửa ô bị đỏ." : ""}
           </p>
         )}
       </Card>

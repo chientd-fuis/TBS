@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, BellRing, Check, Loader2, Settings2, Sparkles, X, Zap } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
@@ -32,6 +32,8 @@ type Props = {
   /** tuần sau trở đi mới gửi yêu cầu đăng ký được */
   canRequest: boolean;
   isPast: boolean;
+  /** điều hướng tuần (tuần trước / sau) – đặt ngay trên bảng xếp ca */
+  weekNav?: React.ReactNode;
 };
 
 const hours = (t: TplInfo) => {
@@ -274,6 +276,7 @@ export default function ScheduleBoard(p: Props) {
       </ConfirmDialog>
 
       {/* Bảng lịch theo mẫu */}
+      {p.weekNav}
       <WeekGrid
         templates={p.templates as GridTpl[]}
         days={p.days}
@@ -285,11 +288,6 @@ export default function ScheduleBoard(p: Props) {
             {(t.minStaff || t.targetStaff) ? <div className="text-[10px] font-normal text-ink/60">tối thiểu {t.minStaff} · định mức {t.targetStaff}</div> : null}
           </>
         )}
-        cellClass={(t, d) => {
-          const c = cell(t.id, d).filter((e) => e.status === "APPROVED").length;
-          const lv = slotLevel(c, t.minStaff ?? 0, t.targetStaff ?? 0);
-          return lv === "short" ? "!bg-[#fbd5d5]" : undefined; // ít người chỉ hiện nhãn, giữ màu hàng theo mẫu
-        }}
         renderCell={(t, d) => {
           const list = cell(t.id, d);
           const inCell = new Set(list.map((e) => e.userId));
@@ -369,8 +367,16 @@ export default function ScheduleBoard(p: Props) {
                     ) : null;
                   })}
                 </select>
-                {lv === "short" && <span className="whitespace-nowrap text-[10px] font-bold text-danger">Thiếu {tpl.minStaff - approvedN}</span>}
-                {lv === "low" && <span className="whitespace-nowrap text-[10px] font-bold text-warn">Ít {approvedN}/{tpl.targetStaff}</span>}
+                {lv === "short" && (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-danger" title={`Thiếu người: ${approvedN}/${tpl.minStaff} (tối thiểu)`}>
+                    <TriangleAlert size={11} /> Thiếu {tpl.minStaff - approvedN}
+                  </span>
+                )}
+                {lv === "low" && (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tpl.targetStaff} (định mức)`}>
+                    <CircleAlert size={11} /> Ít {approvedN}/{tpl.targetStaff}
+                  </span>
+                )}
               </div>
             </div>
           );

@@ -48,7 +48,8 @@ export async function sendPhotosToTelegram(chatId: string, photos: Buffer[], cap
 }
 
 /** Gửi tin nhắn chữ – dùng cho nút "Gửi thử" ở màn hình cơ sở. */
-export async function sendTelegramText(chatId: string, text: string) {
+/** Gửi tin nhắn chữ. Trả về message_id. */
+export async function sendTelegramText(chatId: string, text: string): Promise<number> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error("Chưa cấu hình TELEGRAM_BOT_TOKEN");
   if (!chatId) throw new Error("Chưa có Telegram chat ID");
@@ -59,4 +60,6 @@ export async function sendTelegramText(chatId: string, text: string) {
   });
   const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as TgResult;
   if (!j.ok) throw new Error(`Telegram: ${j.description || r.status}`);
+  const res = (j as { result?: { message_id?: number } }).result;
+  return res?.message_id ?? 0;
 }
