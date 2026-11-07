@@ -42,9 +42,9 @@ export default function MonthShiftBoard({
         <span className="inline-flex items-center gap-1"><CirclePlus size={13} className="text-secondary" /> làm thêm ca (không có lịch)</span>
         <span className="inline-flex items-center gap-1"><LogOut size={13} className="text-danger" /> quên check-out</span>
         <span className="inline-flex items-center gap-1"><b className="text-[10px] text-[#1d4ed8]">CS2</b> đi hỗ trợ / từ cơ sở khác sang</span>
-        <span className="inline-flex items-center gap-1"><span className="rounded bg-gray-300 px-1 text-gray-600 line-through">Tên</span> {compactLegend ? "bỏ ca" : "bỏ ca (có lịch, không chấm công)"}</span>
+        <span className="inline-flex items-center gap-1"><span className="text-danger line-through">Tên</span> {compactLegend ? "bỏ ca" : "bỏ ca (có lịch, không chấm công)"}</span>
         <span><b>Tên đậm</b> = ca sắp tới · <span className="text-ink/55">tên mờ</span> = ca đã qua</span>
-        {compactLegend && <span className="rounded bg-[#ffd8b8] px-1 italic text-warn">chờ duyệt</span>}
+        {compactLegend && <span>Tên <i className="text-warn">(Chờ duyệt)</i></span>}
       </div>
       <div className="overflow-x-auto rounded-xl ring-1 ring-[#c9d6e8]" data-month-board>
         <ScrollToToday />
@@ -104,20 +104,22 @@ function Chip({ c, month, storeNames, href, linkable }: { c: BoardChip; month: s
   const content = (
     <>
       <span className="truncate">{c.name}</span>
+      {c.state === "pending" && <i className="shrink-0 text-[10px] text-warn">(Chờ duyệt)</i>}
       {(c.late || c.early) && <AlarmClock size={12} className="shrink-0 text-warn" />}
       {c.extra && <CirclePlus size={12} className="shrink-0 text-secondary" />}
       {c.missingOut && <LogOut size={12} className="shrink-0 text-danger" />}
       {c.tag && <b className="shrink-0 text-[9px] leading-none text-[#1d4ed8]">{c.tag.label}</b>}
     </>
   );
+  // không nền: bỏ ca = chữ đỏ gạch ngang · sắp tới = đậm · đã qua = mờ nhẹ · chờ duyệt = bình thường + "(Chờ duyệt)"
   const stateCls =
     c.state === "missed"
-      ? "bg-gray-300 text-gray-600 line-through"
+      ? "text-danger line-through"
       : c.state === "upcoming"
-        ? "bg-white/80 font-bold" // ca sắp tới: in đậm
+        ? "font-bold"
         : c.state === "pending"
-          ? "bg-[#ffd8b8] italic text-warn"
-          : "bg-white/50 text-ink/55"; // ca đã qua (đã chấm công): mờ nhẹ
+          ? ""
+          : "text-ink/55";
   const cls = `flex items-center gap-0.5 rounded px-1 leading-6 ${stateCls}`;
   return linkable ? (
     <Link
