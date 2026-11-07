@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
     "set-admin-password": "tsx scripts/set-admin-password.ts",
-    "test": "tsx --test tests/calc.test.ts tests/schedule.test.ts tests/telegram.test.ts tests/revenue.test.ts"
+    "test": "tsx --test tests/calc.test.ts tests/schedule.test.ts tests/telegram.test.ts tests/revenue.test.ts tests/sheets-key.test.ts"
   },
   "dependencies": {
     "@googleapis/drive": "27.0.0",

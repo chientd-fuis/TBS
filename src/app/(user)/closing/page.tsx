@@ -5,7 +5,7 @@ import { addDays, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import ClosingForm from "./ClosingForm";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { closingWorkDate, defaultClosingShift, revenueDiff, type ClosingShiftKey, type Revenue } from "@/lib/revenue";
+import { CLOSING_SHIFTS, closingWorkDate, defaultClosingShift, revenueDiff, type ClosingShiftKey, type Revenue } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,22 @@ export default async function ClosingPage() {
   const dateOf = (k: ClosingShiftKey) => (today ? closingWorkDate(k, today, hour, addDays) : "");
   // các ca đã chốt trước trong ngày của ca Tối (ca cuối thấy tổng ngày trước khi ghi sheet)
   const nightDate = dateOf("T");
+  // ca đã chốt rồi (cùng ngày + ca) → mở lại để SỬA, không tạo bản ghi mới
+  const existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string }>> = {};
+  if (ctx)
+    for (const c of CLOSING_SHIFTS) {
+      const doc = await ShiftClosing.findOne({ storeId: ctx.store._id, workDate: dateOf(c.key), shiftName: c.name }).lean();
+      if (!doc) continue;
+      const input: Record<string, string> = {};
+      for (const k of ["dt", "tm", "tk", "cp", "grab", "shopee"] as const)
+        input[k] = doc.revenueInput?.[k] ?? (doc.revenue?.[k] != null ? String(doc.revenue[k]) : "");
+      existing[c.key] = {
+        input,
+        note: doc.note ?? "",
+        at: localTime(new Date(doc.lastEditedAt ?? doc.createdAt ?? Date.now()), tz).slice(0, 5),
+        by: doc.employeeName ?? "",
+      };
+    }
   const dayBefore = ctx
     ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: nightDate, "revenue.dt": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
         label: `${c.shiftName ? `Ca ${c.shiftName}` : "Ngoài ca"} · ${c.employeeName ?? ""}`,
@@ -47,6 +63,7 @@ export default async function ClosingPage() {
         employee={`${user.name}${user.phone ? ` · ${user.phone}` : ""}`}
         storeName={ctx?.store.name}
         dayBefore={dayBefore}
+        existing={existing}
       />
       {recent.length > 0 && (
         <Card title="Lần chốt ca gần đây">

@@ -313,10 +313,13 @@ const ShiftClosingSchema = new Schema(
     },
     isDayEnd: { type: Boolean, default: false }, // ca cuối ngày → ghi Google Sheet
     revenueEditedBy: String, // admin sửa số liệu
+    editCount: { type: Number, default: 0 }, // số lần nhân viên chốt lại (cập nhật) ca này
+    lastEditedAt: Date,
   },
   { timestamps: true },
 );
 ShiftClosingSchema.index({ storeId: 1, createdAt: -1 });
+ShiftClosingSchema.index({ storeId: 1, workDate: 1, shiftName: 1 }); // 1 ca chỉ 1 bản ghi
 ShiftClosingSchema.index({ "telegram.status": 1 });
 /* ---------- Doanh thu theo ngày (cộng các lượt chốt ca) + trạng thái ghi Google Sheet ---------- */
 const DayRevenueSchema = new Schema(

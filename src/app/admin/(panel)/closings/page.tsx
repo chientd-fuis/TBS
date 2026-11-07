@@ -5,7 +5,7 @@ import { telegramConfigured } from "@/lib/telegram";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
-import { editClosingRevenue, resendClosing, syncDayRevenue } from "../../actions/closing";
+import { deleteClosing, editClosingRevenue, resendClosing, syncDayRevenue } from "../../actions/closing";
 import { REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { addDays } from "@/lib/time";
@@ -145,7 +145,8 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                               const d = revenueDiff(c.revenue as Partial<Revenue>);
                               return <div className={d ? "font-bold text-danger" : "text-secondary-dark"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
                             })()}
-                            {c.revenueEditedBy && <div className="text-warn">Sửa bởi {c.revenueEditedBy}</div>}
+                            {c.revenueEditedBy && <div className="text-warn">Admin sửa: {c.revenueEditedBy}</div>}
+                            {!!c.editCount && <div className="text-ink/60">NV chốt lại {c.editCount} lần</div>}
                           </>
                         ) : (
                           <span className="text-ink/50">—</span>
@@ -170,11 +171,22 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                         {c.webhook?.status && <div className="mt-1 text-ink/60">Webhook: {c.webhook.status}</div>}
                       </td>
                       <td>
-                        {c.telegram?.status !== "SENT" && (
-                          <ActionForm action={resendClosing} submitLabel="Gửi lại" variant="outline" successText="Đã gửi">
+                        <div className="flex flex-col gap-1">
+                          {c.telegram?.status !== "SENT" && (
+                            <ActionForm action={resendClosing} submitLabel="Gửi lại" variant="outline" successText="Đã gửi">
+                              <input type="hidden" name="id" value={String(c._id)} />
+                            </ActionForm>
+                          )}
+                          <ActionForm
+                            action={deleteClosing}
+                            submitLabel="Xoá"
+                            variant="danger"
+                            successText="Đã xoá"
+                            confirm={`Xoá hẳn lượt chốt ca ${c.shiftName ? `Ca ${c.shiftName} ` : ""}ngày ${viDate(c.workDate)} của ${c.employeeName ?? ""}? Doanh thu ngày sẽ được tính lại (đã ghi Google Sheet thì ghi lại số mới). Không khôi phục được.`}
+                          >
                             <input type="hidden" name="id" value={String(c._id)} />
                           </ActionForm>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );

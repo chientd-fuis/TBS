@@ -22,6 +22,7 @@ export default function ClosingForm({
   employee,
   storeName,
   dayBefore,
+  existing,
 }: {
   scheduledShift: string | null; // ca được xếp lịch (để tham khảo)
   defaultShift: ClosingShiftKey;
@@ -31,12 +32,21 @@ export default function ClosingForm({
   storeName?: string;
   /** các ca đã chốt trước trong ngày (để ca cuối thấy tổng ngày) */
   dayBefore: { label: string; dt: number; diff: number }[];
+  /** ca đã chốt rồi → nạp lại số để sửa (1 ca chỉ 1 bản ghi) */
+  existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string }>>;
 }) {
   const router = useRouter();
   const device = useDevice();
-  const [note, setNote] = useState("");
-  const [raw, setRaw] = useState<Raw>(EMPTY);
+  const load = (k: ClosingShiftKey): Raw => ({ ...EMPTY, ...(existing[k]?.input ?? {}) });
   const [shiftKey, setShiftKey] = useState<ClosingShiftKey>(defaultShift);
+  const [note, setNote] = useState(existing[defaultShift]?.note ?? "");
+  const [raw, setRaw] = useState<Raw>(() => load(defaultShift));
+  const done = existing[shiftKey];
+  const pickShift = (k: ClosingShiftKey) => {
+    setShiftKey(k);
+    setRaw(load(k));
+    setNote(existing[k]?.note ?? "");
+  };
   const isDayEnd = shiftKey === "T";
   const [busy, setBusy] = useState(false);
   const [shooting, setShooting] = useState(false); // đang mở camera chụp ảnh chốt ca
@@ -70,9 +80,7 @@ export default function ClosingForm({
     setBusy(false);
     if (!r.ok) return setResult({ tone: "red", text: j.error || "Chốt ca thất bại" });
     setResult({ tone: j.telegram === "SENT" && j.sheet !== "FAILED" ? "green" : "orange", text: [j.message, j.sheetMessage].filter(Boolean).join(" ") });
-    setNote("");
-    setRaw(EMPTY);
-    setShiftKey(defaultShift);
+    // giữ nguyên số vừa gửi (ca này giờ đã chốt – lần sau là sửa)
     router.refresh();
   };
 
@@ -100,18 +108,24 @@ export default function ClosingForm({
               type="button"
               role="radio"
               aria-checked={shiftKey === c.key}
-              onClick={() => setShiftKey(c.key)}
+              onClick={() => pickShift(c.key)}
               className={`rounded-xl px-2 py-2.5 text-center text-sm ring-1 transition ${
                 shiftKey === c.key ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200"
               }`}
             >
               Ca {c.name}
+              {existing[c.key] && <span className="block text-[10px] font-normal opacity-80">đã chốt</span>}
             </button>
           ))}
         </div>
       </Card>
 
       <Card title="Số liệu ca">
+        {done && (
+          <p className="mb-3 rounded-lg bg-[#fff4e5] px-3 py-2 text-xs text-warn">
+            Ca này đã chốt lúc <b>{done.at}</b>{done.by ? ` (${done.by})` : ""}. Lần này sẽ <b>sửa lại</b> bản chốt đó và gửi bản cập nhật vào nhóm.
+          </p>
+        )}
         <p className="mb-3 text-xs text-ink/70">Gõ được phép cộng, VD <b>10000 + 20000 + 20k</b>. Rời ô sẽ tự hiện tổng. Ô có * bắt buộc (không có thì nhập 0), ô khác bỏ trống = 0.</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {REVENUE_KEYS.map((k) => (
@@ -146,7 +160,7 @@ export default function ClosingForm({
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="VD: thiếu 20k do trả lại khách" />
         </Field>
         <Button className="mt-3 w-full py-3 text-base" variant="secondary" disabled={busy || !ready || device.state !== "APPROVED"} onClick={() => setShooting(true)}>
-          {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />} {busy ? "Đang gửi…" : "Chốt ca & chụp ảnh"}
+          {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />} {busy ? "Đang gửi…" : done ? "Cập nhật chốt ca & chụp ảnh" : "Chốt ca & chụp ảnh"}
         </Button>
         {!ready && (
           <p className="mt-1 text-center text-xs text-ink/60">

@@ -57,6 +57,8 @@ export async function recomputeDay(storeId: Id, date: string) {
 
 function friendly(e: unknown) {
   const msg = (e as { message?: string }).message ?? String(e);
+  if (/DECODER routines|unsupported|PEM|private key|invalid_grant/i.test(msg))
+    return "Private key của service account sai định dạng – dán lại theo hướng dẫn (nên dùng GOOGLE_SA_JSON)";
   if (/does not have permission|PERMISSION_DENIED|403/i.test(msg)) return "Service account chưa được share quyền chỉnh sửa file sheet";
   if (/Unable to parse range/i.test(msg)) return "Không có tab tháng này trong sheet (VD tab T11) – hãy tạo tab theo mẫu";
   if (/Requested entity was not found|404/i.test(msg)) return "Không tìm thấy file Google Sheet – kiểm tra link";

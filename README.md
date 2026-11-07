@@ -83,7 +83,8 @@ Nhân viên nhập tay số liệu ca (gõ được phép cộng). Mỗi lần c
 **Google Sheet** (mỗi cơ sở 1 file, mỗi tháng 1 tab `T11`, dòng 3 = ngày 1, cột B–I như template):
 1. Google Cloud (cùng project) → **IAM & Admin → Service Accounts → Create** → vào service account → **Keys → Add key → JSON** → tải file.
 2. **APIs & Services → Library** → bật **Google Sheets API**.
-3. Vercel: `GOOGLE_SA_EMAIL` = `client_email` trong file JSON; `GOOGLE_SA_PRIVATE_KEY` = `private_key` (dán nguyên, gồm `-----BEGIN PRIVATE KEY-----…`).
+3. Vercel: tạo biến **`GOOGLE_SA_JSON`** và dán **nguyên nội dung file JSON** (cách dễ nhất, không lo lỗi định dạng key).
+   Hoặc dùng 2 biến `GOOGLE_SA_EMAIL` = `client_email`, `GOOGLE_SA_PRIVATE_KEY` = `private_key` (gồm `-----BEGIN PRIVATE KEY-----…`).
 4. Mở từng file sheet → **Chia sẻ** → thêm email service account, quyền **Người chỉnh sửa**.
 5. Admin → **Cơ sở** → dán link sheet, tên tab (`T{m}`), dòng ngày 1 (`3`) → Lưu → **Kiểm tra Google Sheet**.
 

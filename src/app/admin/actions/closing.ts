@@ -97,6 +97,29 @@ export async function testRevenueSheet(_: FormState, fd: FormData): Promise<Form
     return { ok: true };
   } catch (e) {
     const msg = (e as Error).message;
+    if (/DECODER routines|unsupported|PEM|private key|invalid_grant/i.test(msg))
+      return { error: "Private key của service account sai định dạng – dán lại (nên dùng biến GOOGLE_SA_JSON chứa nguyên file JSON)" };
     return { error: /permission|403/i.test(msg) ? "Service account chưa được share quyền chỉnh sửa file sheet" : msg };
+  }
+}
+
+/** Xoá hẳn 1 lượt chốt ca → cộng lại doanh thu ngày (ngày đã ghi sheet thì ghi lại số mới). */
+export async function deleteClosing(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const id = str(fd.get("id"));
+    const { ShiftClosing, DayRevenue } = await import("@/lib/models");
+    const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
+    const c = await ShiftClosing.findById(id).lean();
+    if (!c) return { error: "Không tìm thấy lượt chốt ca" };
+    await ShiftClosing.deleteOne({ _id: id });
+    await audit(adminActor(admin), "closing.delete", { type: "ShiftClosing", id }, c, null);
+    const { day, wasSynced, changed } = await recomputeDay(c.storeId, c.workDate);
+    if (wasSynced && changed) await syncDaySheet(c.storeId, c.workDate);
+    else if (!day.closings && !wasSynced) await DayRevenue.deleteOne({ _id: day._id }); // ngày không còn lượt chốt nào
+    revalidatePath("/admin/closings");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
   }
 }

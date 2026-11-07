@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     const id = new Types.ObjectId();
     // ảnh chốt ca KHÔNG lưu (Drive / database) – chỉ gửi thẳng vào nhóm Telegram
     const photos: { driveId?: string }[] = [];
-    // ca chốt (Sáng 8h–16h / Chiều 16h–20h / Tối 20h–8h): nhân viên chọn, mặc định theo giờ hiện tại
+    // ca chốt: nhân viên chọn; giờ (8h–16h Sáng, 16h–20h Chiều, 20h–8h Tối) CHỈ dùng để chọn sẵn, không lưu / gửi
     const hour = Number(localTime(now, tz).slice(0, 2));
     const csKey = b.closingShift ?? defaultClosingShift(hour);
     const cs = CLOSING_SHIFTS.find((x) => x.key === csKey)!;
@@ -85,43 +85,54 @@ export async function POST(req: Request) {
     const isDayEnd = csKey === "T"; // ca tối = ca cuối ngày → ghi Google Sheet
     const distanceM =
       b.lat != null && b.lng != null && store.lat != null && store.lng != null ? distanceMeters(b.lat, b.lng, store.lat, store.lng) : undefined;
-    await ShiftClosing.create({
-      _id: id,
-      userId: user._id,
-      storeId: store._id,
-      attendanceId: att?._id,
-      workDate,
-      shiftLabel: `${cs.name} ${cs.start}–${cs.end}`,
-      shiftAssignmentId: shift?._id,
-      shiftName: cs.name,
-      shiftStart: cs.start,
-      shiftEnd: cs.end,
-      checkInAt: att?.checkInAt,
-      checkOutAt: att?.checkOutAt,
-      coworkers,
-      employeeName: user.name || user.googleName || user.email,
-      employeePhone: user.phone,
-      note: b.note?.trim(),
-      lat: b.lat,
-      lng: b.lng,
-      distanceM,
-      deviceId: dev.deviceId,
-      photos,
-      revenue: b.revenue,
-      revenueInput: b.revenueInput,
-      ocr: b.ocr ?? { status: "NONE" },
-      isDayEnd,
-    });
-    const status = await deliverClosing(String(id), bufs);
+    // 1 ca (cơ sở × ngày × ca chốt) chỉ có 1 bản ghi: chốt lại → cập nhật bản ghi cũ
+    const prev = await ShiftClosing.findOne({ storeId: store._id, workDate, shiftName: cs.name }).select("_id").lean();
+    const saved = await ShiftClosing.findOneAndUpdate(
+      { storeId: store._id, workDate, shiftName: cs.name },
+      {
+        $set: {
+          userId: user._id,
+          attendanceId: att?._id,
+          shiftLabel: cs.name,
+          shiftAssignmentId: shift?._id,
+          checkInAt: att?.checkInAt,
+          checkOutAt: att?.checkOutAt,
+          coworkers,
+          employeeName: user.name || user.googleName || user.email,
+          employeePhone: user.phone,
+          note: b.note?.trim(),
+          lat: b.lat,
+          lng: b.lng,
+          distanceM,
+          deviceId: dev.deviceId,
+          photos,
+          revenue: b.revenue,
+          revenueInput: b.revenueInput,
+          isDayEnd,
+          telegram: { status: "PENDING", attempts: 0 },
+          webhook: {},
+          ...(prev ? { lastEditedAt: now } : {}),
+        },
+        $unset: { shiftStart: 1, shiftEnd: 1, revenueEditedBy: 1 },
+        ...(prev ? { $inc: { editCount: 1 } } : {}),
+        $setOnInsert: { _id: id },
+      },
+      { upsert: true, returnDocument: "after" },
+    ).lean();
+    const closingId = String(saved!._id);
+    const status = await deliverClosing(closingId, bufs);
     // cộng doanh thu ngày; ca cuối ngày → ghi Google Sheet
     const sheet = await afterClosing(store._id, workDate, isDayEnd).catch(() => "FAILED" as const);
     return NextResponse.json({
       ok: true,
+      updated: !!prev,
       telegram: status,
       sheet,
       message:
         status === "SENT"
-          ? "Đã chốt ca và gửi ảnh vào nhóm Telegram."
+          ? prev
+            ? "Đã cập nhật lần chốt ca này và gửi lại vào nhóm Telegram."
+            : "Đã chốt ca và gửi vào nhóm Telegram."
           : status === "DISABLED"
             ? "Đã lưu chốt ca (chưa cấu hình nhóm Telegram – báo admin)."
             : "Đã lưu chốt ca, gửi Telegram chưa được – hệ thống sẽ tự gửi lại.",

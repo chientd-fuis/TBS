@@ -27,6 +27,7 @@ export type CaptionData = {
   coworkers?: string[];
   note?: string | null;
   supportFrom?: string;
+  edited?: boolean; // ca đã chốt trước đó, lần này là cập nhật
   revenue?: { dt?: number | null; tm?: number | null; tk?: number | null; cp?: number | null; grab?: number | null; shopee?: number | null } | null;
   revenueInput?: { cp?: string | null } | null;
 };
@@ -51,12 +52,12 @@ export function formatCaption(d: CaptionData) {
   const endAt = d.checkOutAt ? new Date(d.checkOutAt) : d.createdAt;
   const worked = d.checkInAt ? Math.max(0, (endAt.getTime() - new Date(d.checkInAt).getTime()) / 3600000).toFixed(1).replace(".", ",") : "";
   const shiftLine = d.shiftName
-    ? `⏰ Ca ${d.shiftName} (${d.shiftStart}–${d.shiftEnd})`
+    ? `⏰ Ca ${d.shiftName}${d.shiftStart && d.shiftEnd ? ` (${d.shiftStart}–${d.shiftEnd})` : ""}`
     : d.shiftLabel
       ? `⏰ Ca ${d.shiftLabel}`
       : "⏰ Ngoài ca (không có ca được xếp)";
   return [
-    `🧾 CHỐT CA`,
+    d.edited ? `🧾 CHỐT CA (CẬP NHẬT)` : `🧾 CHỐT CA`,
     `📅 Ngày: ${viDate(d.workDate).slice(0, 5)} (${weekdayVi(d.workDate)})`,
     `🏪 Cơ sở: ${d.storeName.replace(/^TBS\s+/i, "")}`,
     `👤 Thu ngân: ${d.employeeName}${d.employeePhone ? ` · ${d.employeePhone}` : ""}${d.supportFrom ? ` (hỗ trợ từ ${d.supportFrom})` : ""}`,
@@ -95,6 +96,7 @@ export async function buildCaption(closingId: string) {
     note: c.note,
     revenue: c.revenue,
     revenueInput: c.revenueInput,
+    edited: (c.editCount ?? 0) > 0,
     supportFrom: user?.storeId && String(user.storeId) !== String(c.storeId) ? ((await Store.findById(user.storeId).select("name").lean())?.name ?? undefined) : undefined,
   });
 }
