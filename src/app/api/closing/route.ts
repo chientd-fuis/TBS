@@ -24,13 +24,14 @@ const Body = z.object({
   note: z.string().max(500).optional(),
   // doanh thu ca (bot đọc ảnh → nhân viên kiểm tra / sửa)
   revenue: z.object({
-    dt: Money,
+    dt: Money.nullable().optional(), // DT máy do admin cấp – NV có thì ghi, không có → admin bổ sung sau
     tm: Money,
     tk: Money,
     cp: z.number().int().min(-1_000_000_000).max(1_000_000_000), // thu chi (có thể âm nếu là khoản thu)
     grab: Money.default(0),
     shopee: Money,
   }),
+  staffTotal: Money.nullable().optional(), // tổng NV tự cộng trên tờ chốt ca
   revenueInput: z
     .object({ dt: Raw, tm: Raw, tk: Raw, cp: Raw, grab: Raw, shopee: Raw })
     .partial()
@@ -50,10 +51,10 @@ export async function POST(req: Request) {
     if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");
     const parsed = Body.safeParse(await req.json());
     if (!parsed.success) throw new HttpError(400, "Số liệu chốt ca chưa hợp lệ");
-    // bắt buộc: Doanh thu máy, Tiền mặt, Tài khoản (nhân viên phải gõ, kể cả 0)
+    // bắt buộc: Tiền mặt, Tài khoản (kể cả 0). Doanh thu máy không bắt buộc (admin cấp, có thì nhập)
     const ri = parsed.data.revenueInput;
-    if (ri && (["dt", "tm", "tk"] as const).some((k) => !ri[k]?.trim()))
-      throw new HttpError(400, "Nhập đủ Doanh thu máy, Tiền mặt, Tài khoản");
+    if (ri && (["tm", "tk"] as const).some((k) => !ri[k]?.trim())) throw new HttpError(400, "Nhập đủ Tiền mặt, Tài khoản");
+    if (!ri?.dt?.trim()) parsed.data.revenue.dt = null;
     const b = parsed.data;
 
     const dev = await checkDeviceForAttendance(user._id);
@@ -110,6 +111,7 @@ export async function POST(req: Request) {
           photos,
           revenue: b.revenue,
           revenueInput: b.revenueInput,
+          staffTotal: b.staffTotal ?? null,
           ocr: b.ocr ?? { status: "NONE" },
           isDayEnd,
           telegram: { status: "PENDING", attempts: 0 },

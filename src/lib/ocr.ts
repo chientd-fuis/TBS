@@ -6,22 +6,25 @@ import { normalizeOcr, type Revenue } from "./revenue";
  * - Dự phòng: bot riêng qua HTTP (CLOSING_OCR_URL / CLOSING_OCR_SECRET)
  */
 
-export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; provider: string };
+export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean; provider: string };
 
 export const ocrConfigured = () => !!process.env.GEMINI_API_KEY || !!process.env.CLOSING_OCR_URL;
 
-const GEMINI_PROMPT = `Bạn đọc ẢNH CHỐT CA của quán cà phê / trà sữa "Tiệm Bơ Sầu" (Việt Nam). Ảnh có thể là phiếu in từ máy bán hàng (POS), màn hình báo cáo doanh thu, hoặc tờ giấy ghi tay.
-Hãy trích các số liệu (đơn vị VND, trả về SỐ NGUYÊN, không dấu chấm phẩy):
-- dt: Doanh thu / tổng doanh thu máy / tổng tiền bán (tổng cộng của ca)
-- tm: Tiền mặt (cash)
-- tk: Tài khoản / chuyển khoản / QR / banking / thẻ
-- cp: Tổng thu chi / chi phí / chi trong két (nếu có nhiều khoản thì cộng lại)
-- cp_detail: chi tiết các khoản thu chi như ghi trên ảnh, dạng "30k sữa chua + 20k ship" (bỏ trống nếu không có)
-- grab: tiền đơn Grab / GrabFood
-- shopee: tiền đơn Shopee / ShopeeFood
-- date: ngày ghi trên ảnh, dạng YYYY-MM-DD (bỏ trống nếu không thấy)
-- note: ghi chú khác đáng chú ý (ngắn gọn, tiếng Việt)
-Quy tắc: KHÔNG đoán. Không thấy rõ thì để null. Hiểu "k" = nghìn, "tr" = triệu. Chỉ trả về JSON.`;
+const GEMINI_PROMPT = `Bạn đọc ẢNH TỜ CHỐT CA của quán trà sữa "Tiệm Bơ Sầu" (Việt Nam) – thường là tờ giấy NHÂN VIÊN GHI TAY, đôi khi là phiếu in máy POS.
+Trên tờ ghi tay thường có: ngày + ca ("Ca tối 7/11"), "TM" (tiền mặt), "TK" (tài khoản / chuyển khoản), các khoản chi trong ca (sữa chua, ship, đá…),
+Grab, Shopee, có thể có "DTm" (doanh thu máy – do quản lý cấp, KHÔNG phải lúc nào cũng có), và CUỐI TỜ là con số TỔNG do nhân viên tự cộng.
+Trích (trả về số nguyên VND):
+- dt: CHỈ khi có ghi "DTm" / "DT máy" / "doanh thu máy" (hoặc phiếu in máy POS ghi tổng doanh thu). Không có → null. KHÔNG lấy số tổng cuối tờ làm dt.
+- tm: Tiền mặt (TM)
+- tk: Tài khoản / chuyển khoản / QR (TK)
+- cp: tổng các khoản chi trong ca (cộng lại); khoản THU thêm thì là số âm
+- cp_detail: các khoản chi như ghi trên tờ, dạng "30k sữa chua + 20k ship" (null nếu không có)
+- grab, shopee: tiền đơn Grab / Shopee nếu có ghi
+- staff_total: con số TỔNG nhân viên tự cộng (thường ở cuối tờ, có gạch dưới / khoanh tròn)
+- date: ngày ghi trên tờ, dạng YYYY-MM-DD
+- note: các dòng khác không thuộc mục trên (VD "6850 Tạ Văn Thắng", "cơm ca chiều"), ngắn gọn
+ĐƠN VỊ: tờ ghi tay thường viết theo NGHÌN đồng ("2487" = 2.487.000; "30" = 30.000) → nhân 1000. Phiếu in POS ghi đủ đồng → giữ nguyên. "k" = nghìn, "tr" = triệu.
+KHÔNG đoán: số không đọc rõ → null. Chỉ trả về JSON.`;
 
 const SCHEMA = {
   type: "OBJECT",
@@ -33,6 +36,7 @@ const SCHEMA = {
     cp_detail: { type: "STRING", nullable: true },
     grab: { type: "INTEGER", nullable: true },
     shopee: { type: "INTEGER", nullable: true },
+    staff_total: { type: "INTEGER", nullable: true },
     date: { type: "STRING", nullable: true },
     note: { type: "STRING", nullable: true },
   },
@@ -182,39 +186,51 @@ async function readWithGemini(photos: string[], refDate: string): Promise<OcrRes
   return { ...normalizeOcr(json, refDate), provider: "gemini" };
 }
 
-/* ---------- Bill chi phí ---------- */
-const BILL_PROMPT = `Bạn đọc ẢNH CHỨNG TỪ CHI PHÍ của quán trà sữa ở Việt Nam. Có 2 loại:
-(1) BILL: hoá đơn siêu thị, chợ, phiếu giao hàng, hoá đơn điện nước, giấy viết tay…
-(2) TRANSFER: ảnh chụp màn hình CHUYỂN KHOẢN ngân hàng / ví (MoMo, VCB, MB, TCB…).
-Trích (tiền VND, số nguyên):
-- kind: "BILL" hoặc "TRANSFER"
-- amount: TỔNG SỐ TIỀN đã trả / đã chuyển (không lấy số dư, phí giao dịch, tiền khách đưa, tiền thối)
-- date: ngày giao dịch / ngày trên bill, dạng YYYY-MM-DD
-- vendor: BILL → tên nơi bán; TRANSFER → TÊN NGƯỜI NHẬN (viết đúng như trên ảnh)
-- transfer_note: TRANSFER → NỘI DUNG CHUYỂN KHOẢN nguyên văn; BILL → null
-- items: tiền này chi cho cái gì, ngắn gọn tiếng Việt (VD "Sữa đặc x5, đường 2kg", "Tiền điện T10", "Nhập trân châu")
-- category: một trong {CATS}. Dùng LUONG nếu là trả lương / thưởng / tạm ứng cho nhân viên.
-Quy tắc: KHÔNG đoán. Không thấy rõ thì để null. "k" = nghìn, "tr" = triệu. Chỉ trả về JSON.`;
+/* ---------- Sao kê / biên lai chuyển khoản / bill chi phí ---------- */
+const STATEMENT_PROMPT = `Ảnh là chứng từ chi tiền của chủ quán trà sữa ở Việt Nam, 1 trong các loại:
+(a) SAO KÊ / LỊCH SỬ GIAO DỊCH ngân hàng hoặc ví (nhiều giao dịch trên 1 ảnh),
+(b) BIÊN LAI CHUYỂN KHOẢN thành công (1 giao dịch),
+(c) hoá đơn / bill mua hàng (1 giao dịch).
+Liệt kê TẤT CẢ giao dịch nhìn thấy trong "transactions", mỗi giao dịch:
+- direction: "OUT" nếu là TIỀN RA / chi / chuyển đi (thường có dấu "-" hoặc màu đỏ), "IN" nếu là tiền vào (dấu "+", màu xanh, "nhận tiền")
+- amount: số tiền giao dịch (số nguyên VND, không lấy SỐ DƯ, không lấy phí)
+- date: ngày giao dịch YYYY-MM-DD; time: giờ HH:mm nếu có
+- recipient: tên người / đơn vị nhận tiền (bill mua hàng → tên cửa hàng)
+- transfer_note: NỘI DUNG CHUYỂN KHOẢN nguyên văn (bill → null)
+- purpose: tiền này chi cho việc gì, ngắn gọn tiếng Việt, suy từ nội dung CK / người nhận / các món trên bill (VD "Nhập sữa tươi", "Tiền điện T10", "Lương T10 cho Lan")
+- category: một trong {CATS}. LUONG nếu là trả lương / thưởng / tạm ứng cho nhân viên.
+Giao dịch bị cắt mất ở mép ảnh, không đọc rõ số tiền → bỏ qua. KHÔNG đoán. "k" = nghìn, "tr" = triệu. Chỉ trả về JSON.`;
 
-export async function readBillPhoto(photo: string, refDate: string, categories: string[]) {
+/** Đọc 1 ảnh sao kê / biên lai CK / bill → danh sách giao dịch TIỀN RA. */
+export async function readStatementPhoto(photo: string, refDate: string, categories: string[]) {
   const json = await geminiGenerate({
-    prompt: BILL_PROMPT.replace("{CATS}", categories.join(", ")),
+    prompt: STATEMENT_PROMPT.replace("{CATS}", categories.join(", ")),
     photos: [photo],
+    timeoutMs: 55_000,
     schema: {
       type: "OBJECT",
       properties: {
-        kind: { type: "STRING", enum: ["BILL", "TRANSFER"], nullable: true },
-        amount: { type: "INTEGER", nullable: true },
-        date: { type: "STRING", nullable: true },
-        vendor: { type: "STRING", nullable: true },
-        transfer_note: { type: "STRING", nullable: true },
-        items: { type: "STRING", nullable: true },
-        category: { type: "STRING", enum: categories, nullable: true },
+        transactions: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              direction: { type: "STRING", enum: ["OUT", "IN"], nullable: true },
+              amount: { type: "INTEGER", nullable: true },
+              date: { type: "STRING", nullable: true },
+              time: { type: "STRING", nullable: true },
+              recipient: { type: "STRING", nullable: true },
+              transfer_note: { type: "STRING", nullable: true },
+              purpose: { type: "STRING", nullable: true },
+              category: { type: "STRING", enum: categories, nullable: true },
+            },
+          },
+        },
       },
     },
   });
-  const { normalizeBill } = await import("./finance");
-  return normalizeBill(json, refDate);
+  const { normalizeStatement } = await import("./finance");
+  return normalizeStatement(json, refDate);
 }
 
 async function readWithBot(photos: string[], ctx: Record<string, unknown>, refDate: string): Promise<OcrResult> {

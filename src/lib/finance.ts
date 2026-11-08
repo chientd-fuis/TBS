@@ -88,7 +88,7 @@ export const COST_LABEL: Record<(typeof COST_KEYS)[number], string> = {
   direct: "Bill / CK – riêng cơ sở",
   shared: "Bill / CK – chung (phân bổ)",
   labor: "Lương (ước tính)",
-  fixed: "Chi phí cố định",
+  fixed: "Tiền thuê nhà",
 };
 export { COST_KEYS };
 
@@ -318,4 +318,69 @@ export function detectSalary(b: { vendor?: string | null; transferNote?: string 
   const m = SALARY_WORDS.exec(text);
   if (m) return `Nội dung có "${m[1].toLowerCase()}"`;
   return null;
+}
+
+/* ---------- Sao kê / biên lai chuyển khoản: nhiều giao dịch ---------- */
+export type StatementTx = {
+  date?: string;
+  time?: string; // HH:mm
+  amount: number;
+  recipient?: string;
+  transferNote?: string;
+  purpose?: string; // chi cho việc gì
+  category?: ExpenseCategory;
+  salaryHint?: string;
+};
+
+/** Chuẩn hoá JSON Gemini { transactions: [...] } → chỉ giữ giao dịch TIỀN RA có số tiền. */
+export function normalizeStatement(raw: unknown, refDate?: string): StatementTx[] {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const list = Array.isArray(o.transactions) ? o.transactions : Array.isArray(raw) ? (raw as unknown[]) : [];
+  const txt = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : undefined);
+  const out: StatementTx[] = [];
+  for (const it of list) {
+    if (!it || typeof it !== "object") continue;
+    const t = it as Record<string, unknown>;
+    const dir = String(t.direction ?? "OUT").toUpperCase();
+    let amount = parseMoney(t.amount);
+    if (amount === null || amount === 0) continue;
+    if (dir === "IN" || (dir !== "OUT" && amount > 0 && /^\+/.test(String(t.amount)))) continue; // tiền vào → bỏ
+    amount = Math.abs(amount);
+    const tx: StatementTx = { amount };
+    const d = t.date != null && String(t.date).trim() ? parseOcrDate(String(t.date), refDate) : null;
+    if (d) tx.date = d;
+    const tm = /^(\d{1,2}):(\d{2})/.exec(String(t.time ?? ""));
+    if (tm) tx.time = `${tm[1].padStart(2, "0")}:${tm[2]}`;
+    tx.recipient = txt(t.recipient ?? t.vendor, 120);
+    tx.transferNote = txt(t.transfer_note ?? t.transferNote ?? t.note, 200);
+    tx.purpose = txt(t.purpose ?? t.items, 300);
+    if (isCategory(t.category)) tx.category = t.category;
+    for (const k of Object.keys(tx) as (keyof StatementTx)[]) if (tx[k] === undefined) delete tx[k];
+    out.push(tx);
+  }
+  return out;
+}
+
+/** Khoá để bỏ giao dịch lặp khi nhiều ảnh sao kê chụp chồng lên nhau. */
+export const txKey = (t: { date?: string; time?: string; amount: number; transferNote?: string }) =>
+  `${t.date ?? ""}|${t.time ?? ""}|${t.amount}|${foldVi(t.transferNote ?? "").slice(0, 40)}`;
+
+/** Tin Telegram cho 1 lần nhập nhiều khoản chi. */
+export function formatExpenseBatchCaption(
+  rows: { date: string; amount: number; category: string; target: string; purpose?: string | null; recipient?: string | null }[],
+  by: string,
+) {
+  const total = rows.filter((r) => !EXCLUDED_CATEGORIES.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+  const salary = rows.filter((r) => EXCLUDED_CATEGORIES.includes(r.category));
+  const lines = [`💸 CHI PHÍ – ${rows.length} khoản · tính vào chi phí ${total.toLocaleString("vi-VN")} đ`];
+  rows.forEach((r, i) => {
+    const [, m, d] = r.date.split("-");
+    const what = [r.purpose, r.recipient && `→ ${r.recipient}`].filter(Boolean).join(" ");
+    lines.push(
+      `${i + 1}. ${d}/${m} · ${r.amount.toLocaleString("vi-VN")} · ${CATEGORY_LABEL[r.category] ?? r.category} · ${r.target}${what ? ` – ${what}` : ""}${EXCLUDED_CATEGORIES.includes(r.category) ? " (lương, không cộng)" : ""}`,
+    );
+  });
+  if (salary.length) lines.push(`ℹ️ ${salary.length} khoản lương NV – chỉ lưu chứng từ, không cộng vào chi phí`);
+  lines.push(`👤 Người nhập: ${by}`);
+  return lines.join("\n");
 }

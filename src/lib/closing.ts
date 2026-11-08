@@ -30,21 +30,30 @@ export type CaptionData = {
   edited?: boolean; // ca đã chốt trước đó, lần này là cập nhật
   revenue?: { dt?: number | null; tm?: number | null; tk?: number | null; cp?: number | null; grab?: number | null; shopee?: number | null } | null;
   revenueInput?: { cp?: string | null } | null;
+  staffTotal?: number | null;
 };
 
 /** Nội dung tin nhắn Telegram của 1 lượt chốt ca (thuần – có unit test). */
 const money = (n?: number | null) => `${Math.round(n ?? 0).toLocaleString("vi-VN")}đ`;
-function revenueLines(r: CaptionData["revenue"], input?: CaptionData["revenueInput"]) {
-  if (!r || r.dt == null) return [];
-  const diff = (r.dt ?? 0) - ((r.tm ?? 0) + (r.tk ?? 0) + (r.cp ?? 0) + (r.grab ?? 0) + (r.shopee ?? 0));
+function revenueLines(r: CaptionData["revenue"], input?: CaptionData["revenueInput"], staffTotal?: number | null) {
+  if (!r || (r.dt == null && r.tm == null)) return [];
+  const sum = (r.tm ?? 0) + (r.tk ?? 0) + (r.cp ?? 0) + (r.grab ?? 0) + (r.shopee ?? 0);
   const tcDetail = input?.cp && /[a-zA-ZÀ-ỹ+]/.test(input.cp) ? ` (${input.cp.trim()})` : "";
-  return [
-    `💰 Doanh thu máy: ${money(r.dt)}`,
+  const lines = [
+    r.dt != null ? `💰 Doanh thu máy: ${money(r.dt)}` : `💰 Doanh thu máy: chưa có (admin bổ sung)`,
     `   Tiền mặt ${money(r.tm)} · Tài khoản ${money(r.tk)}`,
     `   Thu chi ${money(r.cp)}${tcDetail}`,
     `   Grab ${money(r.grab)} · Shopee ${money(r.shopee)}`,
-    `${diff === 0 ? "✅" : "⚠️"} Âm/Dương: ${diff > 0 ? "+" : ""}${money(diff)}`,
   ];
+  if (staffTotal != null) {
+    const d = staffTotal - sum;
+    lines.push(d === 0 ? `🧮 Tổng NV ghi ${money(staffTotal)} – ✅ cộng đúng` : `🧮 Tổng NV ghi ${money(staffTotal)} – ⚠️ cộng SAI, đúng là ${money(sum)} (lệch ${d > 0 ? "+" : ""}${money(d)})`);
+  }
+  if (r.dt != null) {
+    const diff = r.dt - sum;
+    lines.push(`${diff === 0 ? "✅" : "⚠️"} Âm/Dương: ${diff > 0 ? "+" : ""}${money(diff)}`);
+  }
+  return lines;
 }
 
 export function formatCaption(d: CaptionData) {
@@ -66,7 +75,7 @@ export function formatCaption(d: CaptionData) {
       ? `🕐 Vào ca ${hhmm(d.checkInAt)}${d.checkOutAt ? ` · Ra ca ${hhmm(d.checkOutAt)}` : ""} · Chốt lúc ${hhmm(d.createdAt)} (${worked}h)`
       : `🕐 Chốt lúc ${hhmm(d.createdAt)} (chưa có lượt check-in)`,
     d.coworkers?.length ? `👥 Cùng ca: ${d.coworkers.join(", ")}` : "",
-    ...revenueLines(d.revenue, d.revenueInput),
+    ...revenueLines(d.revenue, d.revenueInput, d.staffTotal),
     d.note ? `📝 ${d.note}` : "",
     `#chotca #${hashtag(d.storeCode || "TBS")}${d.shiftName ? ` #ca_${hashtag(d.shiftName)}` : ""}`,
   ]
@@ -96,6 +105,7 @@ export async function buildCaption(closingId: string) {
     note: c.note,
     revenue: c.revenue,
     revenueInput: c.revenueInput,
+    staffTotal: c.staffTotal,
     edited: (c.editCount ?? 0) > 0,
     supportFrom: user?.storeId && String(user.storeId) !== String(c.storeId) ? ((await Store.findById(user.storeId).select("name").lean())?.name ?? undefined) : undefined,
   });

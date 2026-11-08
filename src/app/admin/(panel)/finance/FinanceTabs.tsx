@@ -7,7 +7,7 @@ const TABS = [
   { href: "/admin/finance", label: "Lãi lỗ", owner: true },
   { href: "/admin/finance/shift-expenses", label: "Chi phí trong ca" },
   { href: "/admin/finance/expenses", label: "Bill / chuyển khoản" },
-  { href: "/admin/finance/fixed", label: "Chi phí cố định" },
+  { href: "/admin/finance/fixed", label: "Tiền thuê nhà" },
   { href: "/admin/finance/settings", label: "Cài đặt", owner: true },
 ];
 

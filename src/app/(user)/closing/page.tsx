@@ -27,7 +27,7 @@ export default async function ClosingPage() {
   // các ca đã chốt trước trong ngày của ca Tối (ca cuối thấy tổng ngày trước khi ghi sheet)
   const nightDate = dateOf("T");
   // ca đã chốt rồi (cùng ngày + ca) → mở lại để SỬA, không tạo bản ghi mới
-  const existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string }>> = {};
+  const existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string; total?: string }>> = {};
   if (ctx)
     for (const c of CLOSING_SHIFTS) {
       const doc = await ShiftClosing.findOne({ storeId: ctx.store._id, workDate: dateOf(c.key), shiftName: c.name }).lean();
@@ -38,12 +38,13 @@ export default async function ClosingPage() {
       existing[c.key] = {
         input,
         note: doc.note ?? "",
+        total: doc.staffTotal != null ? String(doc.staffTotal) : "",
         at: localTime(new Date(doc.lastEditedAt ?? doc.createdAt ?? Date.now()), tz).slice(0, 5),
         by: doc.employeeName ?? "",
       };
     }
   const dayBefore = ctx
-    ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: nightDate, "revenue.dt": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
+    ? (await ShiftClosing.find({ storeId: ctx.store._id, workDate: nightDate, "revenue.tm": { $ne: null } }).sort({ createdAt: 1 }).lean()).map((c) => ({
         label: `${c.shiftName ? `Ca ${c.shiftName}` : "Ngoài ca"} · ${c.employeeName ?? ""}`,
         dt: c.revenue?.dt ?? 0,
         diff: revenueDiff((c.revenue ?? {}) as Partial<Revenue>),

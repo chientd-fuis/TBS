@@ -318,6 +318,8 @@ const ShiftClosingSchema = new Schema(
     revenue: { dt: Number, tm: Number, tk: Number, cp: Number, grab: Number, shopee: Number },
     // nội dung nhân viên gõ ở từng ô (VD thu chi "30k sữa chua + 20k ship") – hiển thị lại / gửi Telegram
     revenueInput: { dt: String, tm: String, tk: String, cp: String, grab: String, shopee: String },
+    // số TỔNG nhân viên tự cộng ghi trên tờ chốt ca (để kiểm tra cộng đúng chưa = TM+TK+Thu chi+Grab+Shopee)
+    staffTotal: Number,
     ocr: {
       status: { type: String, enum: ["NONE", "OK", "FAILED"], default: "NONE" },
       values: { dt: Number, tm: Number, tk: Number, cp: Number, grab: Number, shopee: Number }, // bot đọc được (để so với số nhân viên sửa)

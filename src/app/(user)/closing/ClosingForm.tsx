@@ -7,7 +7,7 @@ import { Alert, Button, Card, Field, Textarea } from "@/components/ui";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { DeviceNotice } from "@/components/user/DeviceNotice";
 import { useDevice } from "@/components/user/useDevice";
-import { CLOSING_SHIFTS, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type ClosingShiftKey, type Revenue, type RevenueKey } from "@/lib/revenue";
+import { CLOSING_SHIFTS, closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type ClosingShiftKey, type Revenue, type RevenueKey } from "@/lib/revenue";
 import { viDate } from "@/lib/time";
 
 type Raw = Record<RevenueKey, string>;
@@ -34,7 +34,7 @@ export default function ClosingForm({
   /** các ca đã chốt trước trong ngày (để ca cuối thấy tổng ngày) */
   dayBefore: { label: string; dt: number; diff: number }[];
   /** ca đã chốt rồi → nạp lại số để sửa (1 ca chỉ 1 bản ghi) */
-  existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string }>>;
+  existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string; total?: string }>>;
   /** đã cấu hình Gemini đọc ảnh */
   ocrEnabled: boolean;
 }) {
@@ -44,11 +44,15 @@ export default function ClosingForm({
   const [shiftKey, setShiftKey] = useState<ClosingShiftKey>(defaultShift);
   const [note, setNote] = useState(existing[defaultShift]?.note ?? "");
   const [raw, setRaw] = useState<Raw>(() => load(defaultShift));
+  // số TỔNG nhân viên tự cộng ghi trên tờ chốt ca → app kiểm tra cộng đúng chưa
+  const [total, setTotal] = useState(existing[defaultShift]?.total ?? "");
+  const [scaled, setScaled] = useState(false);
   const done = existing[shiftKey];
   const pickShift = (k: ClosingShiftKey) => {
     setShiftKey(k);
     setRaw(load(k));
     setNote(existing[k]?.note ?? "");
+    setTotal(existing[k]?.total ?? "");
   };
   const isDayEnd = shiftKey === "T";
   const [busy, setBusy] = useState(false);
@@ -67,9 +71,14 @@ export default function ClosingForm({
   const revenue = Object.fromEntries(REVENUE_KEYS.map((k) => [k, evals[k].value])) as Revenue;
   const diff = revenueDiff(revenue);
   const hasDt = !!raw.dt.trim();
-  const REQUIRED: RevenueKey[] = ["dt", "tm", "tk"];
+  // DT máy do admin cấp – NV có thì ghi (DTm), không có → admin bổ sung sau. Bắt buộc: TM, TK
+  const REQUIRED: RevenueKey[] = ["tm", "tk"];
+  const counted = closingSum(revenue);
+  const totalEval = evalMoneyExpr(total);
+  const hasTotal = !!total.trim() && totalEval.ok;
+  const totalDiff = hasTotal ? totalEval.value - counted : 0;
   const missing = REQUIRED.filter((k) => !raw[k].trim());
-  const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok);
+  const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok) || (!!total.trim() && !totalEval.ok);
   const ready = !missing.length && !invalid;
   const dayTotal = dayBefore.reduce((s, x) => s + x.dt, 0) + revenue.dt;
 
@@ -84,7 +93,7 @@ export default function ClosingForm({
     const r = await fetch("/api/closing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ photos: photo ? [photo] : [], ocr: ocr?.state === "done" ? { status: "OK", values: ocr.values } : ocr?.state === "error" ? { status: "FAILED", error: ocr.text.slice(0, 300) } : undefined, closingShift: shiftKey, note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
+      body: JSON.stringify({ photos: photo ? [photo] : [], ocr: ocr?.state === "done" ? { status: "OK", values: ocr.values } : ocr?.state === "error" ? { status: "FAILED", error: ocr.text.slice(0, 300) } : undefined, closingShift: shiftKey, note, revenue: { ...revenue, dt: hasDt ? revenue.dt : null }, staffTotal: hasTotal ? totalEval.value : null, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
     });
     const j = await r.json().catch(() => ({ error: "Lỗi mạng" }));
     setBusy(false);
@@ -116,6 +125,8 @@ export default function ClosingForm({
       return n;
     });
     if (j.note) setNote((o) => o || String(j.note));
+    if (typeof j.staffTotal === "number") setTotal(String(j.staffTotal));
+    setScaled(!!j.scaled);
     setOcr({ state: "done", found, date: j.date || undefined, values: vals });
   };
 
@@ -124,7 +135,6 @@ export default function ClosingForm({
   if (ocr?.state === "done") {
     for (const k of ["tm", "tk"] as const)
       if (!ocr.found.includes(k)) warnings.push({ text: `Ảnh không có / không đọc được ${REVENUE_LABEL[k]}`, fixed: !!raw[k].trim() });
-    if (!ocr.found.includes("dt")) warnings.push({ text: `Ảnh không có / không đọc được ${REVENUE_LABEL.dt}`, fixed: !!raw.dt.trim() });
     if (!ocr.date) warnings.push({ text: "Không thấy ngày tháng trên ảnh – kiểm tra đúng phiếu của hôm nay" });
     else if (dates[shiftKey] && ocr.date !== dates[shiftKey])
       warnings.push({ text: `Ngày trên ảnh là ${viDate(ocr.date)}, khác ngày chốt ${viDate(dates[shiftKey])} – kiểm tra lại ảnh hoặc ca chốt` });
@@ -218,15 +228,42 @@ export default function ClosingForm({
             Ca này đã chốt lúc <b>{done.at}</b>{done.by ? ` (${done.by})` : ""}. Lần này sẽ <b>sửa lại</b> bản chốt đó và gửi bản cập nhật vào nhóm.
           </p>
         )}
+        {ocr?.state === "done" && scaled && (
+          <p className="mb-2 rounded-lg bg-[#eef6ff] px-3 py-1.5 text-[11px] text-[#1e40af]">Tờ ghi theo đơn vị nghìn (VD 2487 = 2.487.000đ) → đã tự nhân 1000, kiểm tra lại.</p>
+        )}
         <p className="mb-3 text-xs text-ink/70">Gõ được phép cộng, VD <b>10000 + 20000 + 20k</b>. Rời ô sẽ tự hiện tổng. Ô có * bắt buộc (không có thì nhập 0), ô khác bỏ trống = 0.</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {REVENUE_KEYS.map((k) => (
             <div key={k} className={k === "dt" || k === "cp" ? "col-span-2" : ""}>
               <Field label={`${REVENUE_LABEL[k]}${REQUIRED.includes(k) ? " *" : ""}`}>
-                <ExprMoneyInput value={raw[k]} onChange={(v) => setRaw((o) => ({ ...o, [k]: v }))} placeholder={HINT[k]} aria-label={REVENUE_LABEL[k]} />
+                <ExprMoneyInput
+                  value={raw[k]}
+                  onChange={(v) => setRaw((o) => ({ ...o, [k]: v }))}
+                  placeholder={k === "dt" ? "Nếu có DTm – không có để trống" : HINT[k]}
+                  aria-label={REVENUE_LABEL[k]}
+                />
               </Field>
             </div>
           ))}
+        </div>
+
+        {/* kiểm tra tổng NV tự cộng trên tờ chốt ca */}
+        <div className="mt-3 rounded-xl bg-cream px-3 py-2">
+          <Field label="Tổng NV ghi trên tờ (số cuối)">
+            <ExprMoneyInput value={total} onChange={setTotal} placeholder="Số tổng cuối tờ chốt ca" aria-label="Tổng nhân viên ghi" />
+          </Field>
+          <div className="mt-1.5 flex items-center justify-between text-sm">
+            <span className="text-ink/70">App cộng lại (TM + TK + Thu chi + Grab + Shopee)</span>
+            <span className="font-semibold tabular-nums">{counted.toLocaleString("vi-VN")} đ</span>
+          </div>
+          {hasTotal && (
+            <p className={`mt-1 flex items-center gap-1.5 text-sm font-semibold ${totalDiff === 0 ? "text-secondary-dark" : "text-danger"}`}>
+              {totalDiff === 0 ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
+              {totalDiff === 0
+                ? "Tổng ghi trên tờ cộng ĐÚNG"
+                : `Cộng SAI: tờ ghi ${totalEval.value.toLocaleString("vi-VN")}, đúng là ${counted.toLocaleString("vi-VN")} (lệch ${totalDiff > 0 ? "+" : ""}${totalDiff.toLocaleString("vi-VN")})`}
+            </p>
+          )}
         </div>
 
         <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 ${!hasDt ? "bg-cream" : diff === 0 ? "bg-[#e3f3e7]" : "bg-[#fde2e2]"}`}>
@@ -235,7 +272,9 @@ export default function ClosingForm({
             {hasDt ? `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} đ` : "—"}
           </span>
         </div>
-        <p className="mt-1 text-[11px] text-ink/60">= Doanh thu máy − (Tiền mặt + Tài khoản + Thu chi + Grab + Shopee)</p>
+        <p className="mt-1 text-[11px] text-ink/60">
+          {hasDt ? "= Doanh thu máy − (Tiền mặt + Tài khoản + Thu chi + Grab + Shopee)" : "Chưa có Doanh thu máy (DTm) – admin sẽ bổ sung rồi tính âm/dương."}
+        </p>
 
         {isDayEnd && (
           <div className="mt-3 rounded-xl bg-[#eef6ff] p-3 text-xs text-[#1e40af]">
@@ -243,7 +282,7 @@ export default function ClosingForm({
             {dayBefore.map((x) => (
               <p key={x.label} className="flex justify-between"><span>{x.label}</span><span className="tabular-nums">{x.dt.toLocaleString("vi-VN")} đ{x.diff ? ` (lệch ${x.diff.toLocaleString("vi-VN")})` : ""}</span></p>
             ))}
-            <p className="flex justify-between"><span>Ca này</span><span className="tabular-nums">{revenue.dt.toLocaleString("vi-VN")} đ</span></p>
+            <p className="flex justify-between"><span>Ca này</span><span className="tabular-nums">{hasDt ? `${revenue.dt.toLocaleString("vi-VN")} đ` : "chưa có DT máy"}</span></p>
             <p className="mt-1 flex justify-between border-t border-[#bfdbfe] pt-1 font-bold"><span>Tổng doanh thu ngày</span><span className="tabular-nums">{dayTotal.toLocaleString("vi-VN")} đ</span></p>
           </div>
         )}

@@ -104,7 +104,8 @@ export function parseMoney(v: unknown): number | null {
 
 /** Tên trường mà bot đọc ảnh có thể trả về → khoá chuẩn. */
 const ALIASES: Record<RevenueKey, string[]> = {
-  dt: ["dt", "doanhthu", "doanh_thu", "revenue", "total", "tong", "tongdoanhthu"],
+  // chỉ DT MÁY (admin cấp, NV ghi "DTm"); "tổng" NV tự cộng → staff_total, không phải dt
+  dt: ["dt", "dtm", "dt_may", "dtmay", "doanhthumay", "doanh_thu_may", "doanhthu", "doanh_thu", "revenue"],
   tk: ["tk", "taikhoan", "tai_khoan", "chuyenkhoan", "chuyen_khoan", "bank", "transfer", "ck"],
   tm: ["tm", "tienmat", "tien_mat", "cash"],
   cp: ["cp", "chiphi", "chi_phi", "cptrongket", "cp_trong_ket", "expense", "expenses", "thuchi", "thu_chi"],
@@ -123,7 +124,10 @@ const norm = (k: string) =>
  * Chuẩn hoá JSON bot trả về (chấp nhận { dt, tk, … } hoặc { revenue: {...} } / { data: {...} },
  * tên trường tiếng Việt có/không dấu, số dạng chuỗi). Trường không có → không đưa vào kết quả.
  */
-export function normalizeOcr(raw: unknown, refDate?: string): { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string } {
+export function normalizeOcr(
+  raw: unknown,
+  refDate?: string,
+): { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean } {
   let obj = raw as Record<string, unknown> | null;
   if (obj && typeof obj === "object") {
     for (const wrap of ["revenue", "data", "result", "values"])
@@ -135,11 +139,16 @@ export function normalizeOcr(raw: unknown, refDate?: string): { values: Partial<
   let note: string | undefined;
   let date: string | undefined;
   let cpDetail: string | undefined;
+  let staffTotal: number | undefined;
   if (!obj || typeof obj !== "object") return { values };
   for (const [k, v] of Object.entries(obj)) {
     const nk = norm(k);
     if (["note", "ghichu", "ghi_chu", "notes"].includes(nk) && typeof v === "string" && v.trim()) note = v.trim();
     if (["date", "ngay", "ngay_chot", "ngaychot"].includes(nk) && v != null) date = parseOcrDate(String(v), refDate) ?? undefined;
+    if (["staff_total", "stafftotal", "written_total", "tong", "tong_cong", "tongcong", "total", "tong_nv"].includes(nk)) {
+      const n = parseMoney(v);
+      if (n !== null) staffTotal = n;
+    }
     if (["cp_detail", "cpdetail", "thu_chi_chi_tiet", "thuchichitiet", "chi_tiet_thu_chi", "expense_detail"].includes(nk) && typeof v === "string" && v.trim())
       cpDetail = v.trim();
     for (const key of REVENUE_KEYS)
@@ -148,7 +157,26 @@ export function normalizeOcr(raw: unknown, refDate?: string): { values: Partial<
         if (n !== null) values[key] = n;
       }
   }
-  return { values, note, date, cpDetail };
+  return scaleThousands({ values, note, date, cpDetail, staffTotal });
+}
+
+/**
+ * Tờ chốt ca viết tay thường ghi theo NGHÌN đồng ("TM 2487" = 2.487.000đ). Nếu mọi số chính (DT, TM, TK, tổng)
+ * đều < 100.000 → coi là đơn vị nghìn, nhân 1000 (cả chi tiết thu chi: "30 sữa chua" → "30k sữa chua").
+ */
+export function scaleThousands<T extends { values: Partial<Revenue>; cpDetail?: string; staffTotal?: number; scaled?: boolean }>(r: T): T {
+  const main = [r.values.dt, r.values.tm, r.values.tk, r.staffTotal].filter((x): x is number => typeof x === "number" && x > 0);
+  if (!main.length || main.some((x) => x >= 100_000)) return r;
+  const values: Partial<Revenue> = {};
+  for (const k of REVENUE_KEYS) if (r.values[k] != null) values[k] = r.values[k]! * 1000;
+  const cpDetail = r.cpDetail?.replace(/(\d[\d.,]*)(?!\s*(?:k|tr|nghìn|ngàn|đ|vnd|\d))/gi, "$1k");
+  return { ...r, values, cpDetail, staffTotal: r.staffTotal != null ? r.staffTotal * 1000 : undefined, scaled: true };
+}
+
+/** Tổng các khoản tiền NV đếm được trong ca = TM + TK + Thu chi + Grab + Shopee (so với "tổng" NV ghi trên phiếu). */
+export function closingSum(r: Partial<Revenue>) {
+  const n = (k: RevenueKey) => Number(r[k] ?? 0) || 0;
+  return n("tm") + n("tk") + n("cp") + n("grab") + n("shopee");
 }
 
 /**

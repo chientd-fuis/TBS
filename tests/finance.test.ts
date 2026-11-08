@@ -87,3 +87,31 @@ test("nhận diện chuyển lương nhân viên, lương không cộng vào chi
   });
   assert.equal(r.total.cost, 0);
 });
+
+test("sao kê nhiều giao dịch: chỉ lấy tiền ra, chuẩn hoá, caption gộp", async () => {
+  const { normalizeStatement, txKey, formatExpenseBatchCaption } = await import("../src/lib/finance");
+  const txs = normalizeStatement(
+    {
+      transactions: [
+        { direction: "OUT", amount: "-1.250.000", date: "07/11/2026", time: "9:05", recipient: "CONG TY SUA ABC", transfer_note: "TBS nhap sua", purpose: "Nhập sữa", category: "NGUYEN_LIEU" },
+        { direction: "IN", amount: 5_000_000, date: "2026-11-07", recipient: "GRAB" },
+        { direction: "OUT", amount: 3_500_000, date: "2026-11-06", recipient: "NGUYEN THI LAN", transfer_note: "luong T10", category: "LUONG" },
+        { direction: "OUT", amount: null },
+      ],
+    },
+    "2026-11-08",
+  );
+  assert.equal(txs.length, 2);
+  assert.deepEqual(txs[0], { amount: 1_250_000, date: "2026-11-07", time: "09:05", recipient: "CONG TY SUA ABC", transferNote: "TBS nhap sua", purpose: "Nhập sữa", category: "NGUYEN_LIEU" });
+  assert.equal(txKey(txs[0]), txKey({ ...txs[0] }));
+  const cap = formatExpenseBatchCaption(
+    [
+      { date: "2026-11-07", amount: 1_250_000, category: "NGUYEN_LIEU", target: "Geleximco", purpose: "Nhập sữa", recipient: "CONG TY SUA ABC" },
+      { date: "2026-11-06", amount: 3_500_000, category: "LUONG", target: "Chung", purpose: "Lương T10", recipient: "NGUYEN THI LAN" },
+    ],
+    "Chủ",
+  );
+  assert.match(cap, /^💸 CHI PHÍ – 2 khoản · tính vào chi phí 1\.250\.000 đ/);
+  assert.match(cap, /2\. 06\/11 · 3\.500\.000 · .* \(lương, không cộng\)/);
+  assert.match(cap, /1 khoản lương NV/);
+});

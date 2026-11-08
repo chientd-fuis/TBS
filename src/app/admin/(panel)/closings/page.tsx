@@ -6,7 +6,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
 import { deleteClosing, editClosingRevenue, resendClosing, syncDayRevenue } from "../../actions/closing";
-import { REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
+import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { addDays } from "@/lib/time";
 
@@ -17,7 +17,7 @@ const vnd = (n?: number | null) => (n == null ? "" : n.toLocaleString("vi-VN"));
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
 /** Danh sách chốt ca (ảnh) + trạng thái gửi Telegram */
-export default async function ClosingsPage({ searchParams }: { searchParams: Promise<{ store?: string; date?: string; status?: string }> }) {
+export default async function ClosingsPage({ searchParams }: { searchParams: Promise<{ store?: string; date?: string; status?: string; nodt?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
@@ -25,6 +25,8 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   if (sp.store) q.storeId = sp.store;
   if (isYmd(sp.date)) q.workDate = sp.date;
   if (sp.status) q["telegram.status"] = sp.status;
+  if (sp.nodt) Object.assign(q, { "revenue.dt": null, "revenue.tm": { $ne: null } });
+  const noDtCount = await ShiftClosing.countDocuments({ "revenue.dt": null, "revenue.tm": { $ne: null }, workDate: { $gte: addDays(localDate(new Date()), -45) } });
   const list = await ShiftClosing.find(q).sort({ createdAt: -1 }).limit(100).lean();
   const users = new Map((await User.find({ _id: { $in: list.map((c) => c.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const storeMap = new Map(stores.map((s) => [String(s._id), s]));
@@ -35,6 +37,12 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageTitle sub="Số liệu nhân viên nhập khi chốt ca – tự gửi (kèm ảnh) vào nhóm Telegram của cơ sở; ảnh không lưu trong app">Chốt ca</PageTitle>
+      {noDtCount > 0 && !sp.nodt && (
+        <Alert tone="orange">
+          Có <b>{noDtCount}</b> ca chưa có <b>Doanh thu máy</b> (45 ngày gần đây) – cần nhập để tính âm/dương & lãi lỗ.{" "}
+          <a href="/admin/closings?nodt=1" className="underline">Xem các ca này</a>
+        </Alert>
+      )}
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
       <Card>
@@ -135,16 +143,30 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                         </div>
                       </td>
                       <td className="text-xs whitespace-nowrap">
-                        {c.revenue?.dt != null ? (
+                        {c.revenue?.tm != null ? (
                           <>
-                            <div className="font-bold">DT máy {vnd(c.revenue.dt)}</div>
+                            {c.revenue.dt != null ? (
+                              <div className="font-bold">DT máy {vnd(c.revenue.dt)}</div>
+                            ) : (
+                              <div className="font-bold text-warn">Chưa có DT máy – bấm &quot;Sửa số liệu&quot; để nhập</div>
+                            )}
                             <div className="text-ink/70">TM {vnd(c.revenue.tm)} · TK {vnd(c.revenue.tk)}</div>
                             <div className="text-ink/70">Thu chi {vnd(c.revenue.cp)}{c.revenueInput?.cp && /[^\d.,\s]/.test(c.revenueInput.cp) ? ` (${c.revenueInput.cp})` : ""}</div>
                             <div className="text-ink/70">Grab {vnd(c.revenue.grab ?? 0)} · Shopee {vnd(c.revenue.shopee)}</div>
-                            {(() => {
-                              const d = revenueDiff(c.revenue as Partial<Revenue>);
-                              return <div className={d ? "font-bold text-danger" : "text-secondary-dark"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
-                            })()}
+                            {c.staffTotal != null &&
+                              (() => {
+                                const real = closingSum(c.revenue as Partial<Revenue>);
+                                return c.staffTotal === real ? (
+                                  <div className="text-secondary-dark">Tổng NV ghi {vnd(c.staffTotal)} ✓</div>
+                                ) : (
+                                  <div className="font-bold text-danger">NV cộng sai: ghi {vnd(c.staffTotal)}, đúng {vnd(real)}</div>
+                                );
+                              })()}
+                            {c.revenue.dt != null &&
+                              (() => {
+                                const d = revenueDiff(c.revenue as Partial<Revenue>);
+                                return <div className={d ? "font-bold text-danger" : "text-secondary-dark"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
+                              })()}
                             {c.revenueEditedBy && <div className="text-warn">Admin sửa: {c.revenueEditedBy}</div>}
                             {!!c.editCount && <div className="text-ink/60">NV chốt lại {c.editCount} lần</div>}
                           </>
@@ -158,7 +180,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                             {REVENUE_KEYS.map((k) => (
                               <label key={k} className="flex items-center justify-between gap-2">
                                 <span>{REVENUE_LABEL[k]}</span>
-                                <Input name={k} defaultValue={c.revenueInput?.[k] || vnd(c.revenue?.[k] ?? 0)} className="!w-40 !py-1 text-right" title="Gõ được phép cộng, VD 30k + 20k" />
+                                <Input name={k} defaultValue={c.revenueInput?.[k] || (c.revenue?.[k] != null ? vnd(c.revenue[k]) : "")} placeholder={k === "dt" ? "Nhập DT máy" : undefined} className="!w-40 !py-1 text-right" title="Gõ được phép cộng, VD 30k + 20k" />
                               </label>
                             ))}
                           </ActionForm>

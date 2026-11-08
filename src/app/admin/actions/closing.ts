@@ -65,14 +65,14 @@ export async function editClosingRevenue(_: FormState, fd: FormData): Promise<Fo
     const c = await ShiftClosing.findById(id);
     if (!c) return { error: "Không tìm thấy lượt chốt ca" };
     const before = c.toObject().revenue;
-    const revenue: Record<string, number> = {};
+    const revenue: Record<string, number | null> = {};
     const revenueInput: Record<string, string> = {};
     for (const k of REVENUE_KEYS) {
       const raw = str(fd.get(k));
       const r = evalMoneyExpr(raw);
       if (!r.ok) return { error: `Ô ${k} có khoản không có số tiền` };
       if (k !== "cp" && r.value < 0) return { error: "Số tiền không được âm" };
-      revenue[k] = r.value;
+      revenue[k] = k === "dt" && !raw ? null : r.value; // DT máy để trống = chưa có
       revenueInput[k] = raw;
     }
     c.set({ revenue, revenueInput, revenueEditedBy: adminActor(admin).name });

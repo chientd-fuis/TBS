@@ -123,3 +123,18 @@ test("lỗi vị trí không hỗ trợ Gemini", async () => {
   assert.equal(r.retryable, false);
   assert.match(r.text, /sin1/);
 });
+
+test("tờ chốt ca viết tay: đơn vị nghìn, tổng NV ghi, DTm", async () => {
+  const { normalizeOcr, closingSum } = await import("../src/lib/revenue");
+  const r = normalizeOcr({ dt: null, tm: 2487, tk: 6850, cp: 50, cp_detail: "30 sữa chua + 20 ship", staff_total: 9387, date: "2026-11-07" }, "2026-11-08");
+  assert.deepEqual(r.values, { tm: 2_487_000, tk: 6_850_000, cp: 50_000 });
+  assert.equal(r.cpDetail, "30k sữa chua + 20k ship");
+  assert.equal(r.staffTotal, 9_387_000);
+  assert.equal(r.scaled, true);
+  assert.equal(closingSum(r.values), 9_387_000);
+  // phiếu đủ đồng → giữ nguyên; "total" không còn bị hiểu là DT máy
+  const p = normalizeOcr({ dtm: 5_200_000, tm: 1_200_000, total: 5_150_000 });
+  assert.deepEqual(p.values, { dt: 5_200_000, tm: 1_200_000 });
+  assert.equal(p.staffTotal, 5_150_000);
+  assert.equal(p.scaled, undefined);
+});

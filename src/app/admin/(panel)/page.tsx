@@ -50,8 +50,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
-        <LinkButton href="/admin/finance/expenses?shoot=1" variant="secondary" className="mb-4 py-2.5">
-          <Receipt size={18} /> Nhập bill chi phí
+        <LinkButton href="/admin/finance/expenses" variant="secondary" className="mb-4 py-2.5">
+          <Receipt size={18} /> Nhập chi phí (sao kê / CK)
         </LinkButton>
       </div>
       {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Chủ.</Alert>}

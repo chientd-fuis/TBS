@@ -3,7 +3,7 @@ import { connectDB } from "./db";
 import { Attendance, DayRevenue, ReportLog, ShiftAssignment, ShiftClosing, Settings, User, APPROVED_SHIFT } from "./models";
 import { loadPnl, loadStores, type StoreLite } from "./finance-data";
 import { CATEGORY_LABEL, margin, revenueDeviation, type PnlLine } from "./finance";
-import { revenueDiff, type Revenue } from "./revenue";
+import { closingSum, revenueDiff, type Revenue } from "./revenue";
 import { geminiConfigured, geminiGenerate } from "./ocr";
 import { sendTelegramText, telegramConfigured } from "./telegram";
 import { addDays, localDate, prevMonth, viDate, viMonth, weekdayVi, DEFAULT_TZ } from "./time";
@@ -22,6 +22,8 @@ export async function financeChatId() {
 /* ---------- Dữ liệu cảnh báo trong ngày ---------- */
 export type DayIssues = {
   cash: { store: string; shift: string; who: string; diff: number }[]; // âm/dương két
+  noDt: { store: string; shift: string }[]; // ca chưa có DT máy (admin cần bổ sung)
+  badTotal: { store: string; shift: string; who: string; written: number; real: number }[]; // NV cộng tổng sai
   missingClosing: { store: string; shifts: string[] }[]; // ca chưa chốt
   revenueDev: { store: string; dev: number }[]; // lệch so với TB cùng thứ 4 tuần trước
   late: { store: string; names: string[] }[];
@@ -32,7 +34,7 @@ export type DayIssues = {
 
 async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> {
   const name = (id: unknown) => stores.find((s) => s._id === String(id))?.short ?? "?";
-  const closings = await ShiftClosing.find({ workDate: date }).select("storeId shiftName employeeName revenue").lean();
+  const closings = await ShiftClosing.find({ workDate: date }).select("storeId shiftName employeeName revenue staffTotal").lean();
   const cash = closings
     .map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "", who: c.employeeName ?? "", diff: c.revenue?.dt != null ? revenueDiff((c.revenue ?? {}) as Partial<Revenue>) : 0 }))
     .filter((c) => Math.abs(c.diff) >= 1000);
@@ -75,6 +77,10 @@ async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> 
 
   return {
     cash,
+    noDt: closings.filter((c) => c.revenue?.tm != null && c.revenue?.dt == null).map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "" })),
+    badTotal: closings
+      .filter((c) => c.staffTotal != null && c.revenue?.tm != null && c.staffTotal !== closingSum((c.revenue ?? {}) as Partial<Revenue>))
+      .map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "", who: c.employeeName ?? "", written: c.staffTotal!, real: closingSum((c.revenue ?? {}) as Partial<Revenue>) })),
     missingClosing: missingClosing.filter((m) => m.shifts.length),
     revenueDev,
     late: group((a) => (a.lateMinutes ?? 0) > 0),
@@ -87,6 +93,9 @@ async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> 
 export function issueLines(i: DayIssues) {
   const out: string[] = [];
   for (const m of i.missingClosing) out.push(`${m.store}: chưa chốt ca ${m.shifts.join(", ")}`);
+  for (const c of i.noDt) out.push(`${c.store}${c.shift ? ` Ca ${c.shift}` : ""}: chưa có DT máy – admin bổ sung để tính âm/dương`);
+  for (const c of i.badTotal)
+    out.push(`${c.store}${c.shift ? ` Ca ${c.shift}` : ""}${c.who ? ` (${c.who})` : ""}: cộng tổng sai – ghi ${n(c.written)}, đúng ${n(c.real)}`);
   for (const c of i.cash) out.push(`${c.store}${c.shift ? ` Ca ${c.shift}` : ""}${c.who ? ` (${c.who})` : ""}: ${c.diff < 0 ? "âm" : "dư"} ${n(Math.abs(c.diff))} đ`);
   for (const r of i.revenueDev) out.push(`${r.store}: doanh thu ${r.dev < 0 ? "thấp" : "cao"} hơn ${pct(Math.abs(r.dev))} so với TB cùng thứ 4 tuần trước`);
   for (const m of i.missed) out.push(`${m.store}: có lịch nhưng không chấm công – ${m.names.join(", ")}`);
@@ -143,7 +152,7 @@ export async function buildDailyReport(date: string) {
     issues: iss,
   });
   if (ai) lines.push("", "💬 Nhận xét", ai);
-  lines.push("", "LN ước tính = DT − phí sàn − thu chi két − chi phí − lương theo giờ công − cố định/ngày");
+  lines.push("", "LN ước tính = DT − phí sàn − thu chi két − chi phí − lương theo giờ công − tiền thuê nhà/ngày");
   return lines.join("\n");
 }
 
@@ -174,10 +183,12 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const top = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (top.length) lines.push("", "💸 Chi phí lớn nhất", ...top.map(([k, v]) => `• ${k}: ${n(v)} (${t.revenue ? pct(v / t.revenue) : "–"} DT)`));
   // cảnh báo tổng hợp của kỳ
-  const closings = await ShiftClosing.find({ workDate: { $gte: from, $lte: to }, "revenue.dt": { $ne: null } }).select("storeId revenue").lean();
+  const closings = await ShiftClosing.find({ workDate: { $gte: from, $lte: to }, "revenue.tm": { $ne: null } }).select("storeId revenue").lean();
   const neg = stores
     .map((s) => {
-      const list = closings.filter((c) => String(c.storeId) === s._id).map((c) => revenueDiff((c.revenue ?? {}) as Partial<Revenue>));
+      const list = closings
+        .filter((c) => String(c.storeId) === s._id && c.revenue?.dt != null)
+        .map((c) => revenueDiff((c.revenue ?? {}) as Partial<Revenue>));
       return { s: s.short, cnt: list.filter((d) => d < -1000).length, sum: list.filter((d) => d < -1000).reduce((a, b) => a + b, 0) };
     })
     .filter((x) => x.cnt);

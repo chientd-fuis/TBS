@@ -12,12 +12,13 @@ import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Select } from "@/components/ui";
 import { deleteExpense } from "../../../actions/finance";
 import ExpenseForm, { type ExpenseInitial } from "./ExpenseForm";
+import StatementImport from "./StatementImport";
 
 export const dynamic = "force-dynamic";
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
-export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string; cat?: string; edit?: string; shoot?: string }> }) {
+export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string; cat?: string; edit?: string }> }) {
   await requireAdmin();
   await connectDB();
   const sp = await searchParams;
@@ -77,9 +78,15 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
       <div className="space-y-3">
         {!chat && <Alert tone="orange">Chưa có <b>chat ID nhóm Quản lý doanh thu</b> – vào tab Cài đặt (chủ) hoặc đặt env TELEGRAM_FINANCE_CHAT_ID.</Alert>}
-        <Card title={edit ? "Sửa bill / chuyển khoản" : "Thêm bill / chuyển khoản"} actions={edit ? <Link href={`/admin/finance/expenses?month=${month}`} className="text-sm text-accent underline">Huỷ sửa</Link> : null}>
-          <ExpenseForm key={edit ? String(edit._id) : "new"} stores={storeOpts} today={today} initial={initial} ocrEnabled={geminiConfigured()} autoShoot={!edit && sp.shoot === "1"} />
-        </Card>
+        {edit ? (
+          <Card title="Sửa khoản chi" actions={<Link href={`/admin/finance/expenses?month=${month}`} className="text-sm text-accent underline">Huỷ sửa</Link>}>
+            <ExpenseForm key={String(edit._id)} stores={storeOpts} today={today} initial={initial} />
+          </Card>
+        ) : (
+          <Card title="Nhập chi phí từ sao kê / biên lai CK">
+            <StatementImport stores={storeOpts} today={today} ocrEnabled={geminiConfigured()} />
+          </Card>
+        )}
       </div>
 
       <div className="min-w-0 space-y-3">

@@ -102,3 +102,15 @@ test("thông báo chấm công: check-in muộn, check-out sớm", async () => {
   assert.match(cout, /🕐 Vào: 08:12 · Ra: 12:50 · 4,5h công/);
   assert.match(cout, /⚠️ Về sớm 10 phút/);
 });
+
+test("caption chốt ca: chưa có DT máy + kiểm tra tổng NV cộng", async () => {
+  const { formatCaption } = await import("../src/lib/closing");
+  const base = { storeName: "TBS Geleximco", storeCode: "GLX", tz: "Asia/Ho_Chi_Minh", workDate: "2026-11-07", createdAt: new Date("2026-11-07T15:00:00Z"), shiftName: "Tối", employeeName: "Lan" };
+  const a = formatCaption({ ...base, revenue: { dt: null, tm: 2_487_000, tk: 6_850_000, cp: 50_000, grab: 0, shopee: 0 }, staffTotal: 9_387_000 });
+  assert.match(a, /Doanh thu máy: chưa có \(admin bổ sung\)/);
+  assert.match(a, /Tổng NV ghi 9\.387\.000đ – ✅ cộng đúng/);
+  assert.doesNotMatch(a, /Âm\/Dương/);
+  const b = formatCaption({ ...base, revenue: { dt: 9_400_000, tm: 2_487_000, tk: 6_850_000, cp: 50_000, grab: 0, shopee: 0 }, staffTotal: 9_762_000 });
+  assert.match(b, /cộng SAI, đúng là 9\.387\.000đ \(lệch \+375\.000đ\)/);
+  assert.match(b, /⚠️ Âm\/Dương: \+13\.000đ/);
+});

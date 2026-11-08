@@ -17,7 +17,7 @@ export async function isDayEndShift(storeId: Id, shiftStart?: string | null) {
 /** Cộng lại doanh thu 1 ngày từ các lượt chốt ca. Số thay đổi so với lần đã ghi sheet → chờ ghi lại. */
 export async function recomputeDay(storeId: Id, date: string) {
   await connectDB();
-  const list = await ShiftClosing.find({ storeId, workDate: date, "revenue.dt": { $ne: null } })
+  const list = await ShiftClosing.find({ storeId, workDate: date, "revenue.tm": { $ne: null } })
     .sort({ createdAt: 1 })
     .select("revenue revenueInput note shiftName employeeName")
     .lean();
@@ -28,7 +28,7 @@ export async function recomputeDay(storeId: Id, date: string) {
       .map((c) => {
         const who = c.shiftName ? `Ca ${c.shiftName}` : c.employeeName;
         const tc = c.revenueInput?.cp && /[a-zA-ZÀ-ỹ]/.test(c.revenueInput.cp) ? `TC: ${c.revenueInput.cp}` : "";
-        const parts = [tc, c.note].filter(Boolean);
+        const parts = [c.revenue?.dt == null ? "chưa có DT máy" : "", tc, c.note].filter(Boolean);
         return parts.length ? `${who}: ${parts.join("; ")}` : "";
       })
       .filter(Boolean),

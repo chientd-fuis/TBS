@@ -176,7 +176,7 @@ export default function PnlView({
 
       <p className="text-xs text-ink/60">
         Lợi nhuận là <b>ước tính</b> T{viMonth(month)}: Doanh thu máy (chốt ca) − phí sàn Grab/Shopee − thu chi trong ca (tiền két) − chi phí bill (riêng + phần chia từ chi phí
-        chung) − lương (giờ công × lương giờ ± thưởng/phạt + phụ cấp, tính cho cơ sở nơi làm) − chi phí cố định chia theo ngày. Bill trả bằng tiền két không cộng lại.
+        chung) − lương (giờ công × lương giờ ± thưởng/phạt + phụ cấp, tính cho cơ sở nơi làm) − tiền thuê nhà chia theo ngày. Bill trả bằng tiền két không cộng lại.
       </p>
     </div>
   );

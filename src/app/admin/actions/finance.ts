@@ -42,36 +42,38 @@ export async function deleteExpense(_: FormState, fd: FormData): Promise<FormSta
   }
 }
 
-/** Thêm / sửa chi phí cố định (mặt bằng, điện nước…) – tính mỗi tháng, chia đều theo ngày. */
+/** Thêm / sửa tiền thuê nhà của 1 cơ sở (chi phí cố định duy nhất) – tính mỗi tháng, chia đều theo ngày. */
 export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     await connectDB();
     const id = str(fd.get("id"));
-    const name = str(fd.get("name"));
-    const category = str(fd.get("category"));
+    const category = "MAT_BANG";
     const amt = evalMoneyExpr(str(fd.get("amountPerMonth")));
-    const scope = str(fd.get("scope")) === "SHARED" ? "SHARED" : "STORE";
+    const scope = "STORE";
     const storeId = str(fd.get("storeId"));
-    const allocation = ["REVENUE", "EQUAL", "CUSTOM"].includes(str(fd.get("allocation"))) ? str(fd.get("allocation")) : "REVENUE";
+    const allocation = "REVENUE";
     const startMonth = str(fd.get("startMonth"));
     const endMonth = str(fd.get("endMonth"));
-    if (!name) return { error: "Nhập tên khoản chi" };
-    if (!isCategory(category)) return { error: "Chọn danh mục" };
-    if (!amt.ok || amt.value <= 0) return { error: "Số tiền / tháng không hợp lệ" };
+    if (!amt.ok || amt.value <= 0) return { error: "Tiền thuê / tháng không hợp lệ" };
     if (!/^\d{4}-\d{2}$/.test(startMonth)) return { error: "Chọn tháng bắt đầu" };
     if (endMonth && (!/^\d{4}-\d{2}$/.test(endMonth) || endMonth < startMonth)) return { error: "Tháng kết thúc không hợp lệ" };
-    if (scope === "STORE" && !storeId) return { error: "Chọn cơ sở" };
-    const stores = await Store.find({ active: { $ne: false } }).select("_id").lean();
-    const customShares =
-      scope === "SHARED" && allocation === "CUSTOM" ? stores.map((s) => ({ storeId: s._id, pct: dec(fd.get(`pct_${s._id}`)) })) : [];
-    if (allocation === "CUSTOM" && scope === "SHARED" && !customShares.some((c) => c.pct > 0)) return { error: "Nhập tỷ lệ % cho các cơ sở" };
+    const store = storeId ? await Store.findById(storeId).select("name").lean() : null;
+    if (!store) return { error: "Chọn cơ sở" };
+    const name = `Tiền thuê nhà ${store.name.replace(/^TBS\s*/i, "")}`;
+    const customShares: never[] = [];
+    // khoảng tháng không được chồng lên khoản thuê khác của cùng cơ sở
+    const others = await FixedCost.find({ storeId, ...(id ? { _id: { $ne: id } } : {}) }).lean();
+    const end = endMonth || "9999-12";
+    const clash = others.find((o) => o.startMonth <= end && (o.endMonth || "9999-12") >= startMonth);
+    if (clash)
+      return { error: `Trùng thời gian với khoản thuê từ ${clash.startMonth}${clash.endMonth ? ` đến ${clash.endMonth}` : " (đang áp dụng)"} – đặt "Đến tháng" cho khoản cũ trước` };
     const doc = {
       name,
       category,
       amountPerMonth: amt.value,
       scope,
-      ...(scope === "STORE" ? { storeId } : {}),
+      storeId,
       allocation,
       customShares,
       startMonth,
@@ -81,7 +83,7 @@ export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormSta
     const actor = adminActor(admin);
     if (id) {
       const prev = await FixedCost.findById(id).lean();
-      await FixedCost.updateOne({ _id: id }, { $set: doc, ...(scope === "SHARED" ? { $unset: { storeId: 1 } } : {}) });
+      await FixedCost.updateOne({ _id: id }, { $set: doc });
       await audit(actor, "fixedCost.update", { type: "FixedCost", id }, prev, doc);
     } else {
       const c = await FixedCost.create({ ...doc, createdBy: actor.name });
