@@ -96,7 +96,7 @@ const norm = (k: string) =>
  * Chuẩn hoá JSON bot trả về (chấp nhận { dt, tk, … } hoặc { revenue: {...} } / { data: {...} },
  * tên trường tiếng Việt có/không dấu, số dạng chuỗi). Trường không có → không đưa vào kết quả.
  */
-export function normalizeOcr(raw: unknown): { values: Partial<Revenue>; note?: string } {
+export function normalizeOcr(raw: unknown, refDate?: string): { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string } {
   let obj = raw as Record<string, unknown> | null;
   if (obj && typeof obj === "object") {
     for (const wrap of ["revenue", "data", "result", "values"])
@@ -106,17 +106,42 @@ export function normalizeOcr(raw: unknown): { values: Partial<Revenue>; note?: s
   }
   const values: Partial<Revenue> = {};
   let note: string | undefined;
+  let date: string | undefined;
+  let cpDetail: string | undefined;
   if (!obj || typeof obj !== "object") return { values };
   for (const [k, v] of Object.entries(obj)) {
     const nk = norm(k);
-    if (["note", "ghichu", "ghi_chu", "notes"].includes(nk) && typeof v === "string") note = v.trim();
+    if (["note", "ghichu", "ghi_chu", "notes"].includes(nk) && typeof v === "string" && v.trim()) note = v.trim();
+    if (["date", "ngay", "ngay_chot", "ngaychot"].includes(nk) && v != null) date = parseOcrDate(String(v), refDate) ?? undefined;
+    if (["cp_detail", "cpdetail", "thu_chi_chi_tiet", "thuchichitiet", "chi_tiet_thu_chi", "expense_detail"].includes(nk) && typeof v === "string" && v.trim())
+      cpDetail = v.trim();
     for (const key of REVENUE_KEYS)
       if (ALIASES[key].includes(nk) && values[key] === undefined) {
         const n = parseMoney(v);
         if (n !== null) values[key] = n;
       }
   }
-  return { values, note };
+  return { values, note, date, cpDetail };
+}
+
+/**
+ * Ngày đọc từ ảnh → YYYY-MM-DD. Nhận "07/11/2026", "7/11/26", "07-11", "2026-11-07".
+ * Thiếu năm → lấy năm của refDate (YYYY-MM-DD). Không hợp lệ → null.
+ */
+export function parseOcrDate(s: string, refDate?: string): string | null {
+  const t = s.trim();
+  if (!t) return null;
+  let y: number, m: number, d: number;
+  let r = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(t);
+  if (r) [y, m, d] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  else if ((r = /(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?/.exec(t))) {
+    d = Number(r[1]);
+    m = Number(r[2]);
+    y = r[3] ? Number(r[3].length === 2 ? `20${r[3]}` : r[3]) : Number((refDate ?? new Date().toISOString()).slice(0, 4));
+  } else return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return Number.isNaN(Date.parse(iso + "T00:00:00Z")) ? null : iso;
 }
 
 /** Âm/Dương (chênh lệch) = Doanh thu máy − (Tiền mặt + Tài khoản + Thu chi + Grab + Shopee). */

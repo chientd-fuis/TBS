@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
@@ -108,6 +108,7 @@ export async function POST(req: Request) {
           photos,
           revenue: b.revenue,
           revenueInput: b.revenueInput,
+          ocr: b.ocr ?? { status: "NONE" },
           isDayEnd,
           telegram: { status: "PENDING", attempts: 0 },
           webhook: {},
@@ -123,6 +124,12 @@ export async function POST(req: Request) {
     const status = await deliverClosing(closingId, bufs);
     // cộng doanh thu ngày; ca cuối ngày → ghi Google Sheet
     const sheet = await afterClosing(store._id, workDate, isDayEnd).catch(() => "FAILED" as const);
+    // ca Tối của cơ sở cuối cùng chốt xong → gửi báo cáo ngày vào nhóm Quản lý doanh thu
+    if (isDayEnd && !prev)
+      after(async () => {
+        const { maybeSendDailyAfterClosing } = await import("@/lib/finance-report");
+        await maybeSendDailyAfterClosing(workDate).catch(() => null);
+      });
     return NextResponse.json({
       ok: true,
       updated: !!prev,

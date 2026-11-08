@@ -5,6 +5,7 @@ import { addDays, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import ClosingForm from "./ClosingForm";
 import { resolveClosingContext } from "@/lib/closing-context";
+import { ocrConfigured } from "@/lib/ocr";
 import { CLOSING_SHIFTS, closingWorkDate, defaultClosingShift, revenueDiff, type ClosingShiftKey, type Revenue } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export default async function ClosingPage() {
         storeName={ctx?.store.name}
         dayBefore={dayBefore}
         existing={existing}
+        ocrEnabled={ocrConfigured()}
       />
       {recent.length > 0 && (
         <Card title="Lần chốt ca gần đây">

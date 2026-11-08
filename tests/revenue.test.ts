@@ -82,3 +82,19 @@ test("mẫu cột Google Sheet theo cơ sở", async () => {
     { range: "I9", values: [["Shopee 100 + Grab 50 | ok"]] },
   ]);
 });
+
+test("đọc ảnh: ngày + chi tiết thu chi + phản hồi Gemini", async () => {
+  const { parseOcrDate, normalizeOcr } = await import("../src/lib/revenue");
+  const { parseGeminiResponse } = await import("../src/lib/ocr");
+  assert.equal(parseOcrDate("07/11/2026"), "2026-11-07");
+  assert.equal(parseOcrDate("7/11", "2026-11-08"), "2026-11-07");
+  assert.equal(parseOcrDate("07-11-26"), "2026-11-07");
+  assert.equal(parseOcrDate("2026-11-07"), "2026-11-07");
+  assert.equal(parseOcrDate("32/13"), null);
+  const body = { candidates: [{ content: { parts: [{ text: '{"dt":1760000,"tm":260000,"tk":null,"cp":50000,"cp_detail":"30k sữa chua + 20k ship","grab":null,"shopee":0,"date":"2026-11-07","note":null}' }] } }] };
+  const r = normalizeOcr(parseGeminiResponse(body), "2026-11-07");
+  assert.deepEqual(r.values, { dt: 1760000, tm: 260000, cp: 50000, shopee: 0 });
+  assert.equal(r.cpDetail, "30k sữa chua + 20k ship");
+  assert.equal(r.date, "2026-11-07");
+  assert.throws(() => parseGeminiResponse({ candidates: [] }), /không trả về/);
+});

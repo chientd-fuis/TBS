@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, RotateCcw, Send, Sparkles, TriangleAlert, X } from "lucide-react";
 import PhotoCamera from "@/components/user/PhotoCamera";
 import { Alert, Button, Card, Field, Textarea } from "@/components/ui";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
@@ -23,6 +23,7 @@ export default function ClosingForm({
   storeName,
   dayBefore,
   existing,
+  ocrEnabled,
 }: {
   scheduledShift: string | null; // ca được xếp lịch (để tham khảo)
   defaultShift: ClosingShiftKey;
@@ -34,6 +35,8 @@ export default function ClosingForm({
   dayBefore: { label: string; dt: number; diff: number }[];
   /** ca đã chốt rồi → nạp lại số để sửa (1 ca chỉ 1 bản ghi) */
   existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string }>>;
+  /** đã cấu hình Gemini đọc ảnh */
+  ocrEnabled: boolean;
 }) {
   const router = useRouter();
   const device = useDevice();
@@ -51,6 +54,14 @@ export default function ClosingForm({
   const [busy, setBusy] = useState(false);
   const [shooting, setShooting] = useState(false); // đang mở camera chụp ảnh chốt ca
   const [result, setResult] = useState<{ tone: "green" | "orange" | "red"; text: string } | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null); // ảnh chốt ca (chỉ gửi Telegram, không lưu)
+  // kết quả đọc ảnh: found = các ô AI đọc được; date = ngày trên ảnh
+  const [ocr, setOcr] = useState<
+    | { state: "reading" }
+    | { state: "done"; found: RevenueKey[]; date?: string; values: Partial<Revenue> }
+    | { state: "error"; text: string }
+    | null
+  >(null);
 
   const evals = Object.fromEntries(REVENUE_KEYS.map((k) => [k, evalMoneyExpr(raw[k])])) as Record<RevenueKey, ReturnType<typeof evalMoneyExpr>>;
   const revenue = Object.fromEntries(REVENUE_KEYS.map((k) => [k, evals[k].value])) as Revenue;
@@ -63,8 +74,7 @@ export default function ClosingForm({
   const dayTotal = dayBefore.reduce((s, x) => s + x.dt, 0) + revenue.dt;
 
   // chụp xong 1 ảnh → gửi luôn (ảnh chỉ gửi vào nhóm Telegram, không lưu)
-  const submit = async (photo?: string) => {
-    setShooting(false);
+  const submit = async () => {
     setBusy(true);
     setResult(null);
     let pos: GeolocationPosition | null = null;
@@ -74,15 +84,52 @@ export default function ClosingForm({
     const r = await fetch("/api/closing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ photos: photo ? [photo] : [], closingShift: shiftKey, note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
+      body: JSON.stringify({ photos: photo ? [photo] : [], ocr: ocr?.state === "done" ? { status: "OK", values: ocr.values } : ocr?.state === "error" ? { status: "FAILED", error: ocr.text.slice(0, 300) } : undefined, closingShift: shiftKey, note, revenue, revenueInput: raw, lat: pos?.coords.latitude, lng: pos?.coords.longitude }),
     });
     const j = await r.json().catch(() => ({ error: "Lỗi mạng" }));
     setBusy(false);
     if (!r.ok) return setResult({ tone: "red", text: j.error || "Chốt ca thất bại" });
     setResult({ tone: j.telegram === "SENT" && j.sheet !== "FAILED" ? "green" : "orange", text: [j.message, j.sheetMessage].filter(Boolean).join(" ") });
     // giữ nguyên số vừa gửi (ca này giờ đã chốt – lần sau là sửa)
+    if (r.ok) {
+      setPhoto(null);
+      setOcr(null);
+    }
     router.refresh();
   };
+
+  // chụp xong → giữ ảnh, gửi Gemini đọc số → điền vào form (nhân viên kiểm tra, sửa rồi mới gửi)
+  const onShot = async (p: string) => {
+    setShooting(false);
+    setPhoto(p);
+    setResult(null);
+    if (!ocrEnabled) return setOcr(null);
+    setOcr({ state: "reading" });
+    const r = await fetch("/api/closing/ocr", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ photos: [p] }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok) return setOcr({ state: "error", text: j.error || "Không đọc được ảnh – hãy nhập tay" });
+    const vals = (j.values ?? {}) as Partial<Revenue>;
+    const found = REVENUE_KEYS.filter((k) => typeof vals[k] === "number");
+    setRaw((o) => {
+      const n = { ...o };
+      for (const k of found) n[k] = k === "cp" && j.cpDetail ? String(j.cpDetail) : String(vals[k]);
+      return n;
+    });
+    if (j.note) setNote((o) => o || String(j.note));
+    setOcr({ state: "done", found, date: j.date || undefined, values: vals });
+  };
+
+  // cảnh báo thiếu thông tin cơ bản sau khi đọc ảnh: Tiền mặt, Tài khoản, Ngày
+  const warnings: { text: string; fixed?: boolean }[] = [];
+  if (ocr?.state === "done") {
+    for (const k of ["tm", "tk"] as const)
+      if (!ocr.found.includes(k)) warnings.push({ text: `Ảnh không có / không đọc được ${REVENUE_LABEL[k]}`, fixed: !!raw[k].trim() });
+    if (!ocr.found.includes("dt")) warnings.push({ text: `Ảnh không có / không đọc được ${REVENUE_LABEL.dt}`, fixed: !!raw.dt.trim() });
+    if (!ocr.date) warnings.push({ text: "Không thấy ngày tháng trên ảnh – kiểm tra đúng phiếu của hôm nay" });
+    else if (dates[shiftKey] && ocr.date !== dates[shiftKey])
+      warnings.push({ text: `Ngày trên ảnh là ${viDate(ocr.date)}, khác ngày chốt ${viDate(dates[shiftKey])} – kiểm tra lại ảnh hoặc ca chốt` });
+  }
+  const openWarn = warnings.filter((w) => !w.fixed).length;
 
   return (
     <div className="space-y-3">
@@ -118,6 +165,51 @@ export default function ClosingForm({
             </button>
           ))}
         </div>
+      </Card>
+
+      <Card title="Ảnh chốt ca">
+        {!photo ? (
+          <>
+            <p className="mb-2 text-xs text-ink/70">
+              {ocrEnabled
+                ? "Chụp phiếu / màn hình doanh thu cuối ca – AI sẽ đọc và điền sẵn số liệu bên dưới để bạn kiểm tra."
+                : "Chụp phiếu / màn hình doanh thu cuối ca để gửi kèm vào nhóm (chưa bật AI đọc ảnh – nhập số bằng tay)."}
+            </p>
+            <Button className="w-full py-3 text-base" variant="secondary" disabled={busy || device.state !== "APPROVED"} onClick={() => setShooting(true)}>
+              <Camera size={18} /> Chụp ảnh chốt ca
+            </Button>
+          </>
+        ) : (
+          <div className="flex gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photo} alt="Ảnh chốt ca" className="h-24 w-20 shrink-0 rounded-lg object-cover ring-1 ring-ink/10" />
+            <div className="min-w-0 flex-1 space-y-1.5 text-sm">
+              {ocr?.state === "reading" && (
+                <p className="flex items-center gap-1.5 text-accent"><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh bằng AI…</p>
+              )}
+              {ocr?.state === "error" && <p className="text-danger">{ocr.text}</p>}
+              {ocr?.state === "done" && (
+                <p className="flex items-center gap-1.5 text-secondary-dark">
+                  <Sparkles size={16} /> Đã điền {ocr.found.length} ô từ ảnh{ocr.date ? ` · ngày ${viDate(ocr.date)}` : ""}. Kiểm tra lại trước khi gửi.
+                </p>
+              )}
+              {!ocr && <p className="text-ink/70">Ảnh sẽ gửi kèm vào nhóm Telegram.</p>}
+              <button type="button" disabled={busy || ocr?.state === "reading"} onClick={() => setShooting(true)} className="flex items-center gap-1 text-xs text-accent underline disabled:opacity-50">
+                <RotateCcw size={13} /> Chụp lại
+              </button>
+            </div>
+          </div>
+        )}
+        {warnings.length > 0 && (
+          <ul className={`mt-3 space-y-1 rounded-xl px-3 py-2 text-xs ${openWarn ? "bg-[#fde2e2] text-danger" : "bg-[#e3f3e7] text-secondary-dark"}`}>
+            {warnings.map((w) => (
+              <li key={w.text} className={`flex gap-1.5 ${w.fixed ? "text-secondary-dark" : ""}`}>
+                {w.fixed ? <CheckCircle2 size={14} className="mt-px shrink-0" /> : <TriangleAlert size={14} className="mt-px shrink-0" />}
+                <span>{w.text}{w.fixed ? " – đã nhập tay" : ""}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card title="Số liệu ca">
@@ -159,13 +251,19 @@ export default function ClosingForm({
         <Field label="Ghi chú (không bắt buộc)">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="VD: thiếu 20k do trả lại khách" />
         </Field>
-        <Button className="mt-3 w-full py-3 text-base" variant="secondary" disabled={busy || !ready || device.state !== "APPROVED"} onClick={() => setShooting(true)}>
-          {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />} {busy ? "Đang gửi…" : done ? "Cập nhật chốt ca & chụp ảnh" : "Chốt ca & chụp ảnh"}
+        <Button
+          className="mt-3 w-full py-3 text-base"
+          variant="secondary"
+          disabled={busy || !ready || ocr?.state === "reading" || device.state !== "APPROVED"}
+          onClick={() => submit()}
+        >
+          {busy ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} {busy ? "Đang gửi…" : done ? "Cập nhật chốt ca & gửi nhóm" : "Chốt ca & gửi nhóm"}
         </Button>
-        {!ready && (
+        {(!ready || !photo) && (
           <p className="mt-1 text-center text-xs text-ink/60">
             {missing.length ? `Nhập ${missing.map((k) => REVENUE_LABEL[k]).join(", ")}. ` : ""}
-            {invalid ? "Sửa ô bị đỏ." : ""}
+            {invalid ? "Sửa ô bị đỏ. " : ""}
+            {!photo ? "Chưa có ảnh – sẽ gửi không kèm ảnh." : ""}
           </p>
         )}
       </Card>
@@ -176,14 +274,15 @@ export default function ClosingForm({
             <div className="flex items-center justify-between text-white">
               <p className="font-bold">Chụp ảnh chốt ca</p>
               <div className="flex items-center gap-3">
-                <button onClick={() => submit()} className="text-xs text-white/80 underline">Gửi không kèm ảnh</button>
                 <button onClick={() => setShooting(false)} className="rounded-full p-1 hover:bg-white/10" aria-label="Huỷ">
                   <X size={22} />
                 </button>
               </div>
             </div>
-            <p className="text-xs text-white/70">Bấm chụp là gửi luôn vào nhóm Telegram cùng số liệu (ảnh không lưu trong app).</p>
-            <PhotoCamera photos={[]} max={1} shootLabel="Chụp & gửi" onChange={(p) => p[0] && submit(p[0])} />
+            <p className="text-xs text-white/70">
+              Chụp rõ, đủ sáng, thấy cả <b>ngày</b>, <b>tiền mặt</b>, <b>tài khoản</b>. {ocrEnabled ? "AI đọc xong sẽ điền sẵn để bạn kiểm tra." : ""} Ảnh chỉ gửi vào nhóm Telegram, không lưu trong app.
+            </p>
+            <PhotoCamera photos={[]} max={1} shootLabel={ocrEnabled ? "Chụp & đọc số" : "Chụp"} onChange={(p) => p[0] && onShot(p[0])} />
           </div>
         </div>
       )}

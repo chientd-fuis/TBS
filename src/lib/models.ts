@@ -27,6 +27,12 @@ const SettingsSchema = new Schema(
     faceMatchThreshold: { type: Number, default: 0.5 },
     maxGpsAccuracyM: { type: Number, default: 100 },
     adminSessionDays: { type: Number, default: 7 },
+    // Tài chính: nhóm Telegram "Quản lý doanh thu" (ảnh bill chi phí + báo cáo) – trống → TELEGRAM_FINANCE_CHAT_ID
+    financeChatId: { type: String, default: "" },
+    financeReportDaily: { type: Boolean, default: true },
+    financeReportWeekly: { type: Boolean, default: true },
+    financeReportMonthly: { type: Boolean, default: true },
+    financeAiComment: { type: Boolean, default: true }, // Gemini viết nhận xét trong báo cáo
   },
   { timestamps: true },
 );
@@ -52,6 +58,9 @@ const StoreSchema = new Schema(
     revenueFirstRow: { type: Number, default: 3 }, // dòng của ngày 1
     // mẫu cột: GRAB_COL (B–G + ghi chú J, mặc định cơ sở mới) | LEGACY (B–F, Grab gộp Shopee, ghi chú I)
     revenueSheetLayout: { type: String, enum: ["GRAB_COL", "LEGACY"], default: "GRAB_COL" },
+    // % phí sàn trừ vào doanh thu khi tính lãi lỗ
+    grabFeePct: { type: Number, default: 0 },
+    shopeeFeePct: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -371,6 +380,64 @@ const PendingPhotoSchema = new Schema({
 export const PendingPhoto = getModel("PendingPhoto", PendingPhotoSchema);
 
 /* ---------- Lương ---------- */
+/* ---------- Tài chính: chi phí (bill), chi phí cố định, nhật ký báo cáo ---------- */
+const ShareSchema = new Schema({ storeId: { type: Schema.Types.ObjectId, ref: "Store" }, pct: Number }, { _id: false });
+const ExpenseSchema = new Schema(
+  {
+    date: { type: String, required: true }, // ngày chi YYYY-MM-DD
+    month: { type: String, required: true },
+    amount: { type: Number, required: true },
+    category: { type: String, required: true },
+    vendor: String, // nơi bán
+    items: String, // nội dung / các món
+    note: String,
+    // STORE = của 1 cơ sở · SHARED = chung, chia cho các cơ sở theo allocation
+    scope: { type: String, enum: ["STORE", "SHARED"], default: "STORE" },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" },
+    allocation: { type: String, enum: ["REVENUE", "EQUAL", "CUSTOM"], default: "REVENUE" },
+    customShares: [ShareSchema],
+    // OWNER = chủ trả / chuyển khoản · CASHBOX = lấy tiền két (đã nằm trong "Thu chi" chốt ca → không cộng lại)
+    paidFrom: { type: String, enum: ["OWNER", "CASHBOX"], default: "OWNER" },
+    ocr: { status: { type: String, enum: ["NONE", "OK", "FAILED"], default: "NONE" }, amount: Number, date: String },
+    telegram: { status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED"], default: "PENDING" }, messageIds: [Number], error: String },
+    createdBy: String,
+    updatedBy: String,
+  },
+  { timestamps: true },
+);
+ExpenseSchema.index({ month: 1, date: 1 });
+ExpenseSchema.index({ date: 1, amount: 1 });
+export type ExpenseDoc = InferSchemaType<typeof ExpenseSchema> & { _id: Types.ObjectId };
+export const Expense = getModel("Expense", ExpenseSchema);
+
+const FixedCostSchema = new Schema(
+  {
+    name: { type: String, required: true }, // VD "Mặt bằng Văn Phú"
+    category: { type: String, required: true },
+    amountPerMonth: { type: Number, required: true },
+    scope: { type: String, enum: ["STORE", "SHARED"], default: "STORE" },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" },
+    allocation: { type: String, enum: ["REVENUE", "EQUAL", "CUSTOM"], default: "REVENUE" },
+    customShares: [ShareSchema],
+    startMonth: { type: String, required: true }, // YYYY-MM
+    endMonth: String, // trống = đang áp dụng
+    note: String,
+    createdBy: String,
+  },
+  { timestamps: true },
+);
+export type FixedCostDoc = InferSchemaType<typeof FixedCostSchema> & { _id: Types.ObjectId };
+export const FixedCost = getModel("FixedCost", FixedCostSchema);
+
+/** Mỗi báo cáo chỉ gửi 1 lần (key VD "daily:2026-11-08", "weekly:2026-11-02", "monthly:2026-10"). */
+const ReportLogSchema = new Schema({
+  key: { type: String, required: true, unique: true },
+  status: { type: String, enum: ["SENT", "FAILED"], default: "SENT" },
+  error: String,
+  sentAt: { type: Date, default: Date.now },
+});
+export const ReportLog = getModel("ReportLog", ReportLogSchema);
+
 const WageHistorySchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   hourlyWage: { type: Number, required: true },

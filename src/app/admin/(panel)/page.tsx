@@ -6,7 +6,8 @@ import { localDate, localMonth, localTime, viMonth } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
-import { Alert, Badge, Card, PageTitle } from "@/components/ui";
+import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
+import { Receipt } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
+        <LinkButton href="/admin/finance/expenses?shoot=1" variant="secondary" className="mb-4 py-2.5">
+          <Receipt size={18} /> Nhập bill chi phí
+        </LinkButton>
+      </div>
       {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Chủ.</Alert>}
       {!settings.googleRefreshTokenEnc && (
         <Alert tone="orange">
