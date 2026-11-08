@@ -87,6 +87,11 @@ export function describeGeminiError(status: number, body: unknown, model: string
   const e = (body as GeminiErr)?.error;
   const msg = e?.message ?? "";
   if (status === 400 && /API key/i.test(msg)) return { text: "GEMINI_API_KEY không hợp lệ", retryable: false };
+  if (status === 400 && /location is not supported/i.test(msg))
+    return {
+      text: "Gemini không hỗ trợ vị trí máy chủ đang gọi (VD Vercel region Hong Kong hkg1) – cần chạy ở Singapore (sin1) hoặc khu vực được hỗ trợ",
+      retryable: false,
+    };
   if (status === 403) return { text: `Key không có quyền dùng ${model} (${msg.slice(0, 100)})`, retryable: true };
   if (status === 404) return { text: `Không có model ${model}`, retryable: true };
   if (status === 429) {

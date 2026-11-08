@@ -10,6 +10,9 @@ import { Alert, Badge, Card, Field, Input, Select } from "@/components/ui";
 import { saveFinanceSettings, sendReportNow, testFinanceTelegram } from "../../../actions/finance";
 
 export const dynamic = "force-dynamic";
+// nút "Gửi báo cáo ngay" gọi Gemini – Gemini API không hỗ trợ Hong Kong → chạy ở Singapore
+export const preferredRegion = "sin1";
+export const maxDuration = 60;
 
 export default async function FinanceSettingsPage() {
   await requireOwner();

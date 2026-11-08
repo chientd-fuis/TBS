@@ -116,3 +116,10 @@ test("diễn giải lỗi Gemini hết lượt / quá tải", async () => {
   assert.match(describeGeminiError(503, {}, "m").text, /quá tải/);
   assert.equal(describeGeminiError(400, { error: { message: "API key not valid" } }, "m").retryable, false);
 });
+
+test("lỗi vị trí không hỗ trợ Gemini", async () => {
+  const { describeGeminiError } = await import("../src/lib/ocr");
+  const r = describeGeminiError(400, { error: { code: 400, message: "User location is not supported for the API use.", status: "FAILED_PRECONDITION" } }, "m");
+  assert.equal(r.retryable, false);
+  assert.match(r.text, /sin1/);
+});

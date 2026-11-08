@@ -6,6 +6,8 @@ import { resolveClosingContext } from "@/lib/closing-context";
 import { ocrConfigured, readClosingPhotos } from "@/lib/ocr";
 import { HttpError, jsonError } from "@/lib/api";
 
+// Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
+export const preferredRegion = "sin1";
 export const maxDuration = 60;
 
 const Body = z.object({ photos: z.array(z.string()).min(1).max(4) });

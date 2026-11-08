@@ -8,6 +8,8 @@ import { retryFailedClosings } from "@/lib/closing";
 import { syncPendingDays } from "@/lib/day-revenue";
 import { runScheduledReports } from "@/lib/finance-report";
 
+// Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
+export const preferredRegion = "sin1";
 export const maxDuration = 60;
 
 /** Hằng giờ: đánh dấu quên check-out, upload lại ảnh chờ, tạo bảng lương nháp, công bố nếu đã qua ngày 5. */

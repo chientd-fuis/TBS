@@ -9,6 +9,8 @@ import { User } from "@/lib/models";
 import { HttpError, jsonError } from "@/lib/api";
 import { localDate } from "@/lib/time";
 
+// Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
+export const preferredRegion = "sin1";
 export const maxDuration = 60;
 const Body = z.object({ photo: z.string().startsWith("data:image/") });
 

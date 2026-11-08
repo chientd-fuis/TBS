@@ -12,6 +12,8 @@ import { CLOSING_SHIFTS, closingWorkDate, defaultClosingShift } from "@/lib/reve
 import { addDays, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 
+// Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
+export const preferredRegion = "sin1";
 export const maxDuration = 60;
 
 const Money = z.number().int().min(0).max(1_000_000_000);
