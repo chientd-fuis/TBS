@@ -52,6 +52,33 @@ export function evalMoneyExpr(input: string): { value: number; ok: boolean; item
   return { value, ok, items };
 }
 
+/**
+ * Tách biểu thức thành từng khoản có mô tả: "30k sữa chua + 20k ship - 5k" →
+ * [{amount: 30000, label: "sữa chua"}, {amount: 20000, label: "ship"}, {amount: -5000, label: ""}].
+ */
+export function moneyExprItems(input: string): { amount: number; label: string }[] {
+  const s = (input ?? "").trim();
+  if (!s) return [];
+  const out: { amount: number; label: string }[] = [];
+  for (const raw of s.split(/(?=[+\-−])/)) {
+    let t = raw.trim();
+    let sign = 1;
+    if (/^[+\-−]/.test(t)) {
+      sign = t[0] === "+" ? 1 : -1;
+      t = t.slice(1).trim();
+    }
+    if (!t) continue;
+    const re = /\d[\d.,]*\s*(?:tr\d{0,3}|k|nghìn|ngàn|đ|vnd)?/gi;
+    const nums = [...t.matchAll(re)]
+      .map((m) => parseMoney(m[0].replace(/\s+/g, "").replace(/nghìn|ngàn/i, "k").replace(/[.,]$/, "")))
+      .filter((x): x is number => x != null);
+    if (!nums.length) continue;
+    const label = t.replace(re, " ").replace(/\s+/g, " ").replace(/^[\s:,;.-]+|[\s:,;.-]+$/g, "").trim();
+    out.push({ amount: sign * Math.max(...nums), label });
+  }
+  return out;
+}
+
 /** "7.060.000 đ" / "7,060,000" / "7tr06" / 7060000 → 7060000. Không đọc được → null. */
 export function parseMoney(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : null;

@@ -98,3 +98,21 @@ test("đọc ảnh: ngày + chi tiết thu chi + phản hồi Gemini", async () 
   assert.equal(r.date, "2026-11-07");
   assert.throws(() => parseGeminiResponse({ candidates: [] }), /không trả về/);
 });
+
+test("tách khoản thu chi trong ca", async () => {
+  const { moneyExprItems } = await import("../src/lib/revenue");
+  assert.deepEqual(moneyExprItems("30k sữa chua + 20k ship"), [{ amount: 30000, label: "sữa chua" }, { amount: 20000, label: "ship" }]);
+  assert.deepEqual(moneyExprItems("đá 15k - 5k trả lại"), [{ amount: 15000, label: "đá" }, { amount: -5000, label: "trả lại" }]);
+  assert.deepEqual(moneyExprItems("50000"), [{ amount: 50000, label: "" }]);
+  assert.deepEqual(moneyExprItems(""), []);
+});
+
+test("diễn giải lỗi Gemini hết lượt / quá tải", async () => {
+  const { describeGeminiError } = await import("../src/lib/ocr");
+  const perDay = { error: { code: 429, message: "You exceeded your current quota", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier", quotaValue: "20" }] }, { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "35s" }] } };
+  assert.deepEqual(describeGeminiError(429, perDay, "gemini-2.5-flash"), { text: "gemini-2.5-flash: hết lượt miễn phí trong ngày (20 lượt/ngày)", retryable: true });
+  const perMin = { error: { details: [{ violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier" }] }, { retryDelay: "12s" }] } };
+  assert.match(describeGeminiError(429, perMin, "m").text, /1 phút, thử lại sau 12s/);
+  assert.match(describeGeminiError(503, {}, "m").text, /quá tải/);
+  assert.equal(describeGeminiError(400, { error: { message: "API key not valid" } }, "m").retryable, false);
+});

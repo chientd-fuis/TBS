@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { Expense, Store } from "@/lib/models";
-import { ALLOCATION_LABEL, CATEGORY_LABEL, EXPENSE_CATEGORIES } from "@/lib/finance";
+import { ALLOCATION_LABEL, CATEGORY_LABEL, EXPENSE_CATEGORIES, isCountedExpense } from "@/lib/finance";
 import { geminiConfigured } from "@/lib/ocr";
 import { financeChatId } from "@/lib/finance-report";
 import { localDate, localMonth, viDate } from "@/lib/time";
@@ -31,7 +31,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   else if (sp.store) q.storeId = sp.store;
   if (sp.cat) q.category = sp.cat;
   const list = await Expense.find(q).sort({ date: -1, createdAt: -1 }).lean();
-  const counted = list.filter((e) => e.paidFrom !== "CASHBOX");
+  const counted = list.filter(isCountedExpense);
   const total = counted.reduce((s, e) => s + e.amount, 0);
   const byCat = Object.entries(
     counted.reduce<Record<string, number>>((m, e) => ((m[e.category] = (m[e.category] ?? 0) + e.amount), m), {}),
@@ -44,6 +44,8 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     category: "NGUYEN_LIEU",
     vendor: "",
     items: "",
+    transferNote: "",
+    kind: "BILL",
     note: "",
     scope: "STORE",
     storeId: storeOpts.length === 1 ? storeOpts[0].id : "",
@@ -59,6 +61,8 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
         category: edit.category,
         vendor: edit.vendor ?? "",
         items: edit.items ?? "",
+        transferNote: edit.transferNote ?? "",
+        kind: edit.kind === "TRANSFER" ? "TRANSFER" : "BILL",
         note: edit.note ?? "",
         scope: edit.scope === "SHARED" ? "SHARED" : "STORE",
         storeId: edit.storeId ? String(edit.storeId) : "",
@@ -73,7 +77,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
       <div className="space-y-3">
         {!chat && <Alert tone="orange">Chưa có <b>chat ID nhóm Quản lý doanh thu</b> – vào tab Cài đặt (chủ) hoặc đặt env TELEGRAM_FINANCE_CHAT_ID.</Alert>}
-        <Card title={edit ? "Sửa chi phí" : "Thêm chi phí"} actions={edit ? <Link href={`/admin/finance/expenses?month=${month}`} className="text-sm text-accent underline">Huỷ sửa</Link> : null}>
+        <Card title={edit ? "Sửa bill / chuyển khoản" : "Thêm bill / chuyển khoản"} actions={edit ? <Link href={`/admin/finance/expenses?month=${month}`} className="text-sm text-accent underline">Huỷ sửa</Link> : null}>
           <ExpenseForm key={edit ? String(edit._id) : "new"} stores={storeOpts} today={today} initial={initial} ocrEnabled={geminiConfigured()} autoShoot={!edit && sp.shoot === "1"} />
         </Card>
       </div>
@@ -96,7 +100,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             </AutoFilterForm>
           </div>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <p className="text-sm text-ink/70">Tổng chi (không gồm tiền két): <b className="text-lg text-accent">{vnd(total)} đ</b></p>
+            <p className="text-sm text-ink/70">Tổng chi được tính (không gồm tiền két, lương NV): <b className="text-lg text-accent">{vnd(total)} đ</b></p>
             <p className="text-xs text-ink/60">{list.length} khoản</p>
           </div>
           {byCat.length > 0 && (
@@ -120,13 +124,13 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
               {list.map((e) => {
                 const tg = TG[(e.telegram?.status ?? "PENDING") as keyof typeof TG];
                 return (
-                  <li key={String(e._id)} className={`flex flex-wrap items-start gap-x-3 gap-y-1 py-2.5 text-sm ${e.paidFrom === "CASHBOX" ? "opacity-60" : ""}`}>
+                  <li key={String(e._id)} className={`flex flex-wrap items-start gap-x-3 gap-y-1 py-2.5 text-sm ${isCountedExpense(e) ? "" : "opacity-60"}`}>
                     <div className="w-20 shrink-0 text-xs text-ink/60">{viDate(e.date).slice(0, 5)}</div>
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">
                         {vnd(e.amount)} đ <span className="font-normal text-ink/60">· {CATEGORY_LABEL[e.category] ?? e.category}</span>
                       </p>
-                      <p className="truncate text-xs text-ink/70">{[e.vendor, e.items, e.note].filter(Boolean).join(" · ") || "—"}</p>
+                      <p className="truncate text-xs text-ink/70">{[e.items, e.vendor, e.transferNote && `CK: ${e.transferNote}`, e.note].filter(Boolean).join(" · ") || "—"}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {e.scope === "SHARED" ? (
                           <Badge tone="blue">Chung · {(ALLOCATION_LABEL[e.allocation ?? "REVENUE"] ?? "").toLowerCase()}</Badge>
@@ -134,6 +138,8 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                           <Badge tone="yellow">{storeName.get(String(e.storeId)) ?? "?"}</Badge>
                         )}
                         {e.paidFrom === "CASHBOX" && <Badge tone="gray">Tiền két – không cộng</Badge>}
+                        {e.category === "LUONG" && <Badge tone="orange">Lương – không cộng</Badge>}
+                        {e.kind === "TRANSFER" && <Badge tone="gray">Chuyển khoản</Badge>}
                         <Badge tone={tg[1]}>TG: {tg[0]}</Badge>
                       </div>
                     </div>

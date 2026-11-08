@@ -87,11 +87,15 @@ Nhân viên bấm **Chụp ảnh chốt ca** → ảnh gửi Gemini → điền 
 2. Thêm env `GEMINI_API_KEY` (Vercel + `.env.local`). Tuỳ chọn `GEMINI_MODEL` (mặc định `gemini-2.5-flash`; rẻ hơn: `gemini-2.5-flash-lite`).
 3. Gói miễn phí giới hạn lượt/ngày và Google được dùng dữ liệu để cải thiện sản phẩm – nên bật billing (gói trả phí, vài trăm đồng/ảnh) để không bị dùng dữ liệu và không hết lượt.
 
+Model chính hết lượt / quá tải → app tự thử model dự phòng (`GEMINI_FALLBACK_MODELS`, mặc định `gemini-2.5-flash-lite,gemini-3-flash-preview`), lỗi báo rõ "hết lượt trong ngày" hay "quá tải". Kiểm tra key và hạn mức từng model: `npm run check-gemini`.
+
 Không có key → vẫn chụp ảnh gửi kèm, số liệu nhập tay.
 
 ### 5b3. Tài chính: chi phí, lãi lỗ, báo cáo (Admin → Tài chính)
 
-- **Chi phí**: chụp / chọn ảnh bill → Gemini đọc số tiền, ngày, nơi bán, danh mục → kiểm tra → **Lưu & gửi nhóm**. Ảnh chỉ gửi vào nhóm Telegram **Quản lý doanh thu**, không lưu. Chi phí tính cho 1 cơ sở hoặc **chung** (chia theo tỷ lệ doanh thu tháng / chia đều / % tự đặt). Bill trả bằng **tiền két** chỉ lưu chứng từ, không cộng lại (đã nằm trong "Thu chi" chốt ca). Trùng ngày + số tiền → hỏi lại.
+- **Chi phí trong ca**: lấy từ ô "Thu chi" khi chốt ca (VD "30k sữa chua + 20k ship"), tách từng khoản, xem theo ca và khoản chi nhiều nhất. Tiền két → trừ thẳng vào lãi lỗ, không nhập bill lại.
+- **Bill / chuyển khoản** (admin): bill mua hàng hoặc ảnh chụp màn hình CK → Gemini đọc số tiền, ngày, người nhận, nội dung CK, chi cho việc gì. Người nhận trùng tên nhân viên hoặc nội dung có "lương / tạm ứng" → tự chọn danh mục **Lương NV**: chỉ lưu chứng từ, **không cộng vào chi phí** (lương đã tính từ giờ công).
+- **Chi phí (cách nhập)**: chụp / chọn ảnh bill → Gemini đọc số tiền, ngày, nơi bán, danh mục → kiểm tra → **Lưu & gửi nhóm**. Ảnh chỉ gửi vào nhóm Telegram **Quản lý doanh thu**, không lưu. Chi phí tính cho 1 cơ sở hoặc **chung** (chia theo tỷ lệ doanh thu tháng / chia đều / % tự đặt). Bill trả bằng **tiền két** chỉ lưu chứng từ, không cộng lại (đã nằm trong "Thu chi" chốt ca). Trùng ngày + số tiền → hỏi lại.
 - **Chi phí cố định**: mặt bằng, điện nước, internet… theo tháng, tự chia đều theo ngày.
 - **Lãi lỗ** (chỉ chủ): DT − phí sàn Grab/Shopee (% cài theo cơ sở) − thu chi két − chi phí bill − lương ước tính (giờ công × lương giờ ± thưởng/phạt + phụ cấp, tính cho cơ sở nơi làm) − cố định/ngày. Xem theo cơ sở, theo ngày, theo loại chi phí; so với cùng kỳ tháng trước.
 - **Báo cáo Telegram** (chủ bật/tắt ở tab Cài đặt): ngày (khi cơ sở cuối cùng chốt ca Tối, hoặc ~1h sáng hôm sau), tuần (~1h sáng thứ 2), tháng (~1h sáng ngày 1). Có cảnh báo âm két, chưa chốt ca, doanh thu lệch > 30% so với TB cùng thứ, đi muộn / về sớm / bỏ ca, và nhận xét AI (Gemini).

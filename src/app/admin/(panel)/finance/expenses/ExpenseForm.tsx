@@ -18,6 +18,8 @@ export type ExpenseInitial = {
   category: string;
   vendor: string;
   items: string;
+  transferNote: string;
+  kind: "BILL" | "TRANSFER";
   note: string;
   scope: "STORE" | "SHARED";
   storeId: string;
@@ -72,7 +74,7 @@ export default function ExpenseForm({
   const set = <K extends keyof ExpenseInitial>(k: K, v: ExpenseInitial[K]) => setF((o) => ({ ...o, [k]: v }));
   const [photo, setPhoto] = useState<string | null>(null);
   const [shooting, setShooting] = useState(autoShoot);
-  const [ocr, setOcr] = useState<{ state: "reading" } | { state: "done"; amount?: number; date?: string } | { state: "error"; text: string } | null>(null);
+  const [ocr, setOcr] = useState<{ state: "reading" } | { state: "done"; amount?: number; date?: string; salaryHint?: string } | { state: "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "green" | "orange" | "red"; text: string } | null>(null);
   const [dup, setDup] = useState<string | null>(null);
@@ -96,9 +98,11 @@ export default function ExpenseForm({
       ...(j.date ? { date: j.date } : {}),
       ...(j.vendor ? { vendor: j.vendor } : {}),
       ...(j.items ? { items: j.items } : {}),
+      ...(j.transferNote ? { transferNote: j.transferNote } : {}),
+      ...(j.kind ? { kind: j.kind } : {}),
       ...(j.category ? { category: j.category } : {}),
     }));
-    setOcr({ state: "done", amount: j.amount, date: j.date });
+    setOcr({ state: "done", amount: j.amount, date: j.date, salaryHint: j.salaryHint });
   };
 
   const onFile = async (file?: File | null) => {
@@ -135,6 +139,8 @@ export default function ExpenseForm({
         category: f.category,
         vendor: f.vendor,
         items: f.items,
+        transferNote: f.transferNote,
+        kind: f.kind,
         note: f.note,
         scope: f.scope,
         storeId: f.scope === "STORE" ? f.storeId : undefined,
@@ -170,14 +176,14 @@ export default function ExpenseForm({
       {!photo ? (
         <div className="grid grid-cols-2 gap-2">
           <Button type="button" variant="secondary" className="py-3" onClick={() => setShooting(true)} disabled={busy}>
-            <Camera size={18} /> Chụp bill
+            <Camera size={18} /> Chụp bill / CK
           </Button>
           <Button type="button" variant="outline" className="py-3" onClick={() => fileRef.current?.click()} disabled={busy}>
             <ImageUp size={18} /> Chọn ảnh
           </Button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0]).finally(() => (e.target.value = ""))} />
           <p className="col-span-2 text-xs text-ink/60">
-            {ocrEnabled ? "AI đọc bill → điền sẵn số tiền, ngày, nơi bán, danh mục để bạn kiểm tra." : "Chưa bật AI đọc bill (GEMINI_API_KEY) – ảnh chỉ gửi kèm vào nhóm, số liệu nhập tay."}{" "}
+            {ocrEnabled ? "Bill mua hàng hoặc ảnh chụp màn hình chuyển khoản – AI đọc số tiền, ngày, người nhận, nội dung CK và đoán chi cho việc gì." : "Chưa bật AI đọc bill (GEMINI_API_KEY) – ảnh chỉ gửi kèm vào nhóm, số liệu nhập tay."}{" "}
             Ảnh gửi vào nhóm Telegram Quản lý doanh thu, không lưu trong app. Không có bill thì nhập tay bên dưới.
           </p>
         </div>
@@ -205,6 +211,15 @@ export default function ExpenseForm({
             </li>
           ))}
         </ul>
+      )}
+
+      {f.category === "LUONG" && (
+        <div className="rounded-xl bg-[#fff4e5] px-3 py-2 text-xs text-warn">
+          {ocr?.state === "done" && ocr.salaryHint && <p className="font-semibold">Có vẻ là trả lương: {ocr.salaryHint}.</p>}
+          <p>
+            Danh mục <b>Lương NV</b>: chỉ lưu chứng từ và báo nhóm, <b>không cộng vào chi phí</b> vì lương đã tính từ giờ công / bảng lương. Nếu không phải lương → đổi danh mục.
+          </p>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -264,11 +279,16 @@ export default function ExpenseForm({
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        <Field label="Nơi bán">
+        <div className="col-span-2">
+          <Field label="Chi cho việc gì">
+            <Input value={f.items} maxLength={300} onChange={(e) => set("items", e.target.value)} placeholder="VD: Nhập sữa đặc x5, tiền điện T10…" />
+          </Field>
+        </div>
+        <Field label={f.kind === "TRANSFER" ? "Người nhận" : "Nơi bán / người nhận"}>
           <Input value={f.vendor} maxLength={120} onChange={(e) => set("vendor", e.target.value)} placeholder="VD: Bách hoá XANH" />
         </Field>
-        <Field label="Nội dung">
-          <Input value={f.items} maxLength={300} onChange={(e) => set("items", e.target.value)} placeholder="VD: Sữa đặc x5" />
+        <Field label="Nội dung CK">
+          <Input value={f.transferNote} maxLength={200} onChange={(e) => set("transferNote", e.target.value)} placeholder="Nếu chuyển khoản" />
         </Field>
         <div className="col-span-2">
           <Field label="Ghi chú">

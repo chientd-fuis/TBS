@@ -389,7 +389,9 @@ const ExpenseSchema = new Schema(
     amount: { type: Number, required: true },
     category: { type: String, required: true },
     vendor: String, // nơi bán
-    items: String, // nội dung / các món
+    items: String, // chi cho cái gì / các món
+    transferNote: String, // nội dung chuyển khoản (nếu là ảnh CK)
+    kind: { type: String, enum: ["BILL", "TRANSFER"], default: "BILL" },
     note: String,
     // STORE = của 1 cơ sở · SHARED = chung, chia cho các cơ sở theo allocation
     scope: { type: String, enum: ["STORE", "SHARED"], default: "STORE" },

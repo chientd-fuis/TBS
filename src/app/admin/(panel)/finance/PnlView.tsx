@@ -59,7 +59,7 @@ export default function PnlView({
   const costParts: [string, number][] = [
     ["Lương", t.labor],
     ["Phí sàn", t.platformFee],
-    ["Thu chi trong ca", t.cashbox],
+    ["Chi phí trong ca (két)", t.cashbox],
     ...Object.entries(pnl.byCategory).map(([k, v]) => [CATEGORY_LABEL[k] ?? k, v] as [string, number]),
   ];
   const parts = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);

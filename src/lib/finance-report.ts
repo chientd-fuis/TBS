@@ -168,7 +168,7 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const costParts: [string, number][] = [
     ["Lương", t.labor],
     ["Phí sàn", t.platformFee],
-    ["Thu chi két", t.cashbox],
+    ["Chi trong ca (két)", t.cashbox],
     ...Object.entries(pnl.byCategory).map(([k, v]) => [CATEGORY_LABEL[k] ?? k, v] as [string, number]),
   ];
   const top = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);

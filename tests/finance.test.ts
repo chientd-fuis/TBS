@@ -73,3 +73,17 @@ test("caption chi phí gửi nhóm Quản lý doanh thu", () => {
   assert.match(c, /Nguồn tiền: Chủ trả/);
   assert.match(formatExpenseCaption({ date: "2026-11-05", weekday: "Thứ 5", amount: 1, category: "KHAC", storeName: "TBS Văn Phú", by: "x", deleted: true }), /^🗑 ĐÃ XOÁ CHI PHÍ[\s\S]*Cơ sở: Văn Phú/);
 });
+
+test("nhận diện chuyển lương nhân viên, lương không cộng vào chi phí", async () => {
+  const { detectSalary } = await import("../src/lib/finance");
+  const staff = ["Nguyễn Thị Lan", "Trần Văn Nam"];
+  assert.match(detectSalary({ vendor: "NGUYEN THI LAN", transferNote: "chuyen tien" }, staff)!, /Nguyễn Thị Lan/);
+  assert.match(detectSalary({ vendor: "Le Hoa", transferNote: "TBS ung luong T11" }, staff)!, /ung luong/);
+  assert.equal(detectSalary({ vendor: "CONG TY SUA VINAMILK", transferNote: "thanh toan don 123" }, staff), null);
+  assert.equal(detectSalary({ vendor: "Lan", transferNote: "" }, staff), null); // 1 chữ → không đủ để khớp
+  const r = computePnl({
+    storeIds: ["a"], dates: ["2026-11-01"], revenue: [], fixed: [], labor: [], fees: {},
+    expenses: [{ date: "2026-11-01", amount: 5_000_000, scope: "STORE", storeId: "a", category: "LUONG" }],
+  });
+  assert.equal(r.total.cost, 0);
+});

@@ -11,7 +11,12 @@ export const EXPENSE_CATEGORIES = [
   { key: "PHAN_MEM", label: "Phần mềm, internet" },
   { key: "MARKETING", label: "Marketing" },
   { key: "KHAC", label: "Khác" },
+  { key: "LUONG", label: "Lương / thưởng / tạm ứng NV (không tính)" },
 ] as const;
+/** Danh mục chỉ lưu chứng từ, KHÔNG cộng vào chi phí (lương đã tính từ bảng lương / giờ công). */
+export const EXCLUDED_CATEGORIES: readonly string[] = ["LUONG"];
+export const isCountedExpense = (e: { category?: string | null; paidFrom?: string | null }) =>
+  e.paidFrom !== "CASHBOX" && !EXCLUDED_CATEGORIES.includes(e.category ?? "");
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]["key"];
 export const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c.key, c.label]));
 export const isCategory = (v: unknown): v is ExpenseCategory => typeof v === "string" && v in CATEGORY_LABEL;
@@ -79,9 +84,9 @@ export const emptyLine = (): PnlLine => ({ revenue: 0, platformFee: 0, cashbox: 
 const COST_KEYS = ["platformFee", "cashbox", "direct", "shared", "labor", "fixed"] as const;
 export const COST_LABEL: Record<(typeof COST_KEYS)[number], string> = {
   platformFee: "Phí sàn Grab/Shopee",
-  cashbox: "Thu chi trong ca",
-  direct: "Chi phí riêng (bill)",
-  shared: "Chi phí chung (phân bổ)",
+  cashbox: "Chi phí trong ca (két)",
+  direct: "Bill / CK – riêng cơ sở",
+  shared: "Bill / CK – chung (phân bổ)",
   labor: "Lương (ước tính)",
   fixed: "Chi phí cố định",
 };
@@ -161,7 +166,8 @@ export function computePnl(inp: PnlInput): PnlResult {
   const shareRev = inp.shareRevenue ?? periodRev;
 
   for (const e of inp.expenses) {
-    if (!inDate.has(e.date) || e.paidFrom === "CASHBOX") continue; // tiền két đã tính trong "Thu chi" chốt ca
+    // tiền két đã tính trong "Thu chi" chốt ca; lương NV đã tính từ giờ công → không cộng lại
+    if (!inDate.has(e.date) || !isCountedExpense(e)) continue;
     if (e.scope === "STORE") {
       if (!e.storeId || !inStore.has(String(e.storeId))) continue;
       addLine(cell(e.date, String(e.storeId)), { direct: e.amount });
@@ -207,7 +213,17 @@ export function computePnl(inp: PnlInput): PnlResult {
 }
 
 /* ---------- Đọc bill chi phí (Gemini) ---------- */
-export type BillOcr = { amount?: number; date?: string; vendor?: string; items?: string; category?: ExpenseCategory };
+export type BillOcr = {
+  kind?: "BILL" | "TRANSFER";
+  amount?: number;
+  date?: string;
+  vendor?: string; // nơi bán / người nhận tiền
+  items?: string; // chi cho cái gì
+  transferNote?: string; // nội dung chuyển khoản (nguyên văn)
+  category?: ExpenseCategory;
+  /** gợi ý: đây là trả lương / tạm ứng cho nhân viên */
+  salaryHint?: string;
+};
 
 export function normalizeBill(raw: unknown, refDate?: string): BillOcr {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -218,7 +234,9 @@ export function normalizeBill(raw: unknown, refDate?: string): BillOcr {
   if (d != null && String(d).trim()) out.date = parseOcrDate(String(d), refDate) ?? undefined;
   const txt = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : undefined);
   out.vendor = txt(o.vendor ?? o.store ?? o.noi_ban, 120);
-  out.items = txt(o.items ?? o.noi_dung ?? o.description, 300);
+  out.items = txt(o.items ?? o.purpose ?? o.noi_dung ?? o.description, 300);
+  out.transferNote = txt(o.transfer_note ?? o.transferNote ?? o.noi_dung_ck, 200);
+  if (o.kind === "TRANSFER" || o.kind === "BILL") out.kind = o.kind;
   if (isCategory(o.category)) out.category = o.category;
   for (const k of Object.keys(out) as (keyof BillOcr)[]) if (out[k] === undefined) delete out[k];
   return out;
@@ -244,6 +262,7 @@ export type ExpenseCaption = {
   allocation?: string | null; // scope SHARED
   vendor?: string | null;
   items?: string | null;
+  transferNote?: string | null;
   note?: string | null;
   paidFrom?: string | null;
   by: string;
@@ -263,7 +282,40 @@ export function formatExpenseCaption(e: ExpenseCaption) {
   if (e.vendor) lines.push(`🛒 Nơi bán: ${e.vendor}`);
   if (e.items) lines.push(`📝 Nội dung: ${e.items}`);
   lines.push(`💳 Nguồn tiền: ${e.paidFrom === "CASHBOX" ? "Tiền két (đã trừ trong thu chi ca)" : "Chủ trả / chuyển khoản"}`);
+  if (e.transferNote) lines.push(`🏦 Nội dung CK: ${e.transferNote}`);
   if (e.note) lines.push(`🗒 Ghi chú: ${e.note}`);
+  if (EXCLUDED_CATEGORIES.includes(e.category)) lines.push("ℹ️ Lương NV – chỉ lưu chứng từ, không cộng vào chi phí (đã có trong bảng lương)");
   lines.push(`👤 Người nhập: ${e.by}`);
   return lines.join("\n");
+}
+
+/* ---------- Nhận diện chuyển lương cho nhân viên ---------- */
+export const foldVi = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const SALARY_WORDS = /\b(LUONG|TAM UNG|UNG LUONG|THUONG NV|THUONG NHAN VIEN|PHU CAP|SALARY)\b/;
+
+/**
+ * Bill / CK có phải trả lương nhân viên không: người nhận trùng họ tên NV (khớp đủ các chữ), hoặc nội dung có "lương / tạm ứng…".
+ * Trả về lý do (để hiện cảnh báo) hoặc null.
+ */
+export function detectSalary(b: { vendor?: string | null; transferNote?: string | null; items?: string | null }, staffNames: string[]): string | null {
+  const who = foldVi(b.vendor ?? "");
+  if (who.split(" ").length >= 2)
+    for (const n of staffNames) {
+      const f = foldVi(n);
+      if (f.split(" ").length >= 2 && (who === f || who.endsWith(" " + f) || f.endsWith(" " + who) || who.includes(f)))
+        return `Người nhận "${b.vendor}" trùng tên nhân viên ${n}`;
+    }
+  const text = foldVi(`${b.transferNote ?? ""} ${b.items ?? ""}`);
+  const m = SALARY_WORDS.exec(text);
+  if (m) return `Nội dung có "${m[1].toLowerCase()}"`;
+  return null;
 }

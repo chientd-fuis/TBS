@@ -3,7 +3,9 @@ import { z } from "zod";
 import { getAdmin } from "@/lib/admin-session";
 import { readBillPhoto } from "@/lib/ocr";
 import { geminiConfigured } from "@/lib/ocr";
-import { EXPENSE_CATEGORIES } from "@/lib/finance";
+import { detectSalary, EXPENSE_CATEGORIES } from "@/lib/finance";
+import { connectDB } from "@/lib/db";
+import { User } from "@/lib/models";
 import { HttpError, jsonError } from "@/lib/api";
 import { localDate } from "@/lib/time";
 
@@ -20,6 +22,14 @@ export async function POST(req: Request) {
     const out = await readBillPhoto(p.data.photo, localDate(new Date()), EXPENSE_CATEGORIES.map((c) => c.key)).catch((e: Error) => {
       throw new HttpError(502, e.message, { code: "OCR_FAILED" });
     });
+    // người nhận trùng tên NV / nội dung "lương, tạm ứng" → gợi ý danh mục Lương (không cộng vào chi phí)
+    await connectDB();
+    const staff = (await User.find({ status: { $in: ["ACTIVE", "INACTIVE"] } }).select("name").lean()).map((u) => u.name ?? "").filter(Boolean);
+    const salaryHint = detectSalary(out, staff);
+    if (salaryHint) {
+      out.salaryHint = salaryHint;
+      out.category = "LUONG";
+    } else if (out.category === "LUONG") out.salaryHint = "AI nhận định đây là trả lương / tạm ứng nhân viên";
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
     return jsonError(e);
