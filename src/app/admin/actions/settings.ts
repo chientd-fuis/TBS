@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { Settings } from "@/lib/models";
+import { connectDB } from "@/lib/db";
 import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
@@ -50,6 +51,53 @@ export async function disconnectDrive(_: FormState): Promise<FormState> {
 
 /* ===== Dọn dữ liệu cũ (chỉ Chủ) ===== */
 export type CleanupResult = { ok?: boolean; error?: string; counts?: import("@/lib/cleanup").CleanupCounts };
+
+async function ownerOnly() {
+  const admin = await assertAdmin();
+  if (admin.kind !== "OWNER") throw new Error("Chỉ Chủ được dọn dữ liệu");
+  return admin;
+}
+
+/** Đếm mọi loại dữ liệu có thể dọn trước tháng đã chọn (hiện số cạnh từng ô). */
+export async function previewAllCleanup(beforeMonth: string): Promise<CleanupResult> {
+  try {
+    await ownerOnly();
+    const { previewCleanup, latestCutoff } = await import("@/lib/cleanup");
+    if (!/^\d{4}-\d{2}$/.test(beforeMonth) || beforeMonth > latestCutoff()) return { error: "Tháng không hợp lệ" };
+    return { ok: true, counts: await previewCleanup({ beforeMonth }, true) };
+  } catch (e) {
+    return { error: (e as Error).message || "Lỗi hệ thống" };
+  }
+}
+
+/** Dung lượng database (so với 512 MB bản miễn phí) + bảng nặng nhất. */
+export async function loadStorageStats(): Promise<{ error?: string; stats?: import("@/lib/cleanup").StorageStats }> {
+  try {
+    await ownerOnly();
+    const { getStorageStats } = await import("@/lib/cleanup");
+    return { stats: await getStorageStats() };
+  } catch (e) {
+    return { error: (e as Error).message || "Không đọc được dung lượng" };
+  }
+}
+
+/** Bật / tắt tự dọn hằng tháng. */
+export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const admin = await ownerOnly();
+    await connectDB();
+    await Settings.updateOne({ key: "main" }, { $set: { autoCleanup: on } }, { upsert: true });
+    await audit(adminActor(admin), "settings.autoCleanup", { type: "Settings" }, null, { autoCleanup: on });
+    if (on) {
+      const { ensureTtlIndexes } = await import("@/lib/cleanup");
+      await ensureTtlIndexes();
+    }
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message || "Lỗi hệ thống" };
+  }
+}
 
 export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, apply: boolean): Promise<CleanupResult> {
   try {

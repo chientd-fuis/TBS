@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CalendarRange,
   ClipboardList,
+  History,
   FileSpreadsheet,
   Gift,
   Inbox,
@@ -35,14 +36,15 @@ const items = [
   { href: "/admin/devices", label: "Thiết bị", icon: Smartphone, badge: "devices" },
   { href: "/admin/export", label: "Xuất Excel", icon: FileSpreadsheet },
   { href: "/admin/stores", label: "Cơ sở", icon: Store },
+  { href: "/admin/activity", label: "Hoạt động admin", icon: History, owner: true },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings },
 ] as const;
 
-export default function AdminNav({ counts }: { counts: Record<string, number> }) {
+export default function AdminNav({ counts, owner = false }: { counts: Record<string, number>; owner?: boolean }) {
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3">
-      {items.map(({ href, label, icon: Icon, ...rest }) => {
+      {items.filter((it) => owner || !("owner" in it)).map(({ href, label, icon: Icon, ...rest }) => {
         const active = href === "/admin" ? path === "/admin" : path.startsWith(href);
         const n = "badge" in rest ? counts[rest.badge] : 0;
         return (

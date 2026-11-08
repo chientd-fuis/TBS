@@ -1,6 +1,6 @@
 import { AuditLog } from "./models";
 
-export type Actor = { kind: "OWNER" | "ADMIN" | "USER" | "SYSTEM"; name: string };
+export type Actor = { kind: "OWNER" | "ADMIN" | "USER" | "SYSTEM"; name: string; sid?: string };
 
 export async function audit(
   actor: Actor,
@@ -21,5 +21,10 @@ export async function audit(
     });
   } catch (e) {
     console.error("audit log failed", e);
+  }
+  // admin (không phải Chủ) → thêm vào lịch sử hoạt động 7 ngày
+  if (actor.kind === "ADMIN") {
+    const { recordActivity } = await import("./activity-server");
+    await recordActivity(actor, action, target, before, after);
   }
 }

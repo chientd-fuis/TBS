@@ -8,6 +8,8 @@ import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
 import { BellRing, ChevronRight, Receipt } from "lucide-react";
+import ActivityFeed from "./activity/ActivityFeed";
+import { activityDays, loadActivities, loadSessions } from "./activity/data";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +169,44 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </Card>
         ))}
       </div>
+      {admin.kind === "OWNER" && <AdminActivityCard />}
     </>
+  );
+}
+
+/** Cuối trang tổng quan (Chủ): hoạt động của admin hôm nay + hôm qua. */
+async function AdminActivityCard() {
+  const days = activityDays();
+  const [rows, sessions] = await Promise.all([loadActivities({ days: days.slice(0, 2), limit: 300 }), loadSessions()]);
+  const online = sessions.filter((s) => s.online);
+  const SHOW = 40;
+  return (
+    <Card
+      title={`Hoạt động admin – hôm nay & hôm qua (${rows.length})`}
+      actions={
+        <Link className="flex items-center text-sm text-accent underline" href="/admin/activity">
+          Xem 7 ngày / quản lý <ChevronRight size={16} />
+        </Link>
+      }
+    >
+      <p className="mb-2 text-xs text-ink/60">
+        {online.length ? (
+          <>
+            🟢 Đang online: <b>{online.map((s) => s.name).join(", ")}</b>
+          </>
+        ) : (
+          "Không có admin nào đang online"
+        )}
+        {sessions.length > online.length && ` · ${sessions.length - online.length} phiên khác còn đăng nhập`}
+      </p>
+      <div className="max-h-[32rem] overflow-y-auto">
+        <ActivityFeed rows={rows.slice(0, SHOW)} today={days[0]} empty="Hôm nay và hôm qua chưa có admin nào thao tác" />
+      </div>
+      {rows.length > SHOW && (
+        <Link className="mt-2 block text-center text-sm text-accent underline" href="/admin/activity">
+          Xem thêm {rows.length - SHOW} hoạt động
+        </Link>
+      )}
+    </Card>
   );
 }

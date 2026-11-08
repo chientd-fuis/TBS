@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { Attendance, Store, User } from "@/lib/models";
+import { Attendance, ShiftTemplate, Store, User } from "@/lib/models";
+import { geminiConfigured } from "@/lib/ocr";
 import { localDate, localMonth, localTime, viDate } from "@/lib/time";
 import { hoursVi } from "@/lib/format";
 import { isMonthLocked, payStoreFilter } from "@/lib/attendance";
@@ -15,8 +16,11 @@ import MonthShiftBoard from "./MonthShiftBoard";
 import { loadMonthBoard } from "./month-board-data";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import TimeInput from "@/components/TimeInput";
+import BulkAttendance from "./BulkAttendance";
 
 export const dynamic = "force-dynamic";
+// chấm hộ hàng loạt: mỗi đợt ghi tới 40 lượt
+export const maxDuration = 60;
 
 /** Bảng chấm công (spec 5) + chấm hộ (3.5) */
 export default async function AttendanceAdmin({ searchParams }: { searchParams: Promise<{ store?: string; user?: string; month?: string; status?: string }> }) {
@@ -45,6 +49,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
       )
     : [];
   // ===== Bảng chấm công theo ca cả tháng (giống bảng xếp ca – chế độ xem) =====
+  const templates = store ? await ShiftTemplate.find({ storeId: store._id, active: { $ne: false } }).sort({ startTime: 1 }).lean() : [];
   const board = store ? await loadMonthBoard(String(store._id), month, tz, stores) : null;
   const visitorNames = new Map(
     (await User.find({ _id: { $in: visitors.map((v) => v.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]),
@@ -152,27 +157,36 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
 
       {!locked && (
         <Card title="Chấm công hộ">
-          <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">
-            <p className="text-xs text-ink/70">Dùng khi nhân viên không chấm được (hỏng điện thoại, hết pin, lỗi camera/GPS…). Không cần nhân viên xác nhận. Bản ghi có nhãn &quot;Chấm hộ&quot;.</p>
-            <div className="grid gap-3 sm:grid-cols-5">
-              <Field label="Nhân viên">
-                <Select name="userId" defaultValue={sp.user || ""} required>
-                  <option value="">— Chọn —</option>
-                  {staff.filter((u) => u.status === "ACTIVE").map((u) => <option key={String(u._id)} value={String(u._id)}>{u.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Ngày"><Input type="date" name="date" defaultValue={localDate(new Date(), tz)} required /></Field>
-              <Field label="Giờ vào"><TimeInput seconds name="inTime" required /></Field>
-              <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><TimeInput seconds name="outTime" /></Field>
-              <Field label="Làm tại" hint="Đi hỗ trợ thì chọn cơ sở đó">
-                <Select name="workStoreId" defaultValue="">
-                  <option value="">Tự nhận (theo ca / cơ sở gốc)</option>
-                  {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name}</option>)}
-                </Select>
-              </Field>
-            </div>
-            <Field label="Lý do (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
-          </ActionForm>
+          <BulkAttendance
+            storeId={String(store?._id)}
+            month={month}
+            ocrEnabled={geminiConfigured()}
+            staff={staff.filter((u) => u.status === "ACTIVE").map((u) => ({ id: String(u._id), name: u.name }))}
+            templates={templates.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }))}
+            single={
+                <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">
+                  <p className="text-xs text-ink/70">Dùng khi nhân viên không chấm được (hỏng điện thoại, hết pin, lỗi camera/GPS…). Không cần nhân viên xác nhận. Bản ghi có nhãn &quot;Chấm hộ&quot;.</p>
+                  <div className="grid gap-3 sm:grid-cols-5">
+                    <Field label="Nhân viên">
+                      <Select name="userId" defaultValue={sp.user || ""} required>
+                        <option value="">— Chọn —</option>
+                        {staff.filter((u) => u.status === "ACTIVE").map((u) => <option key={String(u._id)} value={String(u._id)}>{u.name}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="Ngày"><Input type="date" name="date" defaultValue={localDate(new Date(), tz)} required /></Field>
+                    <Field label="Giờ vào"><TimeInput seconds name="inTime" required /></Field>
+                    <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><TimeInput seconds name="outTime" /></Field>
+                    <Field label="Làm tại" hint="Đi hỗ trợ thì chọn cơ sở đó">
+                      <Select name="workStoreId" defaultValue="">
+                        <option value="">Tự nhận (theo ca / cơ sở gốc)</option>
+                        {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name}</option>)}
+                      </Select>
+                    </Field>
+                  </div>
+                  <Field label="Lý do (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
+                </ActionForm>
+            }
+          />
         </Card>
       )}
     </>

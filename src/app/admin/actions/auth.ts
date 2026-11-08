@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
-import { AdminLoginLog, Settings } from "@/lib/models";
+import { AdminLoginLog, AdminLoginSession, Settings } from "@/lib/models";
+import { recordActivity } from "@/lib/activity-server";
 import { getSettings } from "@/lib/settings";
 import { clientInfo } from "@/lib/device";
 import { adminActor, clearAdminCookie, createAdminCookie } from "@/lib/admin-session";
@@ -30,11 +31,15 @@ export async function adminLogin(_: FormState, fd: FormData): Promise<FormState>
   const ok = await bcrypt.compare(password, s.adminPasswordHash);
   await AdminLoginLog.create({ kind: "PASSWORD", displayName, success: ok, ip, userAgent });
   if (!ok) return { error: `Mật khẩu không đúng (còn ${MAX_FAILS - fails - 1} lần thử)` };
-  await createAdminCookie(displayName, s.adminSessionVersion, s.adminSessionDays || 7);
+  const sid = await createAdminCookie(displayName, s.adminSessionVersion, s.adminSessionDays || 7, { ip, userAgent });
+  await recordActivity({ kind: "ADMIN", name: displayName, sid }, "admin.login", undefined, null, { ip });
   redirect("/admin");
 }
 
 export async function adminLogout() {
+  const { getAdmin } = await import("@/lib/admin-session");
+  const a = await getAdmin().catch(() => null);
+  if (a?.kind === "PASSWORD") await recordActivity(adminActor(a), "admin.logout");
   await clearAdminCookie();
   redirect("/admin/login");
 }
@@ -68,6 +73,8 @@ export async function changeAdminPassword(_: FormState, fd: FormData): Promise<F
     { $set: { adminPasswordHash: await bcrypt.hash(next, 10), adminPasswordChangedAt: new Date() }, $inc: { adminSessionVersion: 1 } },
   );
   await audit(adminActor(admin), "admin.password.change", { type: "Settings" }, null, { ip });
+  // mọi phiên cũ đã vô hiệu (tăng adminSessionVersion) → đánh dấu đã đăng xuất trong danh sách phiên
+  await AdminLoginSession.updateMany({ revokedAt: null }, { $set: { revokedAt: new Date(), revokedBy: "Đổi mật khẩu" } });
   // phiên hiện tại (nếu là admin mật khẩu) cũng cần đăng nhập lại
   if (admin.kind === "PASSWORD") {
     await clearAdminCookie();

@@ -8,7 +8,7 @@ import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/compo
 import { changeAdminPassword } from "../../actions/auth";
 import { disconnectDrive, saveConfig } from "../../actions/settings";
 import CleanupCard from "./CleanupCard";
-import { latestCutoff } from "@/lib/cleanup";
+import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = await getSettings();
   // tháng mốc để dọn: từ (tháng này − 2) lùi về 24 tháng
   const cleanupMonths: string[] = [];
-  for (let m = latestCutoff(), i = 0; i < 24; i++, m = prevMonth(m)) cleanupMonths.push(m);
+  for (let m = latestCutoff(), i = 0; i < 27; i++, m = prevMonth(m)) cleanupMonths.push(m); // gồm cả "xoá tháng này / tháng trước"
   const [logs, audits, pending] = isOwner
     ? await Promise.all([
         AdminLoginLog.find().sort({ createdAt: -1 }).limit(30).lean(),
@@ -105,7 +105,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Card>
         )}
       </div>
-      {isOwner && <CleanupCard months={cleanupMonths} />}
+      {isOwner && <CleanupCard months={cleanupMonths} safe={safeCutoff()} autoCleanup={!!s.autoCleanup} lastAuto={await lastAutoCleanup().catch(() => null)} />}
       {isOwner && (
         <Card title="Nhật ký thao tác (50 gần nhất)">
           <div className="max-h-96 overflow-auto">

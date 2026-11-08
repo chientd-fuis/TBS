@@ -10,6 +10,8 @@ import { deleteClosing, editClosingRevenue, resendClosing } from "../../actions/
 import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { addDays } from "@/lib/time";
+import { ocrConfigured } from "@/lib/ocr";
+import AddClosing from "./AddClosing";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,25 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   const list = await ShiftClosing.find(q).sort({ createdAt: -1 }).limit(100).lean();
   const users = new Map((await User.find({ _id: { $in: list.map((c) => c.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const storeMap = new Map(stores.map((s) => [String(s._id), s]));
+  // ===== nhập bù: ngày chưa chốt ca Tối (45 ngày tới hôm qua, tính từ ngày cơ sở bắt đầu chốt ca trên app) =====
+  const today = localDate(new Date());
+  const since = addDays(today, -45);
+  const recent = await ShiftClosing.find({ workDate: { $gte: since } }).select("storeId workDate shiftName").lean();
+  const existing: Record<string, string[]> = {};
+  for (const c of recent) (existing[`${c.storeId}|${c.workDate}`] ??= []).push(c.shiftName ?? "");
+  const firstDay = new Map(
+    (await ShiftClosing.aggregate<{ _id: unknown; d: string }>([{ $group: { _id: "$storeId", d: { $min: "$workDate" } } }])).map((x) => [String(x._id), x.d]),
+  );
+  const staffAll = await User.find({ status: "ACTIVE" }).select("name storeId").sort({ name: 1 }).lean();
+  const addStores = stores
+    .filter((s) => s.active !== false)
+    .map((s) => {
+      const id = String(s._id);
+      const start = firstDay.get(id);
+      const missing: string[] = [];
+      if (start) for (let d = addDays(today, -1); d >= since && d >= start; d = addDays(d, -1)) if (!existing[`${id}|${d}`]?.includes("Tối")) missing.push(d);
+      return { id, name: s.name, missing, staff: staffAll.filter((u) => String(u.storeId) === id).map((u) => ({ id: String(u._id), name: u.name })) };
+    });
   return (
     <>
       <PageTitle sub="Mới nhất ở trên. Số chốt ca là LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày). Doanh thu theo ngày xem ở Tài chính → Doanh thu theo ngày.">Lịch sử chốt ca</PageTitle>
@@ -42,6 +63,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       )}
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
+      <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured()} />
       <Card>
         <div className="mb-3 flex flex-wrap gap-2 text-sm">
           {[{ id: "", name: "Tất cả" }, ...stores.map((s) => ({ id: String(s._id), name: s.name.replace(/^TBS\s*/i, "") }))].map((s) => {
@@ -91,7 +113,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                   return (
                     <tr key={String(c._id)}>
                       <td className="whitespace-nowrap">{viDate(c.workDate)}<div className="text-xs">{localTime(created, tz)}</div></td>
-                      <td className="font-semibold">{c.employeeName || users.get(String(c.userId))}{c.employeePhone && <div className="text-xs font-normal text-ink/60">{c.employeePhone}</div>}</td>
+                      <td className="font-semibold">{c.employeeName || users.get(String(c.userId))}{c.employeePhone && <div className="text-xs font-normal text-ink/60">{c.employeePhone}</div>}{c.addedByAdmin && <div><Badge tone="blue">Nhập bù · {c.addedByAdmin}</Badge></div>}</td>
                       <td className="text-xs">{store?.name}{c.distanceM != null && <div className={c.distanceM > (store?.radiusM ?? 100) ? "text-danger" : "text-ink/60"}>cách quán {c.distanceM}m</div>}</td>
                       <td className="text-xs">
                         {c.shiftLabel || "Ngoài ca"} <span className="text-ink/50">(luỹ kế)</span>

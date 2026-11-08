@@ -33,6 +33,7 @@ const SettingsSchema = new Schema(
     financeReportWeekly: { type: Boolean, default: true },
     financeReportMonthly: { type: Boolean, default: true },
     financeAiComment: { type: Boolean, default: true }, // Gemini viết nhận xét trong báo cáo
+    autoCleanup: { type: Boolean, default: false }, // tự dọn dữ liệu rác mỗi tháng (cron)
   },
   { timestamps: true },
 );
@@ -134,7 +135,7 @@ const LoginLogSchema = new Schema({
   fingerprintHash: String,
   ip: String,
   userAgent: String,
-  createdAt: { type: Date, default: Date.now, index: true },
+  createdAt: { type: Date, default: Date.now, expires: 180 * 86_400 }, // TTL: tự xoá sau 180 ngày
 });
 export const LoginLog = getModel("LoginLog", LoginLogSchema);
 
@@ -283,7 +284,8 @@ export const AdjustmentRequest = getModel("AdjustmentRequest", AdjustmentRequest
 /* ---------- Chốt ca: ảnh chụp cuối ca → gửi nhóm Telegram ---------- */
 const ShiftClosingSchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", index: true }, // admin bổ sung chốt ca có thể không rõ người chốt
+    addedByAdmin: String, // admin nhập bù ca còn thiếu (tên admin)
     storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
     attendanceId: { type: Schema.Types.ObjectId, ref: "Attendance" },
     workDate: { type: String, required: true },
@@ -413,7 +415,7 @@ const UserNoticeSchema = new Schema(
     text: { type: String, required: true },
     tone: { type: String, enum: ["green", "orange", "red", "blue"], default: "blue" },
     link: String,
-    readAt: Date,
+    readAt: { type: Date, expires: 30 * 86_400 }, // TTL: đã đọc quá 30 ngày → tự xoá
   },
   { timestamps: true },
 );
@@ -478,7 +480,7 @@ const ReportLogSchema = new Schema({
   key: { type: String, required: true, unique: true },
   status: { type: String, enum: ["SENT", "FAILED"], default: "SENT" },
   error: String,
-  sentAt: { type: Date, default: Date.now },
+  sentAt: { type: Date, default: Date.now, expires: 180 * 86_400 }, // TTL: tự xoá sau 180 ngày
 });
 export const ReportLog = getModel("ReportLog", ReportLogSchema);
 
@@ -572,7 +574,7 @@ const AdminLoginLogSchema = new Schema({
   success: Boolean,
   ip: String,
   userAgent: String,
-  createdAt: { type: Date, default: Date.now, index: true },
+  createdAt: { type: Date, default: Date.now, expires: 180 * 86_400 }, // TTL: tự xoá sau 180 ngày
 });
 export const AdminLoginLog = getModel("AdminLoginLog", AdminLoginLogSchema);
 
@@ -589,3 +591,32 @@ const AuditLogSchema = new Schema({
 export const AuditLog = getModel("AuditLog", AuditLogSchema);
 
 export { mongoose };
+
+/* ---------- Phiên đăng nhập admin (mật khẩu chung) – Chủ xem & đăng xuất từng phiên ---------- */
+const AdminLoginSessionSchema = new Schema({
+  sid: { type: String, required: true, unique: true },
+  name: String, // tên hiển thị admin tự nhập khi đăng nhập
+  ip: String,
+  userAgent: String,
+  createdAt: { type: Date, default: Date.now },
+  lastSeenAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, required: true }, // hết hạn phiên → tự xoá (TTL bên dưới)
+  revokedAt: Date,
+  revokedBy: String,
+});
+AdminLoginSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+export const AdminLoginSession = getModel("AdminLoginSession", AdminLoginSessionSchema);
+
+/* ---------- Lịch sử hoạt động admin (không gồm Chủ) – chỉ giữ 7 ngày ---------- */
+export const ACTIVITY_DAYS = 7;
+const AdminActivitySchema = new Schema({
+  sid: String,
+  adminName: String,
+  action: { type: String, index: true },
+  targetType: String,
+  targetId: String,
+  summary: String,
+  storeId: { type: Schema.Types.ObjectId, ref: "Store" },
+  createdAt: { type: Date, default: Date.now, expires: ACTIVITY_DAYS * 86_400 }, // TTL 7 ngày
+});
+export const AdminActivity = getModel("AdminActivity", AdminActivitySchema);

@@ -182,6 +182,8 @@ async function upsertAttendance(
     source: "ADMIN_MANUAL" | "REQUEST";
     /** cơ sở làm việc (đi hỗ trợ). Bỏ trống → theo ca đã xếp, không có ca thì cơ sở gốc */
     workStoreId?: string;
+    /** chấm hộ hàng loạt: không ghi nhật ký từng lượt (ghi 1 dòng tổng) */
+    quiet?: boolean;
   },
 ) {
   const user = await User.findById(opts.userId).lean();
@@ -260,7 +262,7 @@ async function upsertAttendance(
     manualReason: opts.reason,
   });
   await AttendanceAdjustment.create({ attendanceId: created._id, adminName: actor.name, action: "CREATE", after: { checkInAt, checkOutAt }, reason: opts.reason });
-  await audit(actor, opts.source === "REQUEST" ? "attendance.request.create" : "attendance.manual", { type: "Attendance", id: String(created._id) }, null, {
+  if (!opts.quiet) await audit(actor, opts.source === "REQUEST" ? "attendance.request.create" : "attendance.manual", { type: "Attendance", id: String(created._id) }, null, {
     userId: opts.userId,
     checkInAt,
     checkOutAt,
@@ -286,6 +288,85 @@ export async function manualAttendance(_: FormState, fd: FormData): Promise<Form
     return { ok: true };
   } catch (e) {
     return errMsg(e);
+  }
+}
+
+/* ===== Chấm công hộ hàng loạt (nhiều ngày / import Excel / AI đọc ảnh) ===== */
+export type BulkRow = { k: string; userId: string; date: string; inTime: string; outTime: string | null };
+export type BulkResult = { k: string; status: "ok" | "created" | "dup" | "error"; msg?: string };
+const MAX_BULK = 60;
+
+/**
+ * dryRun = true: chỉ kiểm tra (trùng lượt đã có, trùng trong danh sách, tháng đã khoá…).
+ * dryRun = false: ghi từng lượt; lượt trùng / lỗi bị bỏ qua, các lượt khác vẫn ghi.
+ * Client gửi theo từng đợt ≤ 60 lượt.
+ */
+export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; dryRun: boolean }): Promise<{ error?: string; results?: BulkResult[] }> {
+  try {
+    const admin = await assertAdmin();
+    const reason = (input.reason ?? "").trim();
+    if (!input.dryRun && reason.length < 3) return { error: "Bắt buộc nhập lý do" };
+    if (!Array.isArray(input.rows) || input.rows.length > MAX_BULK) return { error: `Tối đa ${MAX_BULK} lượt mỗi lần gửi` };
+    await connectDB();
+    const uids = [...new Set(input.rows.map((r) => r.userId).filter((i) => Types.ObjectId.isValid(i)))];
+    const users = new Map((await User.find({ _id: { $in: uids } }).select("storeId name").lean()).map((u) => [String(u._id), u]));
+    const tzOf = new Map<string, string>();
+    const results: BulkResult[] = [];
+    const done: { userId: string; date: string }[] = [];
+    const taken = new Map<string, [number, number][]>(); // userId|date → khoảng giờ đã có (DB + trong danh sách)
+    for (const r of input.rows) {
+      try {
+        const u = users.get(r.userId);
+        if (!u?.storeId) throw new Error("Chưa chọn nhân viên");
+        if (!DATE_RE.test(r.date)) throw new Error("Ngày không hợp lệ");
+        if (!TIME_RE.test((r.inTime ?? "").slice(0, 5))) throw new Error("Giờ vào không hợp lệ");
+        if (r.outTime && !TIME_RE.test(r.outTime.slice(0, 5))) throw new Error("Giờ ra không hợp lệ");
+        const sk = String(u.storeId);
+        if (!tzOf.has(sk)) tzOf.set(sk, await storeTz(u.storeId));
+        const tz = tzOf.get(sk)!;
+        const a = zonedToDate(r.date, r.inTime.slice(0, 5), tz).getTime();
+        let b = r.outTime ? zonedToDate(r.date, r.outTime.slice(0, 5), tz).getTime() : a + 3600_000;
+        if (b <= a) b += 24 * 3600_000;
+        const key = `${r.userId}|${r.date}`;
+        if (!taken.has(key)) {
+          const ex = await Attendance.find({ userId: r.userId, checkInAt: { $gte: new Date(a - 30 * 3600_000), $lte: new Date(b + 6 * 3600_000) } })
+            .select("checkInAt checkOutAt")
+            .lean();
+          taken.set(key, ex.map((x) => [x.checkInAt.getTime(), x.checkOutAt ? x.checkOutAt.getTime() : x.checkInAt.getTime() + 3600_000]));
+        }
+        const list = taken.get(key)!;
+        if (list.some(([x, y]) => a < y && b > x)) {
+          results.push({ k: r.k, status: "dup", msg: "Trùng giờ với lượt đã có" });
+          continue;
+        }
+        if (input.dryRun) {
+          await assertNotLocked(u.storeId, localMonth(new Date(a), tz));
+          list.push([a, b]);
+          results.push({ k: r.k, status: "ok" });
+          continue;
+        }
+        await upsertAttendance(admin, { userId: r.userId, date: r.date, inTime: r.inTime.slice(0, 5), outTime: r.outTime ? r.outTime.slice(0, 5) : "", reason, source: "ADMIN_MANUAL", quiet: true });
+        list.push([a, b]);
+        done.push({ userId: r.userId, date: r.date });
+        results.push({ k: r.k, status: "created" });
+      } catch (e) {
+        results.push({ k: r.k, status: "error", msg: (e as Error).message || "Lỗi" });
+      }
+    }
+    if (!input.dryRun && results.some((x) => x.status === "created")) {
+      const dates = done.map((d) => d.date).sort();
+      await audit(adminActor(admin), "attendance.bulk", { type: "Attendance" }, null, {
+        reason,
+        created: done.length,
+        userIds: [...new Set(done.map((d) => d.userId))],
+        from: dates[0],
+        to: dates[dates.length - 1],
+      });
+      revalidatePath("/admin/attendance");
+    }
+    return { results };
+  } catch (e) {
+    return { error: (e as Error).message || "Lỗi hệ thống" };
   }
 }
 
@@ -476,6 +557,11 @@ export async function resolveAdjustment(_: FormState, fd: FormData): Promise<For
     req.adminReply = reply;
     req.resolvedAt = new Date();
     await req.save();
+    await audit(adminActor(admin), op === "approve" ? "adjustment.approve" : "adjustment.reject", { type: "AdjustmentRequest", id: String(req._id) }, null, {
+      userId: String(req.userId),
+      date: req.workDate,
+      reply,
+    });
     revalidatePath("/admin", "layout");
     return { ok: true };
   } catch (e) {
@@ -488,7 +574,8 @@ export async function replyFeedback(_: FormState, fd: FormData): Promise<FormSta
     const admin = await assertAdmin();
     const reply = str(fd.get("reply"));
     if (reply.length < 2) return { error: "Nhập nội dung phản hồi" };
-    await PayrollFeedback.updateOne({ _id: str(fd.get("id")) }, { $set: { adminReply: reply, adminName: adminActor(admin).name, status: "RESOLVED" } });
+    const fb = await PayrollFeedback.findOneAndUpdate({ _id: str(fd.get("id")) }, { $set: { adminReply: reply, adminName: adminActor(admin).name, status: "RESOLVED" } }).lean();
+    if (fb) await audit(adminActor(admin), "feedback.reply", { type: "PayrollFeedback", id: String(fb._id) }, null, { userId: String(fb.userId), month: fb.month, reply });
     revalidatePath("/admin/requests");
     return { ok: true };
   } catch (e) {

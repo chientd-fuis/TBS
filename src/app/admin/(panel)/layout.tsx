@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <p className="text-xs opacity-80">Quản lý chấm công</p>
           </div>
         </div>
-        <AdminNav counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests }} />
+        <AdminNav owner={admin.kind === "OWNER"} counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests }} />
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">

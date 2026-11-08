@@ -268,3 +268,41 @@ export async function readClosingPhotos(
   if (!Object.keys(out.values).length && !out.date) throw new Error("Không đọc được số liệu nào từ ảnh – chụp rõ hơn hoặc nhập tay");
   return out;
 }
+
+/* ---------- Ảnh bảng chấm công (giấy / ảnh chụp màn hình app chấm công) ---------- */
+const ATTENDANCE_PROMPT = `Ảnh là bảng / sổ chấm công của quán (viết tay, in, hoặc chụp màn hình file Excel / app chấm công).
+Liệt kê TẤT CẢ lượt làm việc đọc được, mỗi lượt 1 bản ghi:
+- employee_name: tên nhân viên của lượt đó (tiêu đề bảng, cột tên, hoặc dòng ghi tên). Không thấy tên → null.
+- date: ngày làm, viết đúng như trên ảnh kiểu ngày/tháng[/năm] (VD 8/11 hoặc 08/11/2026). Không tự thêm năm.
+- check_in: giờ vào HH:mm. check_out: giờ ra HH:mm. Không có → null. Ghi "chưa kết thúc" / bỏ trống giờ ra → check_out null.
+- shift: tên ca nếu có ghi (VD "Ca Sáng", "Chiều", "Tối", "S", "C", "T"). Các ca của quán: {SHIFTS}.
+Bảng dạng mỗi ngày nhiều dòng giờ: dòng giờ vào và dòng giờ ra liền nhau tạo thành 1 lượt (giờ lẻ thứ 1,3,5… là vào; 2,4,6… là ra).
+Bảng dạng lịch chỉ đánh dấu ca (VD ô ghi "S", "C", "x" theo ngày) → mỗi ô 1 bản ghi, check_in/check_out null, shift = ca.
+Bỏ qua cột Đi trễ, Về sớm, Tổng thời gian, Tiền công. Không bịa số – chữ mờ không đọc được thì bỏ qua lượt đó.`;
+
+export async function readAttendancePhotos(photos: string[], refMonth: string, shiftNames: string[]) {
+  const json = await geminiGenerate({
+    prompt: ATTENDANCE_PROMPT.replace("{SHIFTS}", shiftNames.join(", ") || "không rõ"),
+    photos,
+    timeoutMs: 55_000,
+    schema: {
+      type: "OBJECT",
+      properties: {
+        records: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              employee_name: { type: "STRING", nullable: true },
+              date: { type: "STRING", nullable: true },
+              check_in: { type: "STRING", nullable: true },
+              check_out: { type: "STRING", nullable: true },
+              shift: { type: "STRING", nullable: true },
+            },
+          },
+        },
+      },
+    },
+  });
+  return json;
+}
