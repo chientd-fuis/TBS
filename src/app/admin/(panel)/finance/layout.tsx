@@ -6,7 +6,7 @@ export default async function FinanceLayout({ children }: { children: React.Reac
   const admin = await requireAdmin();
   return (
     <>
-      <PageTitle sub="Doanh thu từ chốt ca · chi phí từ sao kê / CK · tiền thuê nhà · lương theo giờ công → lợi nhuận từng cơ sở">Tài chính</PageTitle>
+      <PageTitle sub="Lãi toàn chuỗi = Σ lãi gộp các cơ sở (doanh thu, chi trong ca, lương, thuê nhà) − chi phí chung admin nhập">Tài chính</PageTitle>
       <FinanceTabs isOwner={admin.kind === "OWNER"} />
       {children}
     </>

@@ -2,7 +2,7 @@
 import { connectDB } from "./db";
 import { Attendance, DayRevenue, ReportLog, ShiftAssignment, ShiftClosing, Settings, User, APPROVED_SHIFT } from "./models";
 import { loadPnl, loadStores, type StoreLite } from "./finance-data";
-import { CATEGORY_LABEL, margin, revenueDeviation, type PnlLine } from "./finance";
+import { CATEGORY_LABEL, contributionMargin, margin, revenueDeviation, type PnlLine } from "./finance";
 import { closingSum, revenueDiff, type Revenue } from "./revenue";
 import { geminiConfigured, geminiGenerate } from "./ocr";
 import { sendTelegramText, telegramConfigured } from "./telegram";
@@ -127,7 +127,13 @@ ${JSON.stringify(data)}`,
   }
 }
 
-const storeLine = (name: string, l: PnlLine) => `🏪 ${name}\n   DT ${n(l.revenue)} · LN ≈ ${signed(l.profit)} (${pct(margin(l))})`;
+const storeLine = (name: string, l: PnlLine) => `🏪 ${name}\n   DT ${n(l.revenue)} · lãi gộp ≈ ${signed(l.contribution)} (${pct(contributionMargin(l))})`;
+const chainLines = (t: PnlLine) => [
+  `Σ Doanh thu chuỗi: ${n(t.revenue)}`,
+  `   Lãi gộp các cơ sở ≈ ${signed(t.contribution)}`,
+  `   − Chi phí chung: ${n(t.shared)}`,
+  `💰 LÃI CHUỖI ≈ ${signed(t.profit)} (${pct(margin(t))})`,
+];
 
 /* ---------- Báo cáo ngày ---------- */
 export async function buildDailyReport(date: string) {
@@ -141,18 +147,19 @@ export async function buildDailyReport(date: string) {
     lines.push(storeLine(s.short, l));
     lines.push(`   Két: ${cashDiff === 0 ? "✅ khớp" : `⚠️ ${cashDiff < 0 ? "âm" : "dư"} ${n(Math.abs(cashDiff))}`}`);
   }
-  lines.push("━━━━━━━━━━", `Σ Tổng: DT ${n(pnl.total.revenue)} · LN ≈ ${signed(pnl.total.profit)} (${pct(margin(pnl.total))})`);
-  lines.push(`📅 Luỹ kế T${viMonth(date.slice(0, 7))}: DT ${n(month.pnl.total.revenue)} · LN ≈ ${signed(month.pnl.total.profit)}`);
+  lines.push("━━━━━━━━━━", ...chainLines(pnl.total));
+  lines.push(`📅 Luỹ kế T${viMonth(date.slice(0, 7))}: DT ${n(month.pnl.total.revenue)} · chi phí chung ${n(month.pnl.total.shared)} · lãi chuỗi ≈ ${signed(month.pnl.total.profit)}`);
   const iss = issueLines(issues);
   if (iss.length) lines.push("", "⚠️ Cần chú ý", ...iss.map((x) => `• ${x}`));
   const ai = await aiComment("trong ngày", {
     date,
-    stores: stores.map((s) => ({ name: s.short, revenue: pnl.byStore[s._id].revenue, profit: pnl.byStore[s._id].profit })),
-    monthToDate: { revenue: month.pnl.total.revenue, profit: month.pnl.total.profit },
+    stores: stores.map((s) => ({ name: s.short, revenue: pnl.byStore[s._id].revenue, storeContribution: pnl.byStore[s._id].contribution })),
+    chain: { revenue: pnl.total.revenue, commonCosts: pnl.total.shared, chainProfit: pnl.total.profit },
+    monthToDate: { revenue: month.pnl.total.revenue, commonCosts: month.pnl.total.shared, chainProfit: month.pnl.total.profit },
     issues: iss,
   });
   if (ai) lines.push("", "💬 Nhận xét", ai);
-  lines.push("", "LN ước tính = DT − phí sàn − thu chi két − chi phí − lương theo giờ công − tiền thuê nhà/ngày");
+  lines.push("", "Lãi gộp cơ sở = DT thực thu − phí sàn − chi trong ca − lương − thuê nhà. Lãi chuỗi = Σ lãi gộp − chi phí chung (admin nhập).");
   return lines.join("\n");
 }
 
@@ -162,23 +169,24 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const stores = await loadStores();
   const [{ pnl }, prev] = await Promise.all([loadPnl(from, to, stores), loadPnl(prevFrom, prevTo, stores)]);
   const lines: string[] = [title, `${viDate(from)} – ${viDate(to)}`, ""];
-  const ranked = [...stores].sort((a, b) => pnl.byStore[b._id].profit - pnl.byStore[a._id].profit);
+  const ranked = [...stores].sort((a, b) => pnl.byStore[b._id].contribution - pnl.byStore[a._id].contribution);
   for (const s of ranked) {
     const l = pnl.byStore[s._id];
     const p = prev.pnl.byStore[s._id];
     const chg = p?.revenue ? (l.revenue - p.revenue) / p.revenue : null;
     lines.push(storeLine(s.short, l));
-    lines.push(`   Chi phí ${n(l.cost)}${chg !== null ? ` · DT ${chg >= 0 ? "▲" : "▼"} ${pct(Math.abs(chg))} so kỳ trước` : ""}`);
+    lines.push(`   Chi phí cơ sở ${n(l.cost)}${chg !== null ? ` · DT ${chg >= 0 ? "▲" : "▼"} ${pct(Math.abs(chg))} so kỳ trước` : ""}`);
   }
   const t = pnl.total;
   const pt = prev.pnl.total;
-  lines.push("━━━━━━━━━━", `Σ Tổng: DT ${n(t.revenue)} · Chi ${n(t.cost)} · LN ≈ ${signed(t.profit)} (${pct(margin(t))})`);
-  if (pt.revenue) lines.push(`   Kỳ trước: DT ${n(pt.revenue)} · LN ≈ ${signed(pt.profit)}`);
+  lines.push("━━━━━━━━━━", ...chainLines(t));
+  if (pt.revenue) lines.push(`   Kỳ trước: DT ${n(pt.revenue)} · lãi chuỗi ≈ ${signed(pt.profit)}`);
   const costParts: [string, number][] = [
     ["Lương", t.labor],
     ["Phí sàn", t.platformFee],
     ["Chi trong ca (két)", t.cashbox],
-    ...Object.entries(pnl.byCategory).map(([k, v]) => [CATEGORY_LABEL[k] ?? k, v] as [string, number]),
+    ["Thuê nhà", t.fixed],
+    ...Object.entries(pnl.byCategory).map(([k, v]) => [`Chung: ${CATEGORY_LABEL[k] ?? k}`, v] as [string, number]),
   ];
   const top = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (top.length) lines.push("", "💸 Chi phí lớn nhất", ...top.map(([k, v]) => `• ${k}: ${n(v)} (${t.revenue ? pct(v / t.revenue) : "–"} DT)`));
@@ -204,8 +212,8 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const ai = await aiComment(title.toLowerCase(), {
     from,
     to,
-    stores: stores.map((s) => ({ name: s.short, revenue: pnl.byStore[s._id].revenue, cost: pnl.byStore[s._id].cost, profit: pnl.byStore[s._id].profit, prevRevenue: prev.pnl.byStore[s._id]?.revenue ?? 0 })),
-    total: { revenue: t.revenue, cost: t.cost, profit: t.profit, prevRevenue: pt.revenue, prevProfit: pt.profit },
+    stores: stores.map((s) => ({ name: s.short, revenue: pnl.byStore[s._id].revenue, storeContribution: pnl.byStore[s._id].contribution, prevRevenue: prev.pnl.byStore[s._id]?.revenue ?? 0 })),
+    chain: { revenue: t.revenue, commonCosts: t.shared, chainProfit: t.profit, prevRevenue: pt.revenue, prevChainProfit: pt.profit },
     topCosts: top,
     warnings: warn,
   });

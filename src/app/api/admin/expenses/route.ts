@@ -4,7 +4,7 @@ import { getAdmin, adminActor } from "@/lib/admin-session";
 import { connectDB } from "@/lib/db";
 import { Expense, Store } from "@/lib/models";
 import { audit } from "@/lib/audit";
-import { formatExpenseCaption, isCategory } from "@/lib/finance";
+import { defaultCountInCost, formatExpenseCaption, isCategory } from "@/lib/finance";
 import { financeChatId } from "@/lib/finance-report";
 import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "@/lib/telegram";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
@@ -28,6 +28,7 @@ const Body = z.object({
   allocation: z.enum(["REVENUE", "EQUAL", "CUSTOM"]).default("REVENUE"),
   customShares: z.array(z.object({ storeId: z.string(), pct: z.number().min(0).max(100) })).optional(),
   paidFrom: z.enum(["OWNER", "CASHBOX"]).default("OWNER"),
+  countInCost: z.boolean().optional(),
   allowDuplicate: z.boolean().optional(),
   ocr: z.object({ status: z.enum(["NONE", "OK", "FAILED"]), amount: z.number().optional(), date: z.string().optional() }).optional(),
 });
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       allocation: b.allocation,
       customShares: b.scope === "SHARED" && b.allocation === "CUSTOM" ? b.customShares : [],
       paidFrom: b.paidFrom,
+      countInCost: b.countInCost ?? defaultCountInCost(b.category),
     };
     let saved;
     if (b.id) {

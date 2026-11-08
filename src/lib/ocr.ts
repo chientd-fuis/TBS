@@ -198,7 +198,8 @@ Liệt kê TẤT CẢ giao dịch nhìn thấy trong "transactions", mỗi giao 
 - recipient: tên người / đơn vị nhận tiền (bill mua hàng → tên cửa hàng)
 - transfer_note: NỘI DUNG CHUYỂN KHOẢN nguyên văn (bill → null)
 - purpose: tiền này chi cho việc gì, ngắn gọn tiếng Việt, suy từ nội dung CK / người nhận / các món trên bill (VD "Nhập sữa tươi", "Tiền điện T10", "Lương T10 cho Lan")
-- category: một trong {CATS}. LUONG nếu là trả lương / thưởng / tạm ứng cho nhân viên.
+- category: một trong {CATS}. LUONG CHỈ KHI nội dung ghi rõ lương / thưởng / tạm ứng nhân viên.
+  Nội dung không rõ ràng, không đoán được chi cho việc gì → KHAC (không được chọn LUONG).
 Giao dịch bị cắt mất ở mép ảnh, không đọc rõ số tiền → bỏ qua. KHÔNG đoán. "k" = nghìn, "tr" = triệu. Chỉ trả về JSON.`;
 
 /** Đọc 1 ảnh sao kê / biên lai CK / bill → danh sách giao dịch TIỀN RA. */

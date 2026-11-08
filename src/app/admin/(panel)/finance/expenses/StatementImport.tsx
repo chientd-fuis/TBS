@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ImageUp, Loader2, Plus, Send, Sparkles, TriangleAlert, X } from "lucide-react";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { Alert, Button, Input, Select } from "@/components/ui";
-import { EXPENSE_CATEGORIES, EXCLUDED_CATEGORIES, txKey } from "@/lib/finance";
+import { defaultCountInCost, EXPENSE_CATEGORIES, txKey } from "@/lib/finance";
 import { evalMoneyExpr } from "@/lib/revenue";
 import { viDate } from "@/lib/time";
 
@@ -15,11 +15,10 @@ type Row = {
   include: boolean;
   date: string;
   amount: string;
-  purpose: string;
-  recipient: string;
-  transferNote: string;
+  content: string; // nội dung chi tiết = nội dung CK
+  recipient: string; // giữ để lưu, không hiện
   category: string;
-  target: string; // storeId | "SHARED"
+  countInCost: boolean; // tính vào chi phí lãi lỗ
   salaryHint?: string;
   dupHint?: string;
   fromOcr: boolean;
@@ -51,13 +50,11 @@ async function fileToJpeg(file: File, maxSide = 2400): Promise<string> {
 let seq = 0;
 const newKey = () => `r${++seq}`;
 
-export default function StatementImport({ stores, today, ocrEnabled }: { stores: StoreOpt[]; today: string; ocrEnabled: boolean }) {
+export default function StatementImport({ today, ocrEnabled }: { stores?: StoreOpt[]; today: string; ocrEnabled: boolean }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [imgs, setImgs] = useState<Img[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
-  const [target, setTarget] = useState(stores.length === 1 ? stores[0].id : "");
-  const [allocation, setAllocation] = useState<"REVENUE" | "EQUAL">("REVENUE");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "green" | "orange" | "red"; text: string } | null>(null);
   const seen = useRef(new Set<string>());
@@ -68,11 +65,10 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
     include: true,
     date: today,
     amount: "",
-    purpose: "",
+    content: "",
     recipient: "",
-    transferNote: "",
-    category: "NGUYEN_LIEU",
-    target,
+    category: "KHAC",
+    countInCost: true,
     fromOcr: false,
   });
 
@@ -97,11 +93,10 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
         include: !t.dupHint,
         date: t.date ?? today,
         amount: String(t.amount),
-        purpose: t.purpose ?? "",
+        content: t.transferNote || t.purpose || t.recipient || "",
         recipient: t.recipient ?? "",
-        transferNote: t.transferNote ?? "",
         category: t.category ?? "KHAC",
-        target,
+        countInCost: defaultCountInCost(t.category ?? "KHAC"),
         salaryHint: t.salaryHint,
         dupHint: t.dupHint ?? (t.date ? undefined : "Không đọc được ngày – kiểm tra lại"),
         fromOcr: true,
@@ -137,11 +132,11 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
 
   const chosen = rows.filter((r) => r.include);
   const amounts = new Map(rows.map((r) => [r.key, evalMoneyExpr(r.amount)]));
-  const counted = chosen.filter((r) => !EXCLUDED_CATEGORIES.includes(r.category)).reduce((s, r) => s + (amounts.get(r.key)?.value ?? 0), 0);
-  const salary = chosen.filter((r) => EXCLUDED_CATEGORIES.includes(r.category)).reduce((s, r) => s + (amounts.get(r.key)?.value ?? 0), 0);
+  const counted = chosen.filter((r) => r.countInCost).reduce((s, r) => s + (amounts.get(r.key)?.value ?? 0), 0);
+  const notCounted = chosen.filter((r) => !r.countInCost).reduce((s, r) => s + (amounts.get(r.key)?.value ?? 0), 0);
   const problems = chosen.filter((r) => {
     const a = amounts.get(r.key)!;
-    return !a.ok || a.value <= 0 || !r.date || !r.target;
+    return !a.ok || a.value <= 0 || !r.date;
   });
   const reading = imgs.some((i) => i.state === "reading");
 
@@ -158,15 +153,14 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         photos,
-        allocation,
         rows: chosen.map((x) => ({
           date: x.date,
           amount: amounts.get(x.key)!.value,
           category: x.category,
-          target: x.target,
+          target: "SHARED", // chi phí admin nhập = chi phí chung của chuỗi
+          content: x.content,
           recipient: x.recipient,
-          transferNote: x.transferNote,
-          purpose: x.purpose,
+          countInCost: x.countInCost,
           fromOcr: x.fromOcr,
         })),
       }),
@@ -219,39 +213,18 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
       {imgs.filter((i) => i.state === "error").map((i) => <p key={i.id} className="text-xs text-danger">{i.error}</p>)}
       {reading && <p className="flex items-center gap-1.5 text-sm text-accent"><Loader2 size={16} className="animate-spin" /> AI đang đọc ảnh…</p>}
 
-      <div className="grid grid-cols-[1fr_auto] items-end gap-2 rounded-xl bg-cream p-2">
-        <label className="text-xs font-semibold text-accent">
-          Tính cho (mặc định)
-          <Select value={target} onChange={(e) => setTarget(e.target.value)} className="mt-1">
-            <option value="">– Chọn –</option>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            <option value="SHARED">Chung các cơ sở</option>
-          </Select>
-        </label>
-        <Button type="button" variant="outline" className="py-2 text-xs" disabled={!rows.length || !target} onClick={() => setRows((rs) => rs.map((r) => ({ ...r, target })))}>
-          Áp dụng tất cả
-        </Button>
-        {(target === "SHARED" || rows.some((r) => r.target === "SHARED")) && (
-          <label className="col-span-2 text-xs text-ink/70">
-            Chi phí chung chia:{" "}
-            <select value={allocation} onChange={(e) => setAllocation(e.target.value as "REVENUE" | "EQUAL")} className="rounded border border-[#e9d9a8] bg-white px-1 py-0.5">
-              <option value="REVENUE">theo tỷ lệ doanh thu</option>
-              <option value="EQUAL">chia đều</option>
-            </select>
-          </label>
-        )}
-      </div>
 
       {rows.length > 0 && (
         <ul className="space-y-2">
           {rows.map((r, i) => {
             const a = amounts.get(r.key)!;
-            const isSalary = EXCLUDED_CATEGORIES.includes(r.category);
             return (
               <li key={r.key} className={`rounded-xl p-2.5 ring-1 ${r.include ? "bg-white ring-[#f1e6c8]" : "bg-gray-50 opacity-60 ring-gray-200"}`}>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" checked={r.include} onChange={(e) => patch(r.key, { include: e.target.checked })} aria-label={`Lưu khoản ${i + 1}`} className="h-4 w-4" />
-                  <span className="text-xs font-bold text-ink/60">#{i + 1}</span>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-ink/70">
+                    <input type="checkbox" checked={r.include} onChange={(e) => patch(r.key, { include: e.target.checked })} className="h-4 w-4" />
+                    Lưu #{i + 1}
+                  </label>
                   {r.fromOcr && <Sparkles size={13} className="text-secondary" />}
                   <span className="flex-1" />
                   <button type="button" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))} className="text-ink/40 hover:text-danger" aria-label="Xoá dòng">
@@ -261,23 +234,22 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
                 <div className="mt-1.5 grid grid-cols-2 gap-2">
                   <Input type="date" value={r.date} onChange={(e) => patch(r.key, { date: e.target.value })} aria-label="Ngày" />
                   <ExprMoneyInput value={r.amount} onChange={(v) => patch(r.key, { amount: v })} placeholder="Số tiền" aria-label="Số tiền" />
-                  <Input className="col-span-2" value={r.purpose} maxLength={300} onChange={(e) => patch(r.key, { purpose: e.target.value })} placeholder="Chi cho việc gì (VD Nhập sữa tươi)" aria-label="Chi cho việc gì" />
-                  <Input value={r.recipient} maxLength={120} onChange={(e) => patch(r.key, { recipient: e.target.value })} placeholder="Người nhận" aria-label="Người nhận" />
-                  <Input value={r.transferNote} maxLength={200} onChange={(e) => patch(r.key, { transferNote: e.target.value })} placeholder="Nội dung CK" aria-label="Nội dung CK" />
-                  <Select value={r.category} onChange={(e) => patch(r.key, { category: e.target.value })} aria-label="Danh mục">
+                  <Select
+                    className="col-span-2"
+                    value={r.category}
+                    onChange={(e) => patch(r.key, { category: e.target.value, countInCost: defaultCountInCost(e.target.value) })}
+                    aria-label="Mục"
+                  >
                     {EXPENSE_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </Select>
-                  <Select value={r.target} onChange={(e) => patch(r.key, { target: e.target.value })} aria-label="Tính cho" className={!r.target ? "border-danger" : ""}>
-                    <option value="">– Cơ sở –</option>
-                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name.replace(/^TBS\s*/i, "")}</option>)}
-                    <option value="SHARED">Chung</option>
-                  </Select>
+                  <Input className="col-span-2" value={r.content} maxLength={300} onChange={(e) => patch(r.key, { content: e.target.value })} placeholder="Nội dung chi tiết (nội dung CK)" aria-label="Nội dung" />
                 </div>
-                {isSalary && (
-                  <p className="mt-1.5 text-[11px] text-warn">
-                    {r.salaryHint ? `${r.salaryHint}. ` : ""}Lương NV – chỉ lưu chứng từ, không cộng vào chi phí.
-                  </p>
-                )}
+                <label className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm ${r.countInCost ? "text-secondary-dark" : "text-ink/60"}`}>
+                  <input type="checkbox" checked={r.countInCost} onChange={(e) => patch(r.key, { countInCost: e.target.checked })} className="h-4 w-4" />
+                  Tính vào chi phí
+                  {!r.countInCost && <span className="w-full pl-6 text-[11px]">(chỉ lưu chứng từ{r.category === "LUONG" ? " – lương đã có trong bảng lương" : ""})</span>}
+                </label>
+                {r.salaryHint && <p className="mt-1 text-[11px] text-warn">{r.salaryHint}</p>}
                 {r.dupHint && <p className="mt-1 text-[11px] text-danger">⚠ {r.dupHint}{r.include ? "" : " – đã bỏ chọn"}</p>}
                 {!a.ok && r.amount.trim() && <p className="mt-1 text-[11px] text-danger">Số tiền không hợp lệ</p>}
               </li>
@@ -295,7 +267,7 @@ export default function StatementImport({ stores, today, ocrEnabled }: { stores:
           <p>
             Chọn <b>{chosen.length}</b>/{rows.length} khoản · tính vào chi phí <b className="text-accent">{counted.toLocaleString("vi-VN")} đ</b>
           </p>
-          {salary > 0 && <p className="text-xs text-warn">+ {salary.toLocaleString("vi-VN")} đ lương NV (không cộng)</p>}
+          {notCounted > 0 && <p className="text-xs text-ink/60">+ {notCounted.toLocaleString("vi-VN")} đ chỉ lưu chứng từ (không tính chi phí)</p>}
           {problems.length > 0 && <p className="text-xs text-danger">{problems.length} khoản thiếu ngày / số tiền / cơ sở.</p>}
           {chosen.some((r) => r.date > today) && <p className="text-xs text-danger">Có khoản ngày ở tương lai ({viDate(today)} là hôm nay).</p>}
         </div>

@@ -64,28 +64,31 @@ export async function loadStores(): Promise<StoreLite[]> {
   }));
 }
 
-/**
- * Lãi lỗ kỳ [from, to]. Chi phí chung chia theo doanh thu TỪ ĐẦU THÁNG của `to` tới `to` (ổn định, không phụ thuộc kỳ xem).
- */
+/** Lãi lỗ chuỗi + lãi gộp từng cơ sở của kỳ [from, to]. */
 export async function loadPnl(from: string, to: string, stores?: StoreLite[]): Promise<{ stores: StoreLite[]; dates: string[]; pnl: PnlResult }> {
   await connectDB();
   const st = stores ?? (await loadStores());
   const ids = st.map((s) => s._id);
   const dates = dateRange(from, to);
-  const monthStart = `${to.slice(0, 7)}-01`;
-  const revFrom = from < monthStart ? from : monthStart;
   const [rev, exps, fixed, labor] = await Promise.all([
-    DayRevenue.find({ date: { $gte: revFrom, $lte: to }, storeId: { $in: ids.map((i) => new Types.ObjectId(i)) } }).lean(),
+    DayRevenue.find({ date: { $gte: from, $lte: to }, storeId: { $in: ids.map((i) => new Types.ObjectId(i)) } }).lean(),
     Expense.find({ date: { $gte: from, $lte: to } }).lean(),
     FixedCost.find({ startMonth: { $lte: to.slice(0, 7) }, $or: [{ endMonth: null }, { endMonth: "" }, { endMonth: { $gte: from.slice(0, 7) } }] }).lean(),
     loadLabor(from, to),
   ]);
-  const shareRevenue: Record<string, number> = {};
-  for (const r of rev) if (r.date >= monthStart) shareRevenue[String(r.storeId)] = (shareRevenue[String(r.storeId)] ?? 0) + (r.dt ?? 0);
   const pnl = computePnl({
     storeIds: ids,
     dates,
-    revenue: rev.map((r) => ({ storeId: String(r.storeId), date: r.date, dt: r.dt ?? 0, cp: r.cp ?? 0, grab: r.grab ?? 0, shopee: r.shopee ?? 0 })),
+    revenue: rev.map((r) => ({
+      storeId: String(r.storeId),
+      date: r.date,
+      dt: r.dt ?? 0,
+      tm: r.tm ?? 0,
+      tk: r.tk ?? 0,
+      cp: r.cp ?? 0,
+      grab: r.grab ?? 0,
+      shopee: r.shopee ?? 0,
+    })),
     expenses: exps.map((e) => ({
       date: e.date,
       amount: e.amount,
@@ -94,6 +97,7 @@ export async function loadPnl(from: string, to: string, stores?: StoreLite[]): P
       allocation: e.allocation,
       customShares: (e.customShares ?? []).map((c: { storeId?: unknown; pct?: number | null }) => ({ storeId: String(c.storeId), pct: c.pct ?? 0 })),
       paidFrom: e.paidFrom,
+      countInCost: e.countInCost,
       category: e.category,
     })),
     fixed: fixed.map((f) => ({
@@ -108,7 +112,6 @@ export async function loadPnl(from: string, to: string, stores?: StoreLite[]): P
     })),
     labor,
     fees: Object.fromEntries(st.map((s) => [s._id, { grab: s.grabFeePct, shopee: s.shopeeFeePct }])),
-    shareRevenue: Object.keys(shareRevenue).length ? shareRevenue : undefined,
   });
   return { stores: st, dates, pnl };
 }

@@ -34,9 +34,12 @@ export async function POST(req: Request) {
     const out = txs.map((t) => {
       const hint = detectSalary({ vendor: t.recipient, transferNote: t.transferNote, items: t.purpose }, staff);
       const dup = dupes.find((d) => d.date === t.date && d.amount === t.amount);
+      // lương chỉ khi nội dung ghi rõ; AI chọn LUONG mà nội dung không rõ → Khác
+      const category = hint?.strong ? "LUONG" : t.category === "LUONG" ? "KHAC" : (t.category ?? "KHAC");
       return {
         ...t,
-        ...(hint ? { salaryHint: hint, category: "LUONG" } : t.category === "LUONG" ? { salaryHint: "AI nhận định là trả lương / tạm ứng NV" } : {}),
+        category,
+        ...(hint ? { salaryHint: hint.strong ? hint.text : `${hint.text} – nếu là lương thì chọn mục Lương` } : {}),
         ...(dup ? { dupHint: `Đã có khoản ${dup.amount.toLocaleString("vi-VN")} đ ngày này${dup.items || dup.vendor ? ` (${dup.items || dup.vendor})` : ""}` } : {}),
       };
     });

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { Expense, Store } from "@/lib/models";
-import { ALLOCATION_LABEL, CATEGORY_LABEL, EXPENSE_CATEGORIES, isCountedExpense } from "@/lib/finance";
+import { CATEGORY_LABEL, defaultCountInCost, EXPENSE_CATEGORIES, isCountedExpense } from "@/lib/finance";
 import { geminiConfigured } from "@/lib/ocr";
 import { financeChatId } from "@/lib/finance-report";
 import { localDate, localMonth, viDate } from "@/lib/time";
@@ -53,6 +53,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     allocation: "REVENUE",
     shares: {},
     paidFrom: "OWNER",
+    countInCost: true,
   };
   const initial: ExpenseInitial = edit
     ? {
@@ -70,6 +71,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
         allocation: edit.allocation ?? "REVENUE",
         shares: Object.fromEntries((edit.customShares ?? []).map((c: { storeId?: unknown; pct?: number | null }) => [String(c.storeId), String(c.pct ?? "")])),
         paidFrom: edit.paidFrom === "CASHBOX" ? "CASHBOX" : "OWNER",
+        countInCost: typeof edit.countInCost === "boolean" ? edit.countInCost : defaultCountInCost(edit.category),
       }
     : blank;
   const chat = await financeChatId();
@@ -92,14 +94,9 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       <div className="min-w-0 space-y-3">
         <Card>
           <div className="flex flex-wrap items-center gap-2">
-            <MonthPicker month={month} base="/admin/finance/expenses" params={{ store: sp.store, cat: sp.cat }} />
+            <MonthPicker month={month} base="/admin/finance/expenses" params={{ cat: sp.cat }} />
             <AutoFilterForm className="flex flex-wrap gap-2">
               <input type="hidden" name="month" value={month} />
-              <Select name="store" defaultValue={sp.store ?? ""} className="w-auto">
-                <option value="">Tất cả cơ sở</option>
-                {storeOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                <option value="SHARED">Chi phí chung</option>
-              </Select>
               <Select name="cat" defaultValue={sp.cat ?? ""} className="w-auto">
                 <option value="">Tất cả danh mục</option>
                 {EXPENSE_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
@@ -107,7 +104,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             </AutoFilterForm>
           </div>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <p className="text-sm text-ink/70">Tổng chi được tính (không gồm tiền két, lương NV): <b className="text-lg text-accent">{vnd(total)} đ</b></p>
+            <p className="text-sm text-ink/70">Tổng chi tính vào chi phí: <b className="text-lg text-accent">{vnd(total)} đ</b></p>
             <p className="text-xs text-ink/60">{list.length} khoản</p>
           </div>
           {byCat.length > 0 && (
@@ -139,13 +136,9 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                       </p>
                       <p className="truncate text-xs text-ink/70">{[e.items, e.vendor, e.transferNote && `CK: ${e.transferNote}`, e.note].filter(Boolean).join(" · ") || "—"}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {e.scope === "SHARED" ? (
-                          <Badge tone="blue">Chung · {(ALLOCATION_LABEL[e.allocation ?? "REVENUE"] ?? "").toLowerCase()}</Badge>
-                        ) : (
-                          <Badge tone="yellow">{storeName.get(String(e.storeId)) ?? "?"}</Badge>
-                        )}
+                        {e.scope === "STORE" && e.storeId && <Badge tone="yellow">Gắn riêng: {storeName.get(String(e.storeId)) ?? "?"}</Badge>}
                         {e.paidFrom === "CASHBOX" && <Badge tone="gray">Tiền két – không cộng</Badge>}
-                        {e.category === "LUONG" && <Badge tone="orange">Lương – không cộng</Badge>}
+                        {e.paidFrom !== "CASHBOX" && !isCountedExpense(e) && <Badge tone="orange">Không tính chi phí</Badge>}
                         {e.kind === "TRANSFER" && <Badge tone="gray">Chuyển khoản</Badge>}
                         <Badge tone={tg[1]}>TG: {tg[0]}</Badge>
                       </div>

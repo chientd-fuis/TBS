@@ -8,7 +8,7 @@ import { Card, Empty } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function FinancePage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ month?: string; alloc?: string }> }) {
   const admin = await requireAdmin();
   if (admin.kind !== "OWNER") redirect("/admin/finance/expenses");
   const sp = await searchParams;
@@ -30,5 +30,5 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const prevTo = addDays(pm.first, span) > pm.last ? pm.last : addDays(pm.first, span);
   const stores = await loadStores();
   const [{ pnl, dates }, prev] = await Promise.all([loadPnl(first, to, stores), loadPnl(pm.first, prevTo, stores)]);
-  return <PnlView month={month} first={first} to={to} prevFirst={pm.first} prevTo={prevTo} stores={stores} pnl={pnl} dates={dates} prev={prev.pnl} />;
+  return <PnlView month={month} first={first} to={to} prevFirst={pm.first} prevTo={prevTo} stores={stores} pnl={pnl} dates={dates} prev={prev.pnl} alloc={sp.alloc === "1"} />;
 }

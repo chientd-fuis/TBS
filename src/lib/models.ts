@@ -402,6 +402,8 @@ const ExpenseSchema = new Schema(
     customShares: [ShareSchema],
     // OWNER = chủ trả / chuyển khoản · CASHBOX = lấy tiền két (đã nằm trong "Thu chi" chốt ca → không cộng lại)
     paidFrom: { type: String, enum: ["OWNER", "CASHBOX"], default: "OWNER" },
+    // có tính vào chi phí lãi lỗ không (trống = theo mục: lương/thưởng không tính, còn lại tính)
+    countInCost: Boolean,
     ocr: { status: { type: String, enum: ["NONE", "OK", "FAILED"], default: "NONE" }, amount: Number, date: String },
     telegram: { status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED"], default: "PENDING" }, messageIds: [Number], error: String },
     createdBy: String,

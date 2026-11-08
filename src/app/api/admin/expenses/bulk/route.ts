@@ -16,11 +16,10 @@ const Row = z.object({
   date: z.string().refine(isYmd, "Có dòng sai ngày"),
   amount: z.number().int().positive("Số tiền phải > 0").max(10_000_000_000),
   category: z.string().refine(isCategory, "Danh mục không hợp lệ"),
-  target: z.string(), // storeId | "SHARED"
+  target: z.string(), // storeId | "SHARED" (= tất cả cơ sở, chia theo allocation)
+  content: z.string().max(300).optional(), // nội dung chi tiết (= nội dung CK)
   recipient: z.string().max(120).optional(),
-  transferNote: z.string().max(200).optional(),
-  purpose: z.string().max(300).optional(),
-  note: z.string().max(500).optional(),
+  countInCost: z.boolean(),
   fromOcr: z.boolean().optional(),
 });
 const Body = z.object({
@@ -49,10 +48,9 @@ export async function POST(req: Request) {
         amount: r.amount,
         category: r.category,
         vendor: r.recipient?.trim() || undefined,
-        transferNote: r.transferNote?.trim() || undefined,
-        items: r.purpose?.trim() || undefined,
-        note: r.note?.trim() || undefined,
-        kind: r.transferNote ? "TRANSFER" : "BILL",
+        items: r.content?.trim() || undefined,
+        kind: "TRANSFER",
+        countInCost: r.countInCost,
         scope: r.target === "SHARED" ? "SHARED" : "STORE",
         ...(r.target !== "SHARED" ? { storeId: r.target } : {}),
         allocation,
@@ -70,7 +68,7 @@ export async function POST(req: Request) {
     const chat = await financeChatId();
     if (telegramConfigured() && chat) {
       const caption = formatExpenseBatchCaption(
-        rows.map((r) => ({ ...r, target: r.target === "SHARED" ? "Chung" : storeName.get(r.target)! })),
+        rows.map((r) => ({ ...r, target: r.target === "SHARED" ? "" : storeName.get(r.target)! })),
         actor.name,
       );
       try {
