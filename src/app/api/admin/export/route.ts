@@ -14,6 +14,7 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const type = sp.get("type") as ExportType;
   if (!type || !(type in EXPORT_TYPES)) return new NextResponse("Loại báo cáo không hợp lệ", { status: 400 });
+  if (type === "tonghopthang" && admin.kind !== "OWNER") return new NextResponse("Chỉ chủ được xuất báo cáo tài chính", { status: 403 });
   const from = sp.get("from") || "";
   const to = sp.get("to") || from;
   if (!/^\d{4}-\d{2}$/.test(from) || !/^\d{4}-\d{2}$/.test(to) || to < from) return new NextResponse("Khoảng tháng không hợp lệ", { status: 400 });

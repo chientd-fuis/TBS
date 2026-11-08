@@ -2,7 +2,7 @@
 import { connectDB } from "./db";
 import { Attendance, DayRevenue, ReportLog, ShiftAssignment, ShiftClosing, Settings, User, APPROVED_SHIFT } from "./models";
 import { loadPnl, loadStores, type StoreLite } from "./finance-data";
-import { CATEGORY_LABEL, contributionMargin, margin, revenueDeviation, type PnlLine } from "./finance";
+import { CATEGORY_LABEL, margin, revenueDeviation, type PnlLine } from "./finance";
 import { closingSum, revenueDiff, type Revenue } from "./revenue";
 import { geminiConfigured, geminiGenerate } from "./ocr";
 import { sendTelegramText, telegramConfigured } from "./telegram";
@@ -127,12 +127,17 @@ ${JSON.stringify(data)}`,
   }
 }
 
-const storeLine = (name: string, l: PnlLine) => `🏪 ${name}\n   DT ${n(l.revenue)} · lãi gộp ≈ ${signed(l.contribution)} (${pct(contributionMargin(l))})`;
+const storeLine = (name: string, l: PnlLine) =>
+  `🏪 ${name}\n   DT ${n(l.revenue)} · lương ${n(l.labor)} · két ${n(l.cashbox)}`;
 const chainLines = (t: PnlLine) => [
-  `Σ Doanh thu chuỗi: ${n(t.revenue)}`,
-  `   Lãi gộp các cơ sở ≈ ${signed(t.contribution)}`,
-  `   − Chi phí chung: ${n(t.shared)}`,
-  `💰 LÃI CHUỖI ≈ ${signed(t.profit)} (${pct(margin(t))})`,
+  `Σ Doanh thu 3 cơ sở: ${n(t.revenue)}`,
+  `   − Lương NV: ${n(t.labor)}`,
+  `   − Chi phí (admin nhập): ${n(t.shared)}`,
+  `   − Mặt bằng: ${n(t.fixed)}`,
+  `   − Phí sàn Shopee/Grab: ${n(t.platformFee)}`,
+  ...(t.direct ? [`   − Chi phí gắn riêng CS: ${n(t.direct)}`] : []),
+  `   Tổng chi phí (gồm chi phí két ${n(t.cashbox)}): ${n(t.cost + t.cashbox)}`,
+  `💰 LÃI ≈ ${signed(t.profit)} (${pct(margin(t))}) – không trừ chi phí két (đã trừ trong tiền mặt)`,
 ];
 
 /* ---------- Báo cáo ngày ---------- */
@@ -159,7 +164,7 @@ export async function buildDailyReport(date: string) {
     issues: iss,
   });
   if (ai) lines.push("", "💬 Nhận xét", ai);
-  lines.push("", "Lãi gộp cơ sở = DT thực thu − phí sàn − chi trong ca − lương − thuê nhà. Lãi chuỗi = Σ lãi gộp − chi phí chung (admin nhập).");
+  lines.push("", "Lãi = Doanh thu 3 cơ sở − Lương NV − Chi phí admin nhập − Mặt bằng (ước tính).");
   return lines.join("\n");
 }
 
@@ -169,24 +174,25 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const stores = await loadStores();
   const [{ pnl }, prev] = await Promise.all([loadPnl(from, to, stores), loadPnl(prevFrom, prevTo, stores)]);
   const lines: string[] = [title, `${viDate(from)} – ${viDate(to)}`, ""];
-  const ranked = [...stores].sort((a, b) => pnl.byStore[b._id].contribution - pnl.byStore[a._id].contribution);
+  const ranked = [...stores].sort((a, b) => pnl.byStore[b._id].revenue - pnl.byStore[a._id].revenue);
   for (const s of ranked) {
     const l = pnl.byStore[s._id];
     const p = prev.pnl.byStore[s._id];
     const chg = p?.revenue ? (l.revenue - p.revenue) / p.revenue : null;
     lines.push(storeLine(s.short, l));
-    lines.push(`   Chi phí cơ sở ${n(l.cost)}${chg !== null ? ` · DT ${chg >= 0 ? "▲" : "▼"} ${pct(Math.abs(chg))} so kỳ trước` : ""}`);
+    if (chg !== null) lines.push(`   DT ${chg >= 0 ? "▲" : "▼"} ${pct(Math.abs(chg))} so kỳ trước`);
   }
   const t = pnl.total;
   const pt = prev.pnl.total;
   lines.push("━━━━━━━━━━", ...chainLines(t));
   if (pt.revenue) lines.push(`   Kỳ trước: DT ${n(pt.revenue)} · lãi chuỗi ≈ ${signed(pt.profit)}`);
   const costParts: [string, number][] = [
-    ["Lương", t.labor],
+    ["Lương NV", t.labor + (pnl.byCategory.LUONG ?? 0)],
+    ["Mặt bằng", t.fixed],
     ["Phí sàn", t.platformFee],
-    ["Chi trong ca (két)", t.cashbox],
-    ["Thuê nhà", t.fixed],
-    ...Object.entries(pnl.byCategory).map(([k, v]) => [`Chung: ${CATEGORY_LABEL[k] ?? k}`, v] as [string, number]),
+    ...Object.entries(pnl.byCategory)
+      .filter(([k]) => k !== "LUONG")
+      .map(([k, v]) => [CATEGORY_LABEL[k] ?? k, v] as [string, number]),
   ];
   const top = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (top.length) lines.push("", "💸 Chi phí lớn nhất", ...top.map(([k, v]) => `• ${k}: ${n(v)} (${t.revenue ? pct(v / t.revenue) : "–"} DT)`));

@@ -138,3 +138,11 @@ test("tờ chốt ca viết tay: đơn vị nghìn, tổng NV ghi, DTm", async (
   assert.equal(p.staffTotal, 5_150_000);
   assert.equal(p.scaled, undefined);
 });
+
+test("ngày trên tờ chốt ca chỉ ghi ngày/tháng", async () => {
+  const { normalizeOcr } = await import("../src/lib/revenue");
+  assert.equal(normalizeOcr({ tm: 2_000_000, date: "8/11" }, "2026-11-08").date, "2026-11-08");
+  assert.equal(normalizeOcr({ tm: 2_000_000, date: "08/11" }, "2026-11-08").date, "2026-11-08");
+  assert.equal(normalizeOcr({ tm: 2_000_000, date: "Ca tối 7/11" }, "2026-11-08").date, "2026-11-07");
+  assert.equal(normalizeOcr({ tm: 2_000_000, date: null }, "2026-11-08").date, undefined);
+});

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { AdminLoginLog, APPROVED_SHIFT, Attendance, ShiftAssignment, Store, User } from "@/lib/models";
+import { AdjustmentRequest, AdminLoginLog, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
-import { Receipt } from "lucide-react";
+import { BellRing, ChevronRight, Receipt } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,24 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const admin = await requireAdmin();
   const { error } = await searchParams;
   const settings = await getSettings();
+  // việc chờ admin duyệt (hiện nổi bật trên điện thoại)
+  const [pCover, pAdj, pFb, pReg, pUsers, pDevices] = await Promise.all([
+    CoverRequest.countDocuments({ status: "PENDING" }),
+    AdjustmentRequest.countDocuments({ status: "PENDING" }),
+    PayrollFeedback.countDocuments({ status: "OPEN" }),
+    ShiftAssignment.countDocuments({ status: "PENDING", date: { $gte: localDate(new Date()) } }),
+    User.countDocuments({ status: "PENDING" }),
+    Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
+  ]);
+  const todo = [
+    { n: pCover, text: "nhờ làm hộ ca", href: "/admin/requests" },
+    { n: pAdj, text: "điều chỉnh chấm công", href: "/admin/requests" },
+    { n: pFb, text: "phản hồi bảng lương", href: "/admin/requests" },
+    { n: pReg, text: "đăng ký ca", href: "/admin/schedule" },
+    { n: pUsers, text: "tài khoản mới", href: "/admin/approvals" },
+    { n: pDevices, text: "thiết bị mới", href: "/admin/devices" },
+  ].filter((x) => x.n > 0);
+  const todoTotal = todo.reduce((a, x) => a + x.n, 0);
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
   const failedLogins =
@@ -54,6 +72,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <Receipt size={18} /> Nhập chi phí (sao kê / CK)
         </LinkButton>
       </div>
+      {todoTotal > 0 && (
+        <div className="mb-4 overflow-hidden rounded-2xl bg-[#fff4e5] ring-1 ring-warn/40 lg:hidden">
+          <Link href={todo[0].href} className="flex items-center gap-2 px-4 py-3 text-warn">
+            <BellRing size={20} className="shrink-0" />
+            <span className="flex-1 font-bold">Bạn đang có {todoTotal} yêu cầu chưa duyệt</span>
+            <ChevronRight size={18} />
+          </Link>
+          <ul className="divide-y divide-warn/15 border-t border-warn/20 bg-white/60 text-sm">
+            {todo.map((x) => (
+              <li key={x.text}>
+                <Link href={x.href} className="flex items-center justify-between px-4 py-2 text-ink">
+                  <span>
+                    <b>{x.n}</b> {x.text}
+                  </span>
+                  <span className="text-xs text-accent">Duyệt ›</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Chủ.</Alert>}
       {!settings.googleRefreshTokenEnc && (
         <Alert tone="orange">

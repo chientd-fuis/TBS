@@ -19,7 +19,7 @@ export default async function ExportPage() {
       <Card>
         <form action="/api/admin/export" method="GET" className="space-y-4">
           <Field label="Loại báo cáo">
-            <Select name="type" defaultValue="chamcong">
+            <Select name="type" defaultValue="tonghopthang">
               {Object.entries(EXPORT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
           </Field>
@@ -42,6 +42,12 @@ export default async function ExportPage() {
       </Card>
       <Card title="Nội dung từng loại">
         <ul className="list-disc space-y-1 pl-5 text-sm">
+          <li>
+            <b>Tổng hợp tháng</b> (chỉ chủ, cả chuỗi – bỏ qua lọc cơ sở / nhân viên): <b>mỗi tháng 1 sheet</b> gồm A. Lãi lỗ tháng (doanh thu từng cơ sở: TK, TM,
+            Shopee/Grab, két, DT máy · lương từng cơ sở · chi phí nguyên liệu / điện nước / khác · mặt bằng · phí sàn · tổng chi phí · lãi, biên lãi) · B. Doanh thu &amp; lãi
+            theo ngày × cơ sở · C. Chi tiết từng lượt chốt ca (âm/dương, NV cộng đúng/sai) · D. Chi phí admin nhập · E. Mặt bằng · F. Chấm công theo cơ sở (không chi tiết
+            từng nhân viên).
+          </li>
           <li><b>Bảng chấm công chi tiết + Tổng hợp</b>: mỗi nhân viên 1 sheet (Ngày, Giờ Đến, Giờ Về, Tổng, Format, Giờ tính công, Ca, Muộn, Sớm, Nguồn, Ghi chú) + sheet Summary.</li>
           <li><b>Tổng hợp</b>: mỗi nhân viên 1 dòng – giờ công, ngày công, số lần muộn/sớm, quên check-out, chấm hộ.</li>
           <li><b>Bảng lương</b>: giờ công, lương giờ, lương CB, phụ cấp, thưởng, phạt, tạm ứng, thực nhận, trạng thái.</li>

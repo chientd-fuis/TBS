@@ -3,6 +3,7 @@ import { Store } from "@/lib/models";
 import { Logo } from "@/components/Logo";
 import BottomNav from "@/components/user/BottomNav";
 import RegRequestAlert from "@/components/user/RegRequestAlert";
+import UserNotices from "@/components/user/UserNotices";
 
 export default async function UserLayout({ children }: { children: React.ReactNode }) {
   const user = await requireActiveUser();
@@ -17,6 +18,7 @@ export default async function UserLayout({ children }: { children: React.ReactNo
         </div>
       </header>
       <main className="space-y-4 p-4">
+        <UserNotices userId={user._id} />
         <RegRequestAlert userId={user._id} tz={store?.timezone || "Asia/Ho_Chi_Minh"} />
         {children}
       </main>

@@ -8,6 +8,7 @@ import { daysOfMonth, localTime, monthRange, nextMonth, viDate, viDateTime, viMo
 /* Xuất Excel cho admin – spec 3.8 */
 
 export const EXPORT_TYPES = {
+  tonghopthang: "Tổng hợp tháng – doanh thu, chi phí, lãi (mỗi tháng 1 sheet, chỉ chủ)",
   chamcong: "Bảng chấm công chi tiết + Tổng hợp",
   tonghop: "Tổng hợp chấm công tháng",
   luong: "Bảng lương tháng",
@@ -19,6 +20,7 @@ export const EXPORT_TYPES = {
 export type ExportType = keyof typeof EXPORT_TYPES;
 
 const FILE_KEY: Record<ExportType, string> = {
+  tonghopthang: "TongHopThang",
   chamcong: "ChamCong",
   tonghop: "TongHop",
   luong: "BangLuong",
@@ -133,11 +135,19 @@ export async function buildExport(f: ExportFilter) {
   const { stores, storeIds, users, storeName } = await loadScope(f);
   const ms = months(f.fromMonth, f.toMonth);
   const period = ms.length === 1 ? `Tháng ${viMonth(ms[0])}` : `Tháng ${viMonth(ms[0])} – ${viMonth(ms[ms.length - 1])}`;
-  const storeLabel = f.storeIds.length ? stores.map((s) => s.name).join(", ") : "Tất cả cơ sở";
+  const storeLabel = f.type === "tonghopthang" ? "Cả chuỗi" : f.storeIds.length ? stores.map((s) => s.name).join(", ") : "Tất cả cơ sở";
   const meta = `${storeLabel} · ${period} · Xuất lúc ${viDateTime(new Date())} bởi ${f.exportedBy}`;
   const userIds = users.map((u) => u._id);
   const tzOf = (sid: unknown) => stores.find((s) => String(s._id) === String(sid))?.timezone || "Asia/Ho_Chi_Minh";
   const used = new Set<string>();
+
+  if (f.type === "tonghopthang") {
+    // mỗi tháng 1 sheet – toàn chuỗi (bỏ qua lọc cơ sở / nhân viên)
+    const { addMonthSummarySheet } = await import("./export-summary");
+    const { loadStores } = await import("./finance-data");
+    const all = await loadStores();
+    for (const m of ms) await addMonthSummarySheet(wb, m, sheetName(`T${m.slice(5)}-${m.slice(0, 4)}`, used), meta, all);
+  }
 
   if (f.type === "chamcong" || f.type === "tonghop") {
     // theo cơ sở trả lương (gồm giờ đi hỗ trợ cơ sở khác)
@@ -333,7 +343,7 @@ export async function buildExport(f: ExportFilter) {
 
   if (wb.worksheets.length === 0) wb.addWorksheet("Trống").getCell("A1").value = "Không có dữ liệu";
 
-  const storePart = f.storeIds.length === 1 ? (stores[0]?.name || "").replace(/^TBS\s*/i, "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").replace(/\s+/g, "") : "TatCa";
+  const storePart = f.type === "tonghopthang" ? "CaChuoi" : f.storeIds.length === 1 ? (stores[0]?.name || "").replace(/^TBS\s*/i, "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").replace(/\s+/g, "") : "TatCa";
   const monthPart = ms.length === 1 ? ms[0] : `${ms[0]}_${ms[ms.length - 1]}`;
   const fileName = `TBS_${FILE_KEY[f.type]}_${storePart}_${monthPart}.xlsx`;
   const buffer = await wb.xlsx.writeBuffer();

@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import type { StoreLite } from "@/lib/finance-data";
-import { CATEGORY_LABEL, contributionMargin, COST_LABEL, margin, STORE_COST_KEYS, type PnlLine, type PnlResult } from "@/lib/finance";
+import { contributionMargin, COST_LABEL, margin, STORE_COST_KEYS, type PnlLine, type PnlResult } from "@/lib/finance";
 import { viDate, viMonth, weekdayVi } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
 import { Card, Empty } from "@/components/ui";
@@ -51,27 +51,22 @@ export default function PnlView({
   const t = pnl.total;
   const pt = prev.total;
   const storeKeys = STORE_COST_KEYS.filter((k) => k !== "direct" || t.direct > 0);
-  const commonCats = Object.entries(pnl.byCategory).sort((a, b) => b[1] - a[1]);
   const shownDates = [...dates].reverse();
   const link = (a: boolean) => `/admin/finance?month=${month}${a ? "&alloc=1" : ""}`;
 
-  // biểu đồ tròn: màu cố định theo loại chi phí (không đổi theo thứ hạng); loại nhỏ gộp vào "Khác"
-  const PALETTE = { labor: "#2a78d6", fixed: "#eb6834", NGUYEN_LIEU: "#1baf7a", cashbox: "#eda100", platformFee: "#e87ba4", BAO_BI: "#6250d6" } as const;
-  const otherCommon = commonCats.filter(([k]) => k !== "NGUYEN_LIEU" && k !== "BAO_BI").reduce((x, [, v]) => x + v, 0);
+  // biểu đồ tròn: màu cố định theo loại chi phí (không đổi theo thứ hạng)
+  const cat = (k: string) => pnl.byCategory[k] ?? 0;
+  // 5 loại chi phí theo yêu cầu; tổng = Tổng chi phí (gồm cả chi phí két)
   const slices: Slice[] = [
-    { key: "labor", label: "Lương NV", value: t.labor, color: PALETTE.labor },
-    { key: "fixed", label: "Tiền thuê nhà", value: t.fixed, color: PALETTE.fixed },
-    { key: "NGUYEN_LIEU", label: "Nguyên liệu", value: pnl.byCategory.NGUYEN_LIEU ?? 0, color: PALETTE.NGUYEN_LIEU },
-    { key: "cashbox", label: "Chi phí trong ca (két)", value: t.cashbox, color: PALETTE.cashbox },
-    { key: "platformFee", label: "Phí sàn Grab/Shopee", value: t.platformFee, color: PALETTE.platformFee },
-    { key: "BAO_BI", label: "Bao bì, ly, ống hút", value: pnl.byCategory.BAO_BI ?? 0, color: PALETTE.BAO_BI },
-    {
-      key: "other",
-      label: `Khác${otherCommon ? ` (${commonCats.filter(([k]) => k !== "NGUYEN_LIEU" && k !== "BAO_BI").map(([k]) => CATEGORY_LABEL[k] ?? k).join(", ")})` : ""}`,
-      value: otherCommon + t.direct,
-      color: "#9a9a92",
-    },
-  ].sort((x, y) => (x.key === "other" ? 1 : y.key === "other" ? -1 : y.value - x.value));
+    { key: "labor", label: "Lương NV", value: t.labor + cat("LUONG"), color: "#2a78d6" },
+    { key: "shared", label: "Chi phí (NL, điện nước, khác)", value: t.shared - cat("LUONG") + t.direct, color: "#1baf7a" },
+    { key: "fixed", label: "Chi phí cố định – Mặt bằng", value: t.fixed, color: "#eb6834" },
+    { key: "platformFee", label: "Phí sàn Shopee/Grab", value: t.platformFee, color: "#e87ba4" },
+    { key: "cashbox", label: "Chi phí két", value: t.cashbox, color: "#eda100" },
+  ];
+  /** Tổng chi phí = Lương + Chi phí + Mặt bằng + Phí sàn + Chi phí két (két đã trừ trong tiền mặt nên Lãi không trừ lại) */
+  const totalCost = t.cost + t.cashbox;
+  const prevTotalCost = pt.cost + pt.cashbox;
 
   return (
     <div className="space-y-4">
@@ -84,17 +79,17 @@ export default function PnlView({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="p-3">
-          <p className="text-xs text-ink/60">Doanh thu thực thu (cả chuỗi)</p>
+          <p className="text-xs text-ink/60">Doanh thu 3 cơ sở</p>
           <p className="text-xl font-bold tabular-nums">{vnd(t.revenue)}</p>
           <Delta now={t.revenue} prev={pt.revenue} />
         </Card>
         <Card className="p-3">
           <p className="text-xs text-ink/60">Tổng chi phí</p>
-          <p className="text-xl font-bold tabular-nums">{vnd(t.cost)}</p>
-          <Delta now={t.cost} prev={pt.cost} invert />
+          <p className="text-xl font-bold tabular-nums">{vnd(totalCost)}</p>
+          <Delta now={totalCost} prev={prevTotalCost} invert />
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-ink/60">Lãi toàn chuỗi (ước tính)</p>
+          <p className="text-xs text-ink/60">Lãi (ước tính)</p>
           <p className={cn("text-xl font-bold tabular-nums", profitCls(t.profit))}>{signed(t.profit)}</p>
           <Delta now={t.profit} prev={pt.profit} />
         </Card>
@@ -109,76 +104,108 @@ export default function PnlView({
         <Card title="Lãi lỗ toàn chuỗi">
           <table className="w-full text-sm">
             <tbody>
-              {stores.map((st) => {
-                const l = pnl.byStore[st._id];
-                const plus: [string, number][] = [
-                  ["Tiền mặt", l.tm],
-                  ["Tài khoản", l.tk],
-                  ["Grab", l.grab],
-                  ["Shopee", l.shopee],
-                  ["Tiền két đã chi trong ca", l.cashbox],
-                ];
-                const minus = storeKeys.map((k) => [COST_LABEL[k], l[k]] as [string, number]);
-                return (
-                  <Fragment key={st._id}>
+              {(() => {
+                const group = (title: string, total: number, items: [string, number][], sign: "+" | "−", note?: string) => (
+                  <>
                     <tr className="border-t-2 border-[#f1e6c8]">
-                      <td className="pt-2.5 pb-1 font-bold text-accent" colSpan={2}>
-                        Doanh thu thực thu {st.name}
-                        <span className="ml-2 text-xs font-normal text-ink/50">DT máy đối chiếu {vnd(l.machine)}</span>
+                      <td className="pt-2.5 pb-1 font-bold text-accent">
+                        {sign === "−" ? "− " : ""}
+                        {title}
                       </td>
+                      <td className="pt-2.5 pb-1 text-right font-bold tabular-nums">{vnd(total)}</td>
                     </tr>
-                    {plus
-                      .filter(([, v]) => v)
-                      .map(([k, v]) => (
-                        <tr key={k} className="text-ink/80">
-                          <td className="py-0.5 pl-4">+ {k}</td>
-                          <td className="py-0.5 text-right tabular-nums">{vnd(v)}</td>
-                        </tr>
-                      ))}
-                    {minus
-                      .filter(([, v]) => v)
-                      .map(([k, v]) => (
-                        <tr key={k} className="text-ink/60">
-                          <td className="py-0.5 pl-4">− {k}</td>
-                          <td className="py-0.5 text-right tabular-nums">{vnd(v)}</td>
-                        </tr>
-                      ))}
-                    <tr className="border-b border-[#f8f1dd] font-semibold">
-                      <td className="py-1.5 pl-4">= Lãi gộp {st.short}</td>
-                      <td className={cn("py-1.5 text-right tabular-nums", profitCls(l.contribution))}>{signed(l.contribution)}</td>
-                    </tr>
-                  </Fragment>
+                    {items.map(([k, v]) => (
+                      <tr key={k} className="text-ink/70">
+                        <td className="py-0.5 pl-5">{k}</td>
+                        <td className="py-0.5 text-right tabular-nums">{vnd(v)}</td>
+                      </tr>
+                    ))}
+                    {note && (
+                      <tr className="text-xs text-ink/50">
+                        <td className="pt-0.5 pb-1.5 pl-5" colSpan={2}>{note}</td>
+                      </tr>
+                    )}
+                  </>
                 );
-              })}
-              <tr className="border-y-2 border-[#f1e6c8] bg-cream font-bold">
-                <td className="py-1.5 pl-1">Σ Lãi gộp các cơ sở</td>
-                <td className={cn("py-1.5 text-right tabular-nums", profitCls(t.contribution))}>{signed(t.contribution)}</td>
-              </tr>
-              <tr className="border-b border-[#f8f1dd]">
-                <td className="py-1.5 pl-3 text-ink/70">− {COST_LABEL.shared}</td>
-                <td className="py-1.5 text-right tabular-nums text-ink/70">{vnd(t.shared)}</td>
-              </tr>
-              {commonCats.map(([k, v]) => (
-                <tr key={k} className="text-xs text-ink/55">
-                  <td className="py-0.5 pl-7">{CATEGORY_LABEL[k] ?? k}</td>
-                  <td className="py-0.5 text-right tabular-nums">{vnd(v)}</td>
-                </tr>
-              ))}
-              <tr className="bg-[#e3f3e7] text-base font-bold">
-                <td className="py-2 pl-1">= LÃI TOÀN CHUỖI</td>
-                <td className={cn("py-2 text-right tabular-nums", profitCls(t.profit))}>{signed(t.profit)}</td>
-              </tr>
+                const per = (f: (l: PnlLine) => number) => stores.map((st) => [st.name, f(pnl.byStore[st._id])] as [string, number]);
+                const costItems: [string, number][] = [
+                  ["Nguyên liệu", cat("NGUYEN_LIEU")],
+                  ["Điện nước", cat("DIEN_NUOC")],
+                  ["Khác", cat("KHAC")],
+                  ...(cat("LUONG") ? [["Lương / thưởng (chuyển khoản, có tick tính)", cat("LUONG")] as [string, number]] : []),
+                ];
+                return (
+                  <>
+                    <tr className="border-t-2 border-[#f1e6c8]">
+                      <td className="pt-2.5 pb-1 font-bold text-accent">Doanh thu (chốt ca)</td>
+                      <td className="pt-2.5 pb-1 text-right font-bold tabular-nums">{vnd(t.revenue)}</td>
+                    </tr>
+                    {stores.map((st) => {
+                      const l = pnl.byStore[st._id];
+                      return (
+                        <Fragment key={st._id}>
+                          <tr className="font-semibold">
+                            <td className="pt-1 pl-5">{st.name}</td>
+                            <td className="pt-1 text-right tabular-nums">{vnd(l.revenue)}</td>
+                          </tr>
+                          {(
+                            [
+                              ["+ Tài khoản", l.tk],
+                              ["+ Tiền mặt", l.tm],
+                              ["+ Shopee / Grab", l.shopee + l.grab],
+                            ] as [string, number][]
+                          ).map(([k, v]) => (
+                            <tr key={k} className="text-xs text-ink/65">
+                              <td className="pl-10">{k}</td>
+                              <td className="text-right tabular-nums">{vnd(v)}</td>
+                            </tr>
+                          ))}
+                          <tr className="text-xs text-ink/45 italic">
+                            <td className="pb-1 pl-10">Chi phí két (đã chi, trừ sẵn trong tiền mặt)</td>
+                            <td className="pb-1 text-right tabular-nums">{vnd(l.cashbox)}</td>
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
+                    {group("Lương NV", t.labor, per((l) => l.labor), "−", "Giờ công × lương giờ ± thưởng/phạt + phụ cấp (ước tính, tính cho cơ sở nơi làm)")}
+                    {group("Chi phí (admin nhập)", t.shared, costItems, "−")}
+                    {group("Chi phí cố định – Mặt bằng", t.fixed, per((l) => l.fixed), "−")}
+                    {group(
+                      "Phí sàn Shopee/Grab",
+                      t.platformFee,
+                      stores.map((st) => [`${st.name} (Grab ${st.grabFeePct}% · Shopee ${st.shopeeFeePct}%)`, pnl.byStore[st._id].platformFee] as [string, number]),
+                      "−",
+                      t.platformFee ? undefined : "Chưa đặt % phí sàn – vào tab Cài đặt",
+                    )}
+                    {t.direct > 0 && group("Chi phí gắn riêng cơ sở (dữ liệu cũ)", t.direct, per((l) => l.direct), "−")}
+                    <tr className="border-t-2 border-[#f1e6c8] bg-cream font-bold">
+                      <td className="py-2 pl-1">
+                        Tổng chi phí
+                        <span className="block text-xs font-normal text-ink/55">Lương NV + Chi phí + Mặt bằng + Phí sàn + Chi phí két {vnd(t.cashbox)}</span>
+                      </td>
+                      <td className="py-2 text-right tabular-nums">{vnd(totalCost)}</td>
+                    </tr>
+                    <tr className="border-t-2 border-[#f1e6c8] bg-[#e3f3e7] text-base font-bold">
+                      <td className="py-2 pl-1">
+                        = LÃI
+                        <span className="block text-xs font-normal text-ink/55">Doanh thu 3 cơ sở − Lương − Chi phí − Mặt bằng − Phí sàn (không trừ chi phí két – đã trừ trong tiền mặt)</span>
+                      </td>
+                      <td className={cn("py-2 text-right tabular-nums", profitCls(t.profit))}>{signed(t.profit)}</td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </Card>
 
         <Card title="Cơ cấu chi phí">
-          <CostPie slices={slices} total={t.cost} revenue={t.revenue} />
+          <CostPie slices={slices} total={totalCost} revenue={t.revenue} />
         </Card>
       </div>
 
       <Card
-        title="Theo cơ sở"
+        title="Theo cơ sở (tham khảo)"
         actions={
           <div className="flex rounded-lg bg-gray-100 p-0.5 text-xs">
             <Link href={link(false)} className={cn("rounded-md px-2.5 py-1", !alloc && "bg-white font-bold shadow-sm")}>Lãi gộp cơ sở</Link>
@@ -209,7 +236,8 @@ export default function PnlView({
                 );
                 return (
                   <>
-                    {row("Doanh thu thực thu", cols.map((l) => l.revenue), "font-bold")}
+                    {row("Doanh thu (chốt ca)", cols.map((l) => l.revenue), "font-bold")}
+                    {row("Chi phí két (đã trừ, để biết)", cols.map((l) => l.cashbox), "text-xs text-ink/50")}
                     {row("DT máy (đối chiếu)", cols.map((l) => l.machine), "text-xs text-ink/50")}
                     {storeKeys.map((k) => row(`− ${COST_LABEL[k]}`, cols.map((l) => l[k]), "text-ink/70"))}
                     {row("= Lãi gộp cơ sở", cols.map((l) => l.contribution), "bg-cream font-bold", true)}
@@ -275,9 +303,8 @@ export default function PnlView({
       </Card>
 
       <p className="text-xs text-ink/60">
-        T{viMonth(month)} · Doanh thu thực thu = TM + TK + Grab + Shopee + tiền két đã chi (lấy từ chốt ca). Chi phí cơ sở: phí sàn, chi phí trong ca, lương (giờ công × lương
-        giờ ± thưởng/phạt + phụ cấp, tính cho cơ sở nơi làm), tiền thuê nhà chia theo ngày. Chi phí chung: các khoản admin nhập từ sao kê / CK có tick &quot;Tính vào chi
-        phí&quot;.
+        T{viMonth(month)} · Lãi = Doanh thu 3 cơ sở (TM + TK + Grab + Shopee từ chốt ca) − Lương NV − Chi phí admin nhập (có tick &quot;Tính vào chi phí&quot;) − Mặt bằng.
+        Chi phí két trong ca đã trừ sẵn trong tiền mặt nên chỉ hiện để biết.
       </p>
     </div>
   );

@@ -1,18 +1,24 @@
 /* Tài chính: doanh thu – chi phí – lợi nhuận. File thuần (không DB) để dễ test. */
 import { parseMoney, parseOcrDate } from "./revenue";
 
+/** Mục chi phí admin nhập: Nguyên liệu · Điện nước · Khác (+ Lương NV: chỉ lưu chứng từ, mặc định không tính). */
 export const EXPENSE_CATEGORIES = [
   { key: "NGUYEN_LIEU", label: "Nguyên liệu" },
-  { key: "BAO_BI", label: "Bao bì, ly, ống hút" },
-  { key: "VAN_CHUYEN", label: "Vận chuyển, ship" },
-  { key: "DIEN_NUOC", label: "Điện, nước, gas" },
-  { key: "MAT_BANG", label: "Mặt bằng" },
-  { key: "SUA_CHUA", label: "Sửa chữa, thiết bị" },
-  { key: "PHAN_MEM", label: "Phần mềm, internet" },
-  { key: "MARKETING", label: "Marketing" },
+  { key: "DIEN_NUOC", label: "Điện nước" },
   { key: "KHAC", label: "Khác" },
   { key: "LUONG", label: "Lương / thưởng / tạm ứng NV" },
 ] as const;
+/** Mục cũ (dữ liệu trước đây) – vẫn hợp lệ, hiển thị gộp vào "Khác". */
+const LEGACY_CATEGORIES: Record<string, string> = {
+  BAO_BI: "Bao bì, ly, ống hút",
+  VAN_CHUYEN: "Vận chuyển, ship",
+  MAT_BANG: "Mặt bằng",
+  SUA_CHUA: "Sửa chữa, thiết bị",
+  PHAN_MEM: "Phần mềm, internet",
+  MARKETING: "Marketing",
+};
+/** Nhóm hiển thị trên báo cáo: NGUYEN_LIEU | DIEN_NUOC | LUONG | KHAC */
+export const categoryGroup = (c?: string | null) => (c === "NGUYEN_LIEU" || c === "DIEN_NUOC" || c === "LUONG" ? c : "KHAC");
 /** Danh mục chỉ lưu chứng từ, KHÔNG cộng vào chi phí (lương đã tính từ bảng lương / giờ công). */
 export const EXCLUDED_CATEGORIES: readonly string[] = ["LUONG"];
 /** Mặc định lương/thưởng KHÔNG tính (đã có bảng lương) – admin tick "Tính vào chi phí" để tính. */
@@ -20,7 +26,7 @@ export const defaultCountInCost = (category?: string | null) => !EXCLUDED_CATEGO
 export const isCountedExpense = (e: { category?: string | null; paidFrom?: string | null; countInCost?: boolean | null }) =>
   e.paidFrom !== "CASHBOX" && (typeof e.countInCost === "boolean" ? e.countInCost : defaultCountInCost(e.category));
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]["key"];
-export const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c.key, c.label]));
+export const CATEGORY_LABEL: Record<string, string> = { ...LEGACY_CATEGORIES, ...Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c.key, c.label])) };
 export const isCategory = (v: unknown): v is ExpenseCategory => typeof v === "string" && v in CATEGORY_LABEL;
 
 export const ALLOCATIONS = [
@@ -114,15 +120,16 @@ export const emptyLine = (): PnlLine => ({
   profit: 0,
 });
 /** chi phí phát sinh tại cơ sở */
-export const STORE_COST_KEYS = ["platformFee", "cashbox", "labor", "fixed", "direct"] as const;
+// chi phí két KHÔNG nằm ở đây: tiền mặt cuối ca đã trừ khoản chi két → doanh thu đã là số thực, két chỉ để biết
+export const STORE_COST_KEYS = ["platformFee", "labor", "fixed", "direct"] as const;
 const COST_KEYS = [...STORE_COST_KEYS, "shared"] as const;
-export const COST_LABEL: Record<(typeof COST_KEYS)[number], string> = {
+export const COST_LABEL: Record<(typeof COST_KEYS)[number] | "cashbox", string> = {
   platformFee: "Phí sàn Grab/Shopee",
-  cashbox: "Chi phí trong ca (két)",
-  labor: "Lương NV (ước tính)",
-  fixed: "Tiền thuê nhà",
+  cashbox: "Chi phí két (trong ca)",
+  labor: "Lương NV",
+  fixed: "Mặt bằng",
   direct: "Chi phí gắn riêng cơ sở",
-  shared: "Chi phí chung (admin nhập)",
+  shared: "Chi phí (admin nhập)",
 };
 export { COST_KEYS };
 
@@ -173,7 +180,7 @@ export type PnlResult = {
   byStore: Record<string, PnlLine>; // lãi gộp từng cơ sở
   byDate: Record<string, PnlLine>; // cả chuỗi theo ngày (có chi phí chung)
   total: PnlLine; // cả chuỗi
-  /** chi phí chung (admin nhập) theo mục */
+  /** chi phí admin nhập theo nhóm: NGUYEN_LIEU | DIEN_NUOC | LUONG | KHAC (tổng = total.shared) */
   byCategory: Record<string, number>;
   /** tuỳ chọn xem theo cơ sở: phần chi phí chung chia theo tỷ lệ doanh thu kỳ */
   allocByStore: Record<string, number>;
@@ -197,7 +204,7 @@ export function computePnl(inp: PnlInput): PnlResult {
     const fee = inp.fees[r.storeId] ?? { grab: 0, shopee: 0 };
     const cp = r.cp || 0;
     addLine(cell(r.date, r.storeId), {
-      revenue: (r.tm || 0) + (r.tk || 0) + (r.grab || 0) + (r.shopee || 0) + cp,
+      revenue: (r.tm || 0) + (r.tk || 0) + (r.grab || 0) + (r.shopee || 0), // thực thu (đã trừ chi két)
       machine: r.dt || 0,
       tm: r.tm || 0,
       tk: r.tk || 0,
@@ -212,8 +219,10 @@ export function computePnl(inp: PnlInput): PnlResult {
     // tiền két đã tính trong "Thu chi" chốt ca; khoản bỏ tick "tính vào chi phí" (VD lương) → không cộng
     if (!inDate.has(e.date) || !isCountedExpense(e)) continue;
     if (e.scope === "STORE" && e.storeId && inStore.has(String(e.storeId))) addLine(cell(e.date, String(e.storeId)), { direct: e.amount });
-    else addCommon(e.date, e.amount);
-    addCat(e.category, e.amount);
+    else {
+      addCommon(e.date, e.amount);
+      addCat(categoryGroup(e.category), e.amount); // gộp: Nguyên liệu / Điện nước / Lương / Khác
+    }
   }
 
   for (const f of inp.fixed) {
@@ -222,7 +231,10 @@ export function computePnl(inp: PnlInput): PnlResult {
       if (m < f.startMonth || (f.endMonth && m > f.endMonth)) continue;
       const perDay = Math.round(f.amountPerMonth / daysInMonth(m));
       if (f.scope === "STORE" && f.storeId && inStore.has(String(f.storeId))) addLine(cell(d, String(f.storeId)), { fixed: perDay });
-      else addCommon(d, perDay);
+      else {
+        addCommon(d, perDay);
+        addCat("KHAC", perDay);
+      }
     }
   }
 

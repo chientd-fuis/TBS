@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
-import { ShiftAssignment, Store } from "@/lib/models";
+import { APPROVED_SHIFT, CoverRequest, ShiftAssignment, Store, User } from "@/lib/models";
+import CoverForm, { type CoverCandidate } from "@/components/user/CoverForm";
+import CancelCoverButton from "@/components/user/CancelCoverButton";
 import { addDays, daysOfMonth, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekdayVi, weekStartOf } from "@/lib/time";
 import { Alert, Card, LinkButton } from "@/components/ui";
 import { cn } from "@/lib/format";
@@ -71,6 +73,28 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const pendingCount = mine.filter((m) => m.status === "PENDING").length;
   const nextWeek = addDays(weekStartOf(today), 7);
 
+  // Nhờ làm hộ: ca đã duyệt của tôi trong 14 ngày tới + người có thể nhờ
+  const upcoming = await ShiftAssignment.find({ userId: user._id, date: { $gte: today, $lte: addDays(today, 13) }, ...APPROVED_SHIFT })
+    .sort({ date: 1, startTime: 1 })
+    .lean();
+  const covers = await CoverRequest.find({
+    fromUserId: user._id,
+    $or: [{ status: "PENDING" }, { decidedAt: { $gte: new Date(Date.now() - 7 * 86400_000) } }],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+  const allStores = new Map((await Store.find().select("name").lean()).map((x) => [String(x._id), x.name.replace(/^TBS\s*/i, "")]));
+  const people = await User.find({ status: "ACTIVE", _id: { $ne: user._id } }).select("name storeId").sort({ name: 1 }).lean();
+  const names = new Map(people.map((p) => [String(p._id), p.name]));
+  const candidates: CoverCandidate[] = people.map((p) => ({
+    id: String(p._id),
+    name: p.name ?? "",
+    store: allStores.get(String(p.storeId)) ?? "",
+    same: String(p.storeId) === String(user.storeId),
+  }));
+  const pendingCover = new Map(covers.filter((c) => c.status === "PENDING").map((c) => [String(c.shiftAssignmentId), c]));
+  const COVER_ST = { PENDING: ["Chờ admin duyệt", "text-warn"], APPROVED: ["Đã duyệt", "text-secondary-dark"], REJECTED: ["Bị từ chối", "text-danger"], CANCELLED: ["Đã huỷ", "text-ink/50"] } as const;
+
   return (
     <>
       <div className="flex items-center justify-between gap-2">
@@ -119,6 +143,53 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           {supportList(daysOfMonth(month))}
         </>
       )}
+
+      <Card title="Nhờ làm hộ ca">
+        {!upcoming.length ? (
+          <p className="text-sm text-ink/60">Bạn chưa có ca đã duyệt trong 2 tuần tới.</p>
+        ) : (
+          <ul className="divide-y divide-[#f1e6c8]">
+            {upcoming.map((m) => {
+              const label = `${m.shiftName ?? ""} ${m.startTime}–${m.endTime} ${weekdayVi(m.date)} ${m.date.slice(8)}/${m.date.slice(5, 7)}`;
+              const p = pendingCover.get(String(m._id));
+              return (
+                <li key={String(m._id)} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span>
+                    <b>{weekdayVi(m.date)} {m.date.slice(8)}/{m.date.slice(5, 7)}</b> · {m.shiftName} {m.startTime}–{m.endTime}
+                    {String(m.storeId) !== String(user.storeId) && <span className="text-xs text-ink/60"> · {allStores.get(String(m.storeId))}</span>}
+                  </span>
+                  {p ? (
+                    <span className="text-xs text-warn">Đang nhờ {names.get(String(p.toUserId)) ?? "?"} – chờ duyệt</span>
+                  ) : (
+                    <CoverForm shiftId={String(m._id)} label={label} candidates={candidates} />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {covers.length > 0 && (
+          <div className="mt-3 border-t border-[#f1e6c8] pt-2">
+            <p className="mb-1 text-xs font-semibold text-accent">Yêu cầu của bạn</p>
+            <ul className="space-y-1 text-xs">
+              {covers.map((c) => {
+                const st = COVER_ST[c.status as keyof typeof COVER_ST];
+                return (
+                  <li key={String(c._id)} className="flex flex-wrap items-center gap-x-2">
+                    <span className="flex-1">
+                      Nhờ <b>{names.get(String(c.toUserId)) ?? "?"}</b> · {c.shiftName} {c.startTime}–{c.endTime} {c.date.slice(8)}/{c.date.slice(5, 7)}
+                      {c.reply && <span className="text-ink/60"> – {c.reply}</span>}
+                    </span>
+                    <span className={st[1]}>{st[0]}</span>
+                    {c.status === "PENDING" && <CancelCoverButton id={String(c._id)} />}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-ink/50">Admin duyệt xong, ca sẽ chuyển sang người làm hộ và người đó nhận được thông báo.</p>
+      </Card>
     </>
   );
 }

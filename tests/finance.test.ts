@@ -32,19 +32,21 @@ test("lãi lỗ chuỗi: lãi gộp cơ sở − chi phí chung; theo cơ sở l
     fees: { a: { grab: 25, shopee: 0 } },
   });
   const a = r.byStore.a;
-  assert.equal(a.revenue, 3_050_000);
+  assert.equal(a.revenue, 3_000_000); // TM + TK + Grab (két đã trừ sẵn trong tiền mặt)
+  assert.equal(a.cashbox, 50_000); // chỉ để biết
   assert.equal(a.machine, 3_000_000);
-  assert.equal(a.contribution, 3_050_000 - 250_000 - 50_000 - 500_000);
-  assert.equal(a.shared, 0); // chi phí chung không nằm ở cơ sở
-  assert.equal(r.byStore.b.fixed, 200_000); // thuê 3tr / 30 ngày × 2 ngày
+  assert.equal(a.contribution, 3_000_000 - 250_000 - 500_000);
+  assert.equal(a.shared, 0);
+  assert.equal(r.byStore.b.fixed, 200_000); // mặt bằng 3tr / 30 ngày × 2 ngày
   assert.equal(r.total.shared, 600_000);
   assert.equal(r.byDate["2026-11-01"].shared, 600_000);
-  assert.equal(r.total.profit, a.contribution + r.byStore.b.contribution - 600_000);
+  // Lãi = DT 3 cơ sở − lương − chi phí admin − mặt bằng − phí sàn
+  assert.equal(r.total.profit, 4_000_000 - 500_000 - 600_000 - 200_000 - 250_000);
   assert.equal(r.byCategory.NGUYEN_LIEU, 400_000);
+  assert.equal(r.byCategory.KHAC, 200_000); // BAO_BI (mục cũ) gộp vào Khác
   assert.equal(r.byCategory.LUONG, undefined);
-  // tuỳ chọn phân bổ theo doanh thu: a 3.050.000 / b 1.000.000
   assert.equal(r.allocByStore.a + r.allocByStore.b, 600_000);
-  assert.equal(r.allocByStore.b, Math.round((600_000 * 1_000_000) / 4_050_000));
+  assert.equal(r.allocByStore.b, Math.round((600_000 * 1_000_000) / 4_000_000));
 });
 
 test("đọc bill + bất thường doanh thu", () => {
@@ -133,4 +135,32 @@ test("checkbox tính vào chi phí ghi đè mặc định theo mục", async () 
     expenses: [{ date: "2026-11-01", amount: 2_000_000, scope: "SHARED", category: "LUONG", countInCost: true }],
   });
   assert.equal(r.total.cost, 2_000_000);
+});
+
+test("xuất tổng hợp tháng: 1 sheet / tháng có lãi lỗ, doanh thu ngày, chốt ca, chi phí", async () => {
+  const ExcelJS = (await import("exceljs")).default;
+  const { writeMonthSummarySheet } = await import("../src/lib/export-summary");
+  const stores = [{ _id: "a", name: "TBS Geleximco", short: "Geleximco", grabFeePct: 0, shopeeFeePct: 0 }];
+  const dates = ["2026-10-01", "2026-10-02"];
+  const pnl = computePnl({
+    storeIds: ["a"], dates, fees: {}, fixed: [], labor: [{ storeId: "a", date: "2026-10-01", amount: 500_000 }],
+    revenue: [{ storeId: "a", date: "2026-10-01", dt: 3_000_000, tm: 1_000_000, tk: 2_000_000, cp: 0, grab: 0, shopee: 0 }],
+    expenses: [{ date: "2026-10-02", amount: 400_000, scope: "SHARED", category: "NGUYEN_LIEU" }],
+  });
+  const wb = new ExcelJS.Workbook();
+  writeMonthSummarySheet(
+    wb,
+    { month: "2026-10", first: "2026-10-01", to: "2026-10-02", last: "2026-10-31", today: "2026-11-08", stores, pnl, dates, dayRev: [], closings: [], exps: [{ date: "2026-10-02", category: "NGUYEN_LIEU", amount: 400_000 }], rents: [], atts: [], asg: [] } as never,
+    "T10-2026",
+    "test",
+  );
+  const ws = wb.getWorksheet("T10-2026")!;
+  const rows: unknown[][] = [];
+  ws.eachRow((r) => rows.push((r.values as unknown[]).slice(1)));
+  const find = (label: string) => rows.find((r) => r[0] === label);
+  assert.equal(find("DOANH THU (chốt ca)")?.[1], 3_000_000);
+  assert.equal(find("= LÃI")?.[1], 3_000_000 - 500_000 - 400_000);
+  assert.ok(rows.some((r) => r[0] === "C. CHI TIẾT CHỐT CA (0 lượt)"));
+  assert.ok(rows.some((r) => r[0] === "D. CHI PHÍ ADMIN NHẬP (1 khoản)"));
+  assert.ok(rows.some((r) => r[0] === "F. CHẤM CÔNG THEO CƠ SỞ"));
 });

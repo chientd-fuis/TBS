@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, PayrollFeedback, Store, User } from "@/lib/models";
+import { AdjustmentRequest, CoverRequest, PayrollFeedback, Store, User } from "@/lib/models";
+import { resolveCover } from "../../actions/cover";
+import { weekdayVi } from "@/lib/time";
 import { viDate, viDateTime, viMonth } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
@@ -11,17 +13,67 @@ export const dynamic = "force-dynamic";
 /** Yêu cầu điều chỉnh chấm công + phản hồi bảng lương của nhân viên */
 export default async function RequestsPage() {
   await requireAdmin();
-  const [reqs, done, fbs] = await Promise.all([
+  const [covers, coversDone, reqs, done, fbs] = await Promise.all([
+    CoverRequest.find({ status: "PENDING" }).sort({ date: 1 }).lean(),
+    CoverRequest.find({ status: { $ne: "PENDING" } }).sort({ decidedAt: -1 }).limit(10).lean(),
     AdjustmentRequest.find({ status: "PENDING" }).sort({ createdAt: 1 }).lean(),
     AdjustmentRequest.find({ status: { $ne: "PENDING" } }).sort({ resolvedAt: -1 }).limit(15).lean(),
     PayrollFeedback.find().sort({ status: 1, createdAt: -1 }).limit(30).lean(),
   ]);
-  const ids = [...reqs, ...done, ...fbs].map((r) => r.userId);
+  const ids = [...reqs, ...done, ...fbs].map((r) => r.userId).concat([...covers, ...coversDone].flatMap((c) => [c.fromUserId, c.toUserId]));
   const users = new Map((await User.find({ _id: { $in: ids } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const stores = new Map((await Store.find().lean()).map((s) => [String(s._id), s.name]));
   return (
     <>
       <PageTitle>Yêu cầu từ nhân viên</PageTitle>
+      <Card title={`Nhờ làm hộ ca chờ duyệt (${covers.length})`} className="mb-4">
+        {covers.length === 0 ? (
+          <Empty>Không có yêu cầu</Empty>
+        ) : (
+          <div className="space-y-3">
+            {covers.map((c) => (
+              <div key={String(c._id)} className="rounded-xl bg-cream p-3 text-sm">
+                <p>
+                  <b>{users.get(String(c.fromUserId))}</b> nhờ <b>{users.get(String(c.toUserId))}</b> làm hộ
+                </p>
+                <p>
+                  {weekdayVi(c.date)} {viDate(c.date)} · Ca {c.shiftName} {c.startTime}–{c.endTime} · {stores.get(String(c.storeId))}
+                </p>
+                {c.note && <p className="text-ink/70">Lời nhắn: {c.note}</p>}
+                <p className="text-xs text-ink/50">Gửi {viDateTime(c.createdAt)}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <ActionForm action={resolveCover} submitLabel="Duyệt – chuyển ca" variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
+                    <input type="hidden" name="id" value={String(c._id)} />
+                    <input type="hidden" name="op" value="approve" />
+                    <Input name="reply" placeholder="Ghi chú (tuỳ chọn)" className="w-44" />
+                  </ActionForm>
+                  <ActionForm action={resolveCover} submitLabel="Từ chối" variant="outline" successText="" className="flex items-end gap-1">
+                    <input type="hidden" name="id" value={String(c._id)} />
+                    <input type="hidden" name="op" value="reject" />
+                    <Input name="reply" placeholder="Lý do từ chối" className="w-40" />
+                  </ActionForm>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {coversDone.length > 0 && (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-accent">Đã xử lý gần đây</summary>
+            <ul className="mt-2 space-y-1">
+              {coversDone.map((c) => (
+                <li key={String(c._id)}>
+                  {users.get(String(c.fromUserId))} → {users.get(String(c.toUserId))} · {viDate(c.date)} ca {c.shiftName} ·{" "}
+                  <Badge tone={c.status === "APPROVED" ? "green" : c.status === "REJECTED" ? "red" : "gray"}>
+                    {c.status === "APPROVED" ? "Đã duyệt" : c.status === "REJECTED" ? "Từ chối" : "Đã huỷ"}
+                  </Badge>
+                  {c.reply && <span className="text-ink/60"> – {c.reply}</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </Card>
       <Card title={`Điều chỉnh chấm công chờ duyệt (${reqs.length})`}>
         {reqs.length === 0 ? (
           <Empty>Không có yêu cầu</Empty>

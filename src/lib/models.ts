@@ -382,6 +382,41 @@ const PendingPhotoSchema = new Schema({
 export const PendingPhoto = getModel("PendingPhoto", PendingPhotoSchema);
 
 /* ---------- Lương ---------- */
+/* ---------- Nhờ làm hộ ca: NV1 nhờ NV2 làm thay 1 ca đã duyệt → admin duyệt → ca chuyển cho NV2 ---------- */
+const CoverRequestSchema = new Schema(
+  {
+    fromUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    toUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    shiftAssignmentId: { type: Schema.Types.ObjectId, ref: "ShiftAssignment", required: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true },
+    shiftName: String,
+    startTime: String,
+    endTime: String,
+    note: String,
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"], default: "PENDING", index: true },
+    decidedBy: String,
+    decidedAt: Date,
+    reply: String,
+  },
+  { timestamps: true },
+);
+export const CoverRequest = getModel("CoverRequest", CoverRequestSchema);
+
+/** Thông báo trong app cho nhân viên (hiện ở đầu mọi màn hình tới khi bấm "Đã xem"). */
+const UserNoticeSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    text: { type: String, required: true },
+    tone: { type: String, enum: ["green", "orange", "red", "blue"], default: "blue" },
+    link: String,
+    readAt: Date,
+  },
+  { timestamps: true },
+);
+UserNoticeSchema.index({ userId: 1, readAt: 1, createdAt: -1 });
+export const UserNotice = getModel("UserNotice", UserNoticeSchema);
+
 /* ---------- Tài chính: chi phí (bill), chi phí cố định, nhật ký báo cáo ---------- */
 const ShareSchema = new Schema({ storeId: { type: Schema.Types.ObjectId, ref: "Store" }, pct: Number }, { _id: false });
 const ExpenseSchema = new Schema(

@@ -21,7 +21,7 @@ Trích (trả về số nguyên VND):
 - cp_detail: các khoản chi như ghi trên tờ, dạng "30k sữa chua + 20k ship" (null nếu không có)
 - grab, shopee: tiền đơn Grab / Shopee nếu có ghi
 - staff_total: con số TỔNG nhân viên tự cộng (thường ở cuối tờ, có gạch dưới / khoanh tròn)
-- date: ngày ghi trên tờ, dạng YYYY-MM-DD
+- date: ngày ghi trên tờ ĐÚNG NHƯ VIẾT, kiểu Việt Nam ngày/tháng (VD "8/11", "08/11"); tờ thường KHÔNG ghi năm – đừng tự thêm năm. Không thấy ngày → null
 - note: các dòng khác không thuộc mục trên (VD "6850 Tạ Văn Thắng", "cơm ca chiều"), ngắn gọn
 ĐƠN VỊ: tờ ghi tay thường viết theo NGHÌN đồng ("2487" = 2.487.000; "30" = 30.000) → nhân 1000. Phiếu in POS ghi đủ đồng → giữ nguyên. "k" = nghìn, "tr" = triệu.
 KHÔNG đoán: số không đọc rõ → null. Chỉ trả về JSON.`;

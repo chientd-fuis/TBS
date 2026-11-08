@@ -12,6 +12,8 @@ import { viDate } from "@/lib/time";
 
 type Raw = Record<RevenueKey, string>;
 const EMPTY: Raw = { dt: "", tm: "", tk: "", cp: "", grab: "", shopee: "" };
+/** YYYY-MM-DD → dd/mm (tờ chốt ca không ghi năm) */
+const dm = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`;
 const HINT: Partial<Record<RevenueKey, string>> = { cp: "VD: 30k sữa chua + 20k ship" };
 
 export default function ClosingForm({
@@ -135,9 +137,10 @@ export default function ClosingForm({
   if (ocr?.state === "done") {
     for (const k of ["tm", "tk"] as const)
       if (!ocr.found.includes(k)) warnings.push({ text: `Ảnh không có / không đọc được ${REVENUE_LABEL[k]}`, fixed: !!raw[k].trim() });
-    if (!ocr.date) warnings.push({ text: "Không thấy ngày tháng trên ảnh – kiểm tra đúng phiếu của hôm nay" });
-    else if (dates[shiftKey] && ocr.date !== dates[shiftKey])
-      warnings.push({ text: `Ngày trên ảnh là ${viDate(ocr.date)}, khác ngày chốt ${viDate(dates[shiftKey])} – kiểm tra lại ảnh hoặc ca chốt` });
+    // tờ chốt ca chỉ cần ghi ngày/tháng (VD 8/11) – so sánh ngày + tháng, không cần năm
+    if (!ocr.date) warnings.push({ text: "Tờ chốt ca không ghi ngày (ngày/tháng, VD 8/11) – kiểm tra đúng tờ của ca này" });
+    else if (dates[shiftKey] && ocr.date.slice(5) !== dates[shiftKey].slice(5))
+      warnings.push({ text: `Ngày trên tờ là ${dm(ocr.date)}, khác ngày chốt ${dm(dates[shiftKey])} – kiểm tra lại ảnh hoặc ca chốt` });
   }
   const openWarn = warnings.filter((w) => !w.fixed).length;
 
@@ -200,7 +203,7 @@ export default function ClosingForm({
               {ocr?.state === "error" && <p className="text-danger">{ocr.text}</p>}
               {ocr?.state === "done" && (
                 <p className="flex items-center gap-1.5 text-secondary-dark">
-                  <Sparkles size={16} /> Đã điền {ocr.found.length} ô từ ảnh{ocr.date ? ` · ngày ${viDate(ocr.date)}` : ""}. Kiểm tra lại trước khi gửi.
+                  <Sparkles size={16} /> Đã điền {ocr.found.length} ô từ ảnh{ocr.date ? ` · ngày ${dm(ocr.date)}` : ""}. Kiểm tra lại trước khi gửi.
                 </p>
               )}
               {!ocr && <p className="text-ink/70">Ảnh sẽ gửi kèm vào nhóm Telegram.</p>}
