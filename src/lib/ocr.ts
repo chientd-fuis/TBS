@@ -89,7 +89,7 @@ export function describeGeminiError(status: number, body: unknown, model: string
   if (status === 400 && /API key/i.test(msg)) return { text: "GEMINI_API_KEY không hợp lệ", retryable: false };
   if (status === 400 && /location is not supported/i.test(msg))
     return {
-      text: "Gemini không hỗ trợ vị trí máy chủ đang gọi (VD Vercel region Hong Kong hkg1) – cần chạy ở Singapore (sin1) hoặc khu vực được hỗ trợ",
+      text: "Gemini không hỗ trợ vị trí máy chủ đang gọi (Vercel đang chạy ở Hong Kong) – đổi Function Region sang Singapore (sin1) trong vercel.json hoặc Vercel → Settings → Functions",
       retryable: false,
     };
   if (status === 403) return { text: `Key không có quyền dùng ${model} (${msg.slice(0, 100)})`, retryable: true };
