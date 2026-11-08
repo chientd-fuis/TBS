@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WeekBadge, weekLabel } from "@/components/WeekBadge";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { requireAdmin } from "@/lib/guards";
@@ -27,10 +28,13 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   const weekNav = (
     <div className="flex flex-wrap items-center gap-2">
       <Link href={link(addDays(ws, -7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
-      <span className="min-w-56 text-center font-bold">
+      <span className="text-center font-bold sm:min-w-56">
         {viDate(ws)} – {viDate(addDays(ws, 6))}
-        {ws === thisWeek && <span className="ml-1 text-xs font-normal text-secondary-dark">(tuần này)</span>}
-        {ws === addDays(thisWeek, 7) && <span className="ml-1 text-xs font-normal text-warn">(tuần sau)</span>}
+        {weekLabel(ws, thisWeek, addDays) && (
+          <span className="ml-1">
+            (<WeekBadge label={weekLabel(ws, thisWeek, addDays)} />)
+          </span>
+        )}
       </span>
       <Link href={link(addDays(ws, 7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần sau"><ChevronRight size={18} /></Link>
       {ws !== thisWeek && <Link href={link(thisWeek)} className="text-sm text-accent underline">Về tuần này</Link>}

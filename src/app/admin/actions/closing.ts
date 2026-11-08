@@ -15,6 +15,7 @@ export async function resendClosing(_: FormState, fd: FormData): Promise<FormSta
     const st = await deliverClosing(id);
     await audit(adminActor(admin), "closing.resend", { type: "ShiftClosing", id }, null, { status: st });
     revalidatePath("/admin/closings");
+    revalidatePath("/admin/finance", "layout");
     return st === "SENT" ? { ok: true } : { error: "Gửi chưa được – xem lỗi ở cột Telegram" };
   } catch (e) {
     return errMsg(e);
@@ -48,6 +49,7 @@ export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormSt
     const st = await syncDaySheet(storeId, date);
     await audit(adminActor(admin), "revenue.sheetSync", { type: "Store", id: storeId }, null, { date, status: st });
     revalidatePath("/admin/closings");
+    revalidatePath("/admin/finance", "layout");
     return st === "SENT" ? { ok: true } : { error: "Chưa ghi được – xem lỗi ở cột Google Sheet" };
   } catch (e) {
     return errMsg(e);
@@ -81,6 +83,7 @@ export async function editClosingRevenue(_: FormState, fd: FormData): Promise<Fo
     const { wasSynced, changed } = await recomputeDay(c.storeId, c.workDate);
     if (wasSynced && changed) await syncDaySheet(c.storeId, c.workDate);
     revalidatePath("/admin/closings");
+    revalidatePath("/admin/finance", "layout");
     return { ok: true };
   } catch (e) {
     return errMsg(e);
@@ -121,6 +124,7 @@ export async function deleteClosing(_: FormState, fd: FormData): Promise<FormSta
     if (wasSynced && changed) await syncDaySheet(c.storeId, c.workDate);
     else if (!day.closings && !wasSynced) await DayRevenue.deleteOne({ _id: day._id }); // ngày không còn lượt chốt nào
     revalidatePath("/admin/closings");
+    revalidatePath("/admin/finance", "layout");
     return { ok: true };
   } catch (e) {
     return errMsg(e);

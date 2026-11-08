@@ -5,6 +5,7 @@ import { cn } from "@/lib/format";
 
 const TABS = [
   { href: "/admin/finance", label: "Lãi lỗ", owner: true },
+  { href: "/admin/finance/revenue", label: "Doanh thu theo ngày" },
   { href: "/admin/finance/shift-expenses", label: "Chi phí trong ca" },
   { href: "/admin/finance/expenses", label: "Bill / chuyển khoản" },
   { href: "/admin/finance/fixed", label: "Tiền thuê nhà" },

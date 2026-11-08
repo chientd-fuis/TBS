@@ -348,6 +348,9 @@ const DayRevenueSchema = new Schema(
     grab: { type: Number, default: 0 },
     shopee: { type: Number, default: 0 },
     closings: { type: Number, default: 0 },
+    lastShift: String, // ca quyết định doanh thu ngày (Tối; chưa chốt Tối → ca gần nhất)
+    dtMissing: Boolean, // ca đó chưa có DT máy
+    calcVersion: Number, // 2 = luỹ kế
     note: String,
     sheet: {
       status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED"], default: "PENDING" },

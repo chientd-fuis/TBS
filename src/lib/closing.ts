@@ -3,6 +3,7 @@ import { readPhoto } from "./drive";
 import { ShiftClosing, Store, User } from "./models";
 import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "./telegram";
 import { localTime, viDate, weekdayVi } from "./time";
+import { sortClosings } from "./revenue";
 
 /* Chốt ca: gửi ảnh vào nhóm Telegram (+ tuỳ chọn gọi webhook phân tích ảnh). */
 
@@ -31,6 +32,9 @@ export type CaptionData = {
   revenue?: { dt?: number | null; tm?: number | null; tk?: number | null; cp?: number | null; grab?: number | null; shopee?: number | null } | null;
   revenueInput?: { cp?: string | null } | null;
   staffTotal?: number | null;
+  /** số luỹ kế ca trước trong ngày (TM+TK+Grab+Shopee) → hiện "riêng ca này" */
+  prevThu?: number | null;
+  prevShift?: string | null;
 };
 
 /** Nội dung tin nhắn Telegram của 1 lượt chốt ca (thuần – có unit test). */
@@ -76,6 +80,13 @@ export function formatCaption(d: CaptionData) {
       : `🕐 Chốt lúc ${hhmm(d.createdAt)} (chưa có lượt check-in)`,
     d.coworkers?.length ? `👥 Cùng ca: ${d.coworkers.join(", ")}` : "",
     ...revenueLines(d.revenue, d.revenueInput, d.staffTotal),
+    ...(d.revenue && d.prevThu != null
+      ? [
+          `📈 DT thật luỹ kế: ${money((d.revenue.tm ?? 0) + (d.revenue.tk ?? 0) + (d.revenue.grab ?? 0) + (d.revenue.shopee ?? 0) + (d.revenue.cp ?? 0))} · riêng ca này: ${money(
+            (d.revenue.tm ?? 0) + (d.revenue.tk ?? 0) + (d.revenue.grab ?? 0) + (d.revenue.shopee ?? 0) + (d.revenue.cp ?? 0) - d.prevThu,
+          )} (sau ca ${d.prevShift ?? "trước"})`,
+        ]
+      : []),
     d.note ? `📝 ${d.note}` : "",
     `#chotca #${hashtag(d.storeCode || "TBS")}${d.shiftName ? ` #ca_${hashtag(d.shiftName)}` : ""}`,
   ]
@@ -87,6 +98,11 @@ export async function buildCaption(closingId: string) {
   const c = await ShiftClosing.findById(closingId).lean();
   if (!c) throw new Error("Không tìm thấy lượt chốt ca");
   const [store, user] = await Promise.all([Store.findById(c.storeId).lean(), User.findById(c.userId).lean()]);
+  // chốt ca luỹ kế: tìm ca chốt liền trước trong ngày để tính "riêng ca này"
+  const sameDay = await ShiftClosing.find({ storeId: c.storeId, workDate: c.workDate, "revenue.tm": { $ne: null } }).select("shiftName createdAt revenue").lean();
+  const ordered = sortClosings(sameDay);
+  const idx = ordered.findIndex((x) => String(x._id) === String(c._id));
+  const prev = idx > 0 ? ordered[idx - 1] : null;
   return formatCaption({
     storeName: store?.name ?? "",
     storeCode: store?.code ?? "TBS",
@@ -106,6 +122,8 @@ export async function buildCaption(closingId: string) {
     revenue: c.revenue,
     revenueInput: c.revenueInput,
     staffTotal: c.staffTotal,
+    prevThu: prev ? (prev.revenue?.tm ?? 0) + (prev.revenue?.tk ?? 0) + (prev.revenue?.grab ?? 0) + (prev.revenue?.shopee ?? 0) + (prev.revenue?.cp ?? 0) : null,
+    prevShift: prev?.shiftName ?? null,
     edited: (c.editCount ?? 0) > 0,
     supportFrom: user?.storeId && String(user.storeId) !== String(c.storeId) ? ((await Store.findById(user.storeId).select("name").lean())?.name ?? undefined) : undefined,
   });

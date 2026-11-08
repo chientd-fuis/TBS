@@ -86,7 +86,7 @@ export const daysInMonth = (month: string) => {
  *  - Xem theo cơ sở (tuỳ chọn): phân bổ chi phí chung theo tỷ lệ doanh thu → lãi sau phân bổ (tham khảo).
  */
 export type PnlLine = {
-  revenue: number; // doanh thu thực thu = TM + TK + Grab + Shopee + chi phí két
+  revenue: number; // doanh thu thật = TK + TM + Grab + Shopee + chi phí két
   machine: number; // doanh thu máy (DTm) – tham khảo / đối chiếu âm dương
   tm: number; // chi tiết thực thu
   tk: number;
@@ -120,10 +120,10 @@ export const emptyLine = (): PnlLine => ({
   profit: 0,
 });
 /** chi phí phát sinh tại cơ sở */
-// chi phí két KHÔNG nằm ở đây: tiền mặt cuối ca đã trừ khoản chi két → doanh thu đã là số thực, két chỉ để biết
-export const STORE_COST_KEYS = ["platformFee", "labor", "fixed", "direct"] as const;
+// Doanh thu thật = TK + TM + Grab + Shopee + chi phí két (két = lấy tiền doanh thu ra chi) → két cũng là 1 khoản chi phí
+export const STORE_COST_KEYS = ["platformFee", "cashbox", "labor", "fixed", "direct"] as const;
 const COST_KEYS = [...STORE_COST_KEYS, "shared"] as const;
-export const COST_LABEL: Record<(typeof COST_KEYS)[number] | "cashbox", string> = {
+export const COST_LABEL: Record<(typeof COST_KEYS)[number], string> = {
   platformFee: "Phí sàn Grab/Shopee",
   cashbox: "Chi phí két (trong ca)",
   labor: "Lương NV",
@@ -204,7 +204,7 @@ export function computePnl(inp: PnlInput): PnlResult {
     const fee = inp.fees[r.storeId] ?? { grab: 0, shopee: 0 };
     const cp = r.cp || 0;
     addLine(cell(r.date, r.storeId), {
-      revenue: (r.tm || 0) + (r.tk || 0) + (r.grab || 0) + (r.shopee || 0), // thực thu (đã trừ chi két)
+      revenue: (r.tm || 0) + (r.tk || 0) + (r.grab || 0) + (r.shopee || 0) + cp, // DOANH THU THẬT = TK + TM + Grab + Shopee + chi phí két
       machine: r.dt || 0,
       tm: r.tm || 0,
       tk: r.tk || 0,

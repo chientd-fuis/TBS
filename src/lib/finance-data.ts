@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
-import { Attendance, BonusPenalty, DayRevenue, Expense, FixedCost, PayrollItem, Store, User, WageHistory } from "./models";
+import { Attendance, BonusPenalty, Expense, FixedCost, PayrollItem, ShiftClosing, Store, User, WageHistory } from "./models";
+import { dayRevenueFromClosings, type DayRevenueRow } from "./revenue";
 import { computePnl, daysInMonth, type PnlInput, type PnlResult } from "./finance";
 import { addDays } from "./time";
 
@@ -64,6 +65,15 @@ export async function loadStores(): Promise<StoreLite[]> {
   }));
 }
 
+/** Doanh thu ngày × cơ sở tính thẳng từ chốt ca (luỹ kế: lấy ca chốt cuối) – nguồn DUY NHẤT cho mọi màn hình / báo cáo. */
+export async function loadDayRevenue(from: string, to: string, storeIds?: string[]): Promise<DayRevenueRow[]> {
+  await connectDB();
+  const q: Record<string, unknown> = { workDate: { $gte: from, $lte: to }, "revenue.tm": { $ne: null } };
+  if (storeIds) q.storeId = { $in: storeIds.map((i) => new Types.ObjectId(i)) };
+  const closings = await ShiftClosing.find(q).select("storeId workDate shiftName createdAt revenue").lean();
+  return dayRevenueFromClosings(closings);
+}
+
 /** Lãi lỗ chuỗi + lãi gộp từng cơ sở của kỳ [from, to]. */
 export async function loadPnl(from: string, to: string, stores?: StoreLite[]): Promise<{ stores: StoreLite[]; dates: string[]; pnl: PnlResult }> {
   await connectDB();
@@ -71,7 +81,7 @@ export async function loadPnl(from: string, to: string, stores?: StoreLite[]): P
   const ids = st.map((s) => s._id);
   const dates = dateRange(from, to);
   const [rev, exps, fixed, labor] = await Promise.all([
-    DayRevenue.find({ date: { $gte: from, $lte: to }, storeId: { $in: ids.map((i) => new Types.ObjectId(i)) } }).lean(),
+    loadDayRevenue(from, to, ids),
     Expense.find({ date: { $gte: from, $lte: to } }).lean(),
     FixedCost.find({ startMonth: { $lte: to.slice(0, 7) }, $or: [{ endMonth: null }, { endMonth: "" }, { endMonth: { $gte: from.slice(0, 7) } }] }).lean(),
     loadLabor(from, to),
@@ -79,16 +89,7 @@ export async function loadPnl(from: string, to: string, stores?: StoreLite[]): P
   const pnl = computePnl({
     storeIds: ids,
     dates,
-    revenue: rev.map((r) => ({
-      storeId: String(r.storeId),
-      date: r.date,
-      dt: r.dt ?? 0,
-      tm: r.tm ?? 0,
-      tk: r.tk ?? 0,
-      cp: r.cp ?? 0,
-      grab: r.grab ?? 0,
-      shopee: r.shopee ?? 0,
-    })),
+    revenue: rev.map((r) => ({ ...r, dt: r.dt ?? 0 })),
     expenses: exps.map((e) => ({
       date: e.date,
       amount: e.amount,

@@ -1,6 +1,6 @@
 import type ExcelJS from "exceljs";
-import { APPROVED_SHIFT, Attendance, DayRevenue, Expense, FixedCost, ShiftAssignment, ShiftClosing } from "./models";
-import { loadPnl, loadStores, type StoreLite } from "./finance-data";
+import { APPROVED_SHIFT, Attendance, Expense, FixedCost, ShiftAssignment, ShiftClosing } from "./models";
+import { loadDayRevenue, loadPnl, loadStores, type StoreLite } from "./finance-data";
 import { CATEGORY_LABEL, isCountedExpense, margin, type PnlResult } from "./finance";
 import { closingSum, revenueDiff, type Revenue } from "./revenue";
 import { localDate, monthRange, viDate, viMonth, weekdayVi } from "./time";
@@ -129,7 +129,7 @@ export async function loadMonthSummary(month: string, storesIn?: StoreLite[]): P
   if (first > today) return { month, first, to, last, today, stores, pnl: null as unknown as PnlResult, dates: [], dayRev: [], closings: [], exps: [], rents: [], atts: [], asg: [] };
   const [{ pnl, dates }, dayRev, closings, exps, rents, atts, asg] = await Promise.all([
     loadPnl(first, to, stores),
-    DayRevenue.find({ date: { $gte: first, $lte: to }, storeId: { $in: ids } }).lean(),
+    loadDayRevenue(first, to, stores.map((s) => s._id)),
     ShiftClosing.find({ workDate: { $gte: first, $lte: to }, storeId: { $in: ids } }).sort({ workDate: 1, storeId: 1, createdAt: 1 }).lean(),
     Expense.find({ month }).sort({ date: 1, createdAt: 1 }).lean(),
     FixedCost.find({ startMonth: { $lte: month }, $or: [{ endMonth: null }, { endMonth: "" }, { endMonth: { $gte: month } }] }).lean(),
@@ -175,16 +175,18 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
     const r = w.row([label, v, pctRev(v), note], { money: [1], ...opt });
     r.getCell(3).numFmt = '0.0"%"';
   };
-  line("DOANH THU (chốt ca)", t.revenue, { bold: true }, "= TK + TM + Shopee/Grab");
+  line("DOANH THU THẬT (chốt ca)", t.revenue, { bold: true }, "= TK + TM + Shopee/Grab + Chi phí két");
   for (const s of stores) {
     const l = pnl.byStore[s._id];
     line(s.name, l.revenue, { bold: true, indent: 1 });
     line("+ Tài khoản", l.tk, { indent: 3 });
     line("+ Tiền mặt", l.tm, { indent: 3 });
     line("+ Shopee / Grab", l.shopee + l.grab, { indent: 3 });
-    line("Chi phí két (đã trừ trong tiền mặt)", l.cashbox, { indent: 3, italic: true }, "chỉ để biết");
+    line("+ Chi phí két", l.cashbox, { indent: 3 });
     line("DT máy (đối chiếu)", l.machine, { indent: 3, italic: true });
   }
+  line("− CHI PHÍ KÉT (chi trong ca)", t.cashbox, { bold: true });
+  for (const s of stores) line(s.name, pnl.byStore[s._id].cashbox, { indent: 2 });
   line("− LƯƠNG NV (ước tính)", t.labor, { bold: true }, "giờ công × lương giờ ± thưởng/phạt + phụ cấp");
   for (const s of stores) line(s.name, pnl.byStore[s._id].labor, { indent: 2 });
   line("− CHI PHÍ (admin nhập)", t.shared, { bold: true });
@@ -197,14 +199,14 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
   line("− PHÍ SÀN Shopee/Grab", t.platformFee, { bold: true });
   for (const s of stores) line(`${s.name} (Grab ${s.grabFeePct}% · Shopee ${s.shopeeFeePct}%)`, pnl.byStore[s._id].platformFee, { indent: 2 });
   if (t.direct) line("− Chi phí gắn riêng cơ sở (dữ liệu cũ)", t.direct, { bold: true });
-  line("TỔNG CHI PHÍ (gồm chi phí két)", t.cost + t.cashbox, { bold: true, fill: C.section }, "Lương + Chi phí + Mặt bằng + Phí sàn + Két");
-  line("= LÃI", t.profit, { bold: true, fill: C.total }, "DT − Lương − Chi phí − Mặt bằng − Phí sàn (không trừ két)");
+  line("TỔNG CHI PHÍ", t.cost, { bold: true, fill: C.section }, "Két + Lương + Chi phí + Mặt bằng + Phí sàn");
+  line("= LÃI", t.profit, { bold: true, fill: C.total }, "Doanh thu thật − Tổng chi phí");
   const mr = w.row(["Biên lãi", null, Math.round(margin(t) * 1000) / 10], { bold: true });
   mr.getCell(3).numFmt = '0.0"%"';
   w.gap();
 
   /* ---------- B. Doanh thu theo ngày ---------- */
-  const perStoreCols = ["TK", "TM", "Shopee/Grab", "Két", "Doanh thu", "DT máy", "Âm/Dương"];
+  const perStoreCols = ["TK", "TM", "Shopee/Grab", "Két", "DT thật", "DT máy", "Âm/Dương"];
   const wide = 1 + stores.length * perStoreCols.length + 7;
   w.section("B. DOANH THU & LÃI THEO NGÀY", wide);
   // dòng nhóm cơ sở
@@ -225,7 +227,7 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
   grp.getCell(cc).alignment = { horizontal: "center" };
   grp.getCell(cc).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.header } };
   w.r++;
-  w.header(["Ngày", ...stores.flatMap(() => perStoreCols), "Doanh thu", "Lương", "Chi phí", "Mặt bằng", "Phí sàn", "Két", "LÃI"]);
+  w.header(["Ngày", ...stores.flatMap(() => perStoreCols), "Doanh thu thật", "Lương", "Chi phí", "Mặt bằng", "Phí sàn", "Két", "LÃI"]);
   const firstDataRow = w.r;
   for (const d of dates) {
     const vals: Cell[] = [`${weekdayVi(d).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} ${dm(d)}`];
@@ -252,7 +254,7 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
     tot.getCell(col).numFmt = VND;
     tot.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.total } };
   }
-  w.note("Âm/Dương = DT máy − (TM + TK + Thu chi + Grab + Shopee), chỉ tính các ngày có DT máy. Lương theo ngày là ước tính từ giờ công; mặt bằng chia đều theo ngày.");
+  w.note("Âm/Dương = DT máy − DT thật (TK + TM + Shopee/Grab + Két), chỉ tính các ngày có DT máy. Lương theo ngày là ước tính từ giờ công; mặt bằng chia đều theo ngày.");
   w.gap();
 
   /* ---------- C. Chi tiết chốt ca ---------- */

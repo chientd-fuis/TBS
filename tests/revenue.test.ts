@@ -146,3 +146,19 @@ test("ngày trên tờ chốt ca chỉ ghi ngày/tháng", async () => {
   assert.equal(normalizeOcr({ tm: 2_000_000, date: "Ca tối 7/11" }, "2026-11-08").date, "2026-11-07");
   assert.equal(normalizeOcr({ tm: 2_000_000, date: null }, "2026-11-08").date, undefined);
 });
+
+test("chốt ca luỹ kế: doanh thu ngày = ca Tối, riêng ca = chênh lệch", async () => {
+  const { dayClosing, shiftDeltas } = await import("../src/lib/revenue");
+  const list = [
+    { shiftName: "Tối", createdAt: "2026-11-08T15:41:00Z", revenue: { tm: 2_300_000, tk: 4_100_000, cp: 120_000 } },
+    { shiftName: "Sáng", createdAt: "2026-11-08T09:05:00Z", revenue: { tm: 800_000, tk: 1_200_000, cp: 50_000 } },
+    { shiftName: "Chiều", createdAt: "2026-11-08T13:02:00Z", revenue: { tm: 1_500_000, tk: 2_500_000, cp: 80_000 } },
+  ];
+  assert.equal(dayClosing(list)!.shiftName, "Tối");
+  const d = shiftDeltas(list);
+  assert.deepEqual(d.map((x) => x.closing.shiftName), ["Sáng", "Chiều", "Tối"]);
+  assert.equal(d[1].own.tk, 1_300_000);
+  assert.equal(d[2].own.tm, 800_000);
+  assert.equal(d[2].own.cp, 40_000);
+  assert.equal(dayClosing(list.slice(1))!.shiftName, "Chiều"); // chưa chốt Tối → ca gần nhất
+});

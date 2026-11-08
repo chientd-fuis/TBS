@@ -32,21 +32,22 @@ test("lãi lỗ chuỗi: lãi gộp cơ sở − chi phí chung; theo cơ sở l
     fees: { a: { grab: 25, shopee: 0 } },
   });
   const a = r.byStore.a;
-  assert.equal(a.revenue, 3_000_000); // TM + TK + Grab (két đã trừ sẵn trong tiền mặt)
-  assert.equal(a.cashbox, 50_000); // chỉ để biết
+  assert.equal(a.revenue, 3_050_000); // DT thật = TK + TM + Grab + Shopee + két
+  assert.equal(a.cashbox, 50_000); // két là chi phí
   assert.equal(a.machine, 3_000_000);
-  assert.equal(a.contribution, 3_000_000 - 250_000 - 500_000);
+  assert.equal(a.contribution, 3_050_000 - 50_000 - 250_000 - 500_000);
   assert.equal(a.shared, 0);
   assert.equal(r.byStore.b.fixed, 200_000); // mặt bằng 3tr / 30 ngày × 2 ngày
   assert.equal(r.total.shared, 600_000);
   assert.equal(r.byDate["2026-11-01"].shared, 600_000);
-  // Lãi = DT 3 cơ sở − lương − chi phí admin − mặt bằng − phí sàn
-  assert.equal(r.total.profit, 4_000_000 - 500_000 - 600_000 - 200_000 - 250_000);
+  // Lãi = DT thật − két − lương − chi phí admin − mặt bằng − phí sàn (két cộng vào DT rồi trừ ra → lãi không đổi)
+  assert.equal(r.total.revenue, 4_050_000);
+  assert.equal(r.total.profit, 4_050_000 - 50_000 - 500_000 - 600_000 - 200_000 - 250_000);
   assert.equal(r.byCategory.NGUYEN_LIEU, 400_000);
   assert.equal(r.byCategory.KHAC, 200_000); // BAO_BI (mục cũ) gộp vào Khác
   assert.equal(r.byCategory.LUONG, undefined);
   assert.equal(r.allocByStore.a + r.allocByStore.b, 600_000);
-  assert.equal(r.allocByStore.b, Math.round((600_000 * 1_000_000) / 4_000_000));
+  assert.equal(r.allocByStore.b, Math.round((600_000 * 1_000_000) / 4_050_000));
 });
 
 test("đọc bill + bất thường doanh thu", () => {
@@ -158,9 +159,27 @@ test("xuất tổng hợp tháng: 1 sheet / tháng có lãi lỗ, doanh thu ngà
   const rows: unknown[][] = [];
   ws.eachRow((r) => rows.push((r.values as unknown[]).slice(1)));
   const find = (label: string) => rows.find((r) => r[0] === label);
-  assert.equal(find("DOANH THU (chốt ca)")?.[1], 3_000_000);
+  assert.equal(find("DOANH THU THẬT (chốt ca)")?.[1], 3_000_000);
   assert.equal(find("= LÃI")?.[1], 3_000_000 - 500_000 - 400_000);
   assert.ok(rows.some((r) => r[0] === "C. CHI TIẾT CHỐT CA (0 lượt)"));
   assert.ok(rows.some((r) => r[0] === "D. CHI PHÍ ADMIN NHẬP (1 khoản)"));
   assert.ok(rows.some((r) => r[0] === "F. CHẤM CÔNG THEO CƠ SỞ"));
+});
+
+test("tổng Doanh thu theo ngày khớp doanh thu tính lãi (cùng nguồn, luỹ kế lấy ca Tối)", async () => {
+  const { dayRevenueFromClosings } = await import("../src/lib/revenue");
+  const c = (storeId: string, workDate: string, shiftName: string, tm: number, tk: number, grab = 0, shopee = 0, cp = 0) => ({ storeId, workDate, shiftName, createdAt: `${workDate}T10:00:00Z`, revenue: { tm, tk, grab, shopee, cp, dt: null } });
+  const closings = [
+    c("a", "2026-11-01", "Sáng", 800_000, 1_200_000, 300_000),
+    c("a", "2026-11-01", "Chiều", 1_500_000, 2_500_000, 600_000, 100_000),
+    c("a", "2026-11-01", "Tối", 2_300_000, 4_100_000, 900_000, 200_000, 120_000),
+    c("b", "2026-11-01", "Sáng", 600_000, 900_000), // chưa chốt Tối → tạm tính ca Sáng
+    c("a", "2026-11-02", "Tối", 2_000_000, 3_000_000),
+  ];
+  const rows = dayRevenueFromClosings(closings);
+  const pageTotal = rows.reduce((s, r) => s + r.tm + r.tk + r.grab + r.shopee + r.cp, 0); // DT thật gồm két
+  assert.equal(pageTotal, 7_620_000 + 1_500_000 + 5_000_000);
+  const pnl = computePnl({ storeIds: ["a", "b"], dates: ["2026-11-01", "2026-11-02"], revenue: rows, expenses: [], fixed: [], labor: [], fees: {} });
+  assert.equal(pnl.total.revenue, pageTotal);
+  assert.equal(pnl.total.cashbox, 120_000);
 });

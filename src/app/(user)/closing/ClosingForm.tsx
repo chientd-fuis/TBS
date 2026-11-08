@@ -82,7 +82,8 @@ export default function ClosingForm({
   const missing = REQUIRED.filter((k) => !raw[k].trim());
   const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok) || (!!total.trim() && !totalEval.ok);
   const ready = !missing.length && !invalid;
-  const dayTotal = dayBefore.reduce((s, x) => s + x.dt, 0) + revenue.dt;
+  // số luỹ kế: ca Tối chính là doanh thu cả ngày
+  const dayThu = revenue.tm + revenue.tk + revenue.grab + revenue.shopee + revenue.cp; // DT thật
 
   // chụp xong 1 ảnh → gửi luôn (ảnh chỉ gửi vào nhóm Telegram, không lưu)
   const submit = async () => {
@@ -281,12 +282,14 @@ export default function ClosingForm({
 
         {isDayEnd && (
           <div className="mt-3 rounded-xl bg-[#eef6ff] p-3 text-xs text-[#1e40af]">
-            <p className="font-semibold">Ca cuối ngày – chốt xong sẽ ghi doanh thu cả ngày lên Google Sheet.</p>
+            <p className="font-semibold">Ca Tối = doanh thu CẢ NGÀY (số luỹ kế) – chốt xong sẽ ghi lên Google Sheet.</p>
             {dayBefore.map((x) => (
-              <p key={x.label} className="flex justify-between"><span>{x.label}</span><span className="tabular-nums">{x.dt.toLocaleString("vi-VN")} đ{x.diff ? ` (lệch ${x.diff.toLocaleString("vi-VN")})` : ""}</span></p>
+              <p key={x.label} className="flex justify-between"><span>{x.label} (luỹ kế)</span><span className="tabular-nums">{x.dt.toLocaleString("vi-VN")} đ{x.diff ? ` (lệch ${x.diff.toLocaleString("vi-VN")})` : ""}</span></p>
             ))}
-            <p className="flex justify-between"><span>Ca này</span><span className="tabular-nums">{hasDt ? `${revenue.dt.toLocaleString("vi-VN")} đ` : "chưa có DT máy"}</span></p>
-            <p className="mt-1 flex justify-between border-t border-[#bfdbfe] pt-1 font-bold"><span>Tổng doanh thu ngày</span><span className="tabular-nums">{dayTotal.toLocaleString("vi-VN")} đ</span></p>
+            <p className="mt-1 flex justify-between border-t border-[#bfdbfe] pt-1 font-bold"><span>Doanh thu thật cả ngày (TK + TM + Shopee/Grab + két)</span><span className="tabular-nums">{dayThu.toLocaleString("vi-VN")} đ</span></p>
+            {dayBefore.length > 0 && (
+              <p className="flex justify-between"><span>Riêng ca Tối</span><span className="tabular-nums">{(dayThu - dayBefore[dayBefore.length - 1].dt).toLocaleString("vi-VN")} đ</span></p>
+            )}
           </div>
         )}
 

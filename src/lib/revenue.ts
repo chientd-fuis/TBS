@@ -287,3 +287,57 @@ export function sheetRowCells(layout: SheetLayout, row: number, r: Revenue, note
     { range: `J${row}`, values: [[note]] },
   ];
 }
+
+/* ---------- Chốt ca LUỸ KẾ: ca Chiều đã gồm ca Sáng, ca Tối = cả ngày ---------- */
+const SHIFT_RANK: Record<string, number> = { Sáng: 1, Chiều: 2, Tối: 3 };
+export const shiftRank = (name?: string | null) => SHIFT_RANK[name ?? ""] ?? 0;
+
+type CumClosing = { shiftName?: string | null; createdAt?: Date | string | null; revenue?: Partial<Record<RevenueKey, number | null>> | null };
+
+/** Sắp các lượt chốt trong ngày theo thứ tự ca (Sáng → Chiều → Tối), cùng hạng thì theo giờ tạo. */
+export function sortClosings<T extends CumClosing>(list: T[]): T[] {
+  return [...list].sort((a, b) => shiftRank(a.shiftName) - shiftRank(b.shiftName) || +new Date(a.createdAt ?? 0) - +new Date(b.createdAt ?? 0));
+}
+
+/** Lượt chốt quyết định doanh thu ngày = ca muộn nhất đã chốt (Tối; chưa có thì ca gần nhất). */
+export function dayClosing<T extends CumClosing>(list: T[]): T | null {
+  const s = sortClosings(list);
+  return s.length ? s[s.length - 1] : null;
+}
+
+/** Doanh thu RIÊNG từng ca = luỹ kế ca đó − luỹ kế ca trước (cùng ngày). */
+export function shiftDeltas<T extends CumClosing>(list: T[]): { closing: T; own: Revenue }[] {
+  const s = sortClosings(list);
+  return s.map((c, i) => {
+    const prev = i ? s[i - 1].revenue ?? {} : {};
+    const cur = c.revenue ?? {};
+    const own = emptyRevenue();
+    for (const k of REVENUE_KEYS) own[k] = (Number(cur[k] ?? 0) || 0) - (Number(prev[k] ?? 0) || 0);
+    return { closing: c, own };
+  });
+}
+
+export type DayRevenueRow = { storeId: string; date: string; dt: number | null; tm: number; tk: number; cp: number; grab: number; shopee: number; lastShift: string };
+
+/**
+ * Doanh thu ngày × cơ sở từ các lượt chốt ca (luỹ kế → lấy lượt chốt cuối của ngày).
+ * DÙNG CHUNG cho Lãi lỗ, Doanh thu theo ngày, báo cáo, Excel → các nơi luôn khớp nhau.
+ */
+export function dayRevenueFromClosings(
+  closings: (CumClosing & { storeId: unknown; workDate: string })[],
+): DayRevenueRow[] {
+  const groups = new Map<string, typeof closings>();
+  for (const c of closings) {
+    if (c.revenue?.tm == null) continue;
+    const k = `${c.workDate}|${String(c.storeId)}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(c);
+  }
+  return [...groups.entries()].map(([k, list]) => {
+    const [date, storeId] = k.split("|");
+    const last = dayClosing(list)!;
+    const r = last.revenue ?? {};
+    const n = (x: unknown) => Number(x ?? 0) || 0;
+    return { storeId, date, dt: r.dt ?? null, tm: n(r.tm), tk: n(r.tk), cp: n(r.cp), grab: n(r.grab), shopee: n(r.shopee), lastShift: last.shiftName ?? "" };
+  });
+}

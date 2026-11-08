@@ -1,9 +1,9 @@
 /* Báo cáo doanh thu – lợi nhuận gửi nhóm Telegram "Quản lý doanh thu" (ngày / tuần / tháng). */
 import { connectDB } from "./db";
-import { Attendance, DayRevenue, ReportLog, ShiftAssignment, ShiftClosing, Settings, User, APPROVED_SHIFT } from "./models";
-import { loadPnl, loadStores, type StoreLite } from "./finance-data";
+import { Attendance, ReportLog, ShiftAssignment, ShiftClosing, Settings, User, APPROVED_SHIFT } from "./models";
+import { loadDayRevenue, loadPnl, loadStores, type StoreLite } from "./finance-data";
 import { CATEGORY_LABEL, margin, revenueDeviation, type PnlLine } from "./finance";
-import { closingSum, revenueDiff, type Revenue } from "./revenue";
+import { closingSum, dayClosing, revenueDiff, type Revenue } from "./revenue";
 import { geminiConfigured, geminiGenerate } from "./ocr";
 import { sendTelegramText, telegramConfigured } from "./telegram";
 import { addDays, localDate, prevMonth, viDate, viMonth, weekdayVi, DEFAULT_TZ } from "./time";
@@ -34,8 +34,10 @@ export type DayIssues = {
 
 async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> {
   const name = (id: unknown) => stores.find((s) => s._id === String(id))?.short ?? "?";
-  const closings = await ShiftClosing.find({ workDate: date }).select("storeId shiftName employeeName revenue staffTotal").lean();
-  const cash = closings
+  const closings = await ShiftClosing.find({ workDate: date }).select("storeId shiftName employeeName revenue staffTotal createdAt").lean();
+  // chốt ca luỹ kế → âm/dương & DT máy của NGÀY lấy theo lượt chốt cuối của mỗi cơ sở
+  const lastOf = stores.map((s) => dayClosing(closings.filter((c) => String(c.storeId) === s._id))).filter((c): c is (typeof closings)[number] => !!c);
+  const cash = lastOf
     .map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "", who: c.employeeName ?? "", diff: c.revenue?.dt != null ? revenueDiff((c.revenue ?? {}) as Partial<Revenue>) : 0 }))
     .filter((c) => Math.abs(c.diff) >= 1000);
   const missingClosing = stores
@@ -49,12 +51,16 @@ async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> 
   const usual = new Set(recent.map((r) => `${name(r._id.s)}|${r._id.sh}`));
   for (const m of missingClosing) m.shifts = m.shifts.filter((sh) => usual.has(`${m.store}|${sh}`));
 
-  const hist = await DayRevenue.find({ date: { $in: [7, 14, 21, 28].map((k) => addDays(date, -k)) } }).select("storeId dt").lean();
-  const today = await DayRevenue.find({ date }).select("storeId dt").lean();
+  // doanh thu thực thu (TK + TM + Shopee/Grab) – cùng nguồn với Lãi lỗ
+  const thu = (d: { tm: number; tk: number; grab: number; shopee: number; cp: number }) => d.tm + d.tk + d.grab + d.shopee + d.cp;
+  const pastDates = [7, 14, 21, 28].map((k) => addDays(date, -k));
+  const hist = (await loadDayRevenue(pastDates[3], pastDates[0])).filter((d) => pastDates.includes(d.date));
+  const today = await loadDayRevenue(date, date);
   const revenueDev: DayIssues["revenueDev"] = [];
   for (const s of stores) {
-    const t = today.find((d) => String(d.storeId) === s._id)?.dt ?? 0;
-    const dev = revenueDeviation(t, hist.filter((h) => String(h.storeId) === s._id).map((h) => h.dt ?? 0));
+    const tr = today.find((d) => d.storeId === s._id);
+    const t = tr ? thu(tr) : 0;
+    const dev = revenueDeviation(t, hist.filter((h) => h.storeId === s._id).map(thu));
     if (dev !== null) revenueDev.push({ store: s.short, dev });
   }
 
@@ -77,7 +83,7 @@ async function dayIssues(date: string, stores: StoreLite[]): Promise<DayIssues> 
 
   return {
     cash,
-    noDt: closings.filter((c) => c.revenue?.tm != null && c.revenue?.dt == null).map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "" })),
+    noDt: lastOf.filter((c) => c.revenue?.tm != null && c.revenue?.dt == null).map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "" })),
     badTotal: closings
       .filter((c) => c.staffTotal != null && c.revenue?.tm != null && c.staffTotal !== closingSum((c.revenue ?? {}) as Partial<Revenue>))
       .map((c) => ({ store: name(c.storeId), shift: c.shiftName ?? "", who: c.employeeName ?? "", written: c.staffTotal!, real: closingSum((c.revenue ?? {}) as Partial<Revenue>) })),
@@ -130,14 +136,15 @@ ${JSON.stringify(data)}`,
 const storeLine = (name: string, l: PnlLine) =>
   `🏪 ${name}\n   DT ${n(l.revenue)} · lương ${n(l.labor)} · két ${n(l.cashbox)}`;
 const chainLines = (t: PnlLine) => [
-  `Σ Doanh thu 3 cơ sở: ${n(t.revenue)}`,
+  `Σ Doanh thu thật 3 cơ sở: ${n(t.revenue)} (TK + TM + Shopee/Grab + két)`,
+  `   − Chi phí két: ${n(t.cashbox)}`,
   `   − Lương NV: ${n(t.labor)}`,
   `   − Chi phí (admin nhập): ${n(t.shared)}`,
   `   − Mặt bằng: ${n(t.fixed)}`,
   `   − Phí sàn Shopee/Grab: ${n(t.platformFee)}`,
   ...(t.direct ? [`   − Chi phí gắn riêng CS: ${n(t.direct)}`] : []),
-  `   Tổng chi phí (gồm chi phí két ${n(t.cashbox)}): ${n(t.cost + t.cashbox)}`,
-  `💰 LÃI ≈ ${signed(t.profit)} (${pct(margin(t))}) – không trừ chi phí két (đã trừ trong tiền mặt)`,
+  `   Tổng chi phí: ${n(t.cost)}`,
+  `💰 LÃI ≈ ${signed(t.profit)} (${pct(margin(t))})`,
 ];
 
 /* ---------- Báo cáo ngày ---------- */
@@ -164,7 +171,7 @@ export async function buildDailyReport(date: string) {
     issues: iss,
   });
   if (ai) lines.push("", "💬 Nhận xét", ai);
-  lines.push("", "Lãi = Doanh thu 3 cơ sở − Lương NV − Chi phí admin nhập − Mặt bằng (ước tính).");
+  lines.push("", "Doanh thu thật = TK + TM + Shopee/Grab + két. Lãi = Doanh thu thật − két − lương − chi phí − mặt bằng − phí sàn (ước tính).");
   return lines.join("\n");
 }
 
@@ -197,11 +204,14 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
   const top = costParts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (top.length) lines.push("", "💸 Chi phí lớn nhất", ...top.map(([k, v]) => `• ${k}: ${n(v)} (${t.revenue ? pct(v / t.revenue) : "–"} DT)`));
   // cảnh báo tổng hợp của kỳ
-  const closings = await ShiftClosing.find({ workDate: { $gte: from, $lte: to }, "revenue.tm": { $ne: null } }).select("storeId revenue").lean();
+  const closings = await ShiftClosing.find({ workDate: { $gte: from, $lte: to }, "revenue.tm": { $ne: null } }).select("storeId workDate shiftName createdAt revenue").lean();
   const neg = stores
     .map((s) => {
-      const list = closings
-        .filter((c) => String(c.storeId) === s._id && c.revenue?.dt != null)
+      // mỗi ngày chỉ xét lượt chốt cuối (luỹ kế cả ngày)
+      const mine = closings.filter((c) => String(c.storeId) === s._id);
+      const list = [...new Set(mine.map((c) => c.workDate))]
+        .map((d) => dayClosing(mine.filter((c) => c.workDate === d))!)
+        .filter((c) => c.revenue?.dt != null)
         .map((c) => revenueDiff((c.revenue ?? {}) as Partial<Revenue>));
       return { s: s.short, cnt: list.filter((d) => d < -1000).length, sum: list.filter((d) => d < -1000).reduce((a, b) => a + b, 0) };
     })
@@ -211,7 +221,7 @@ export async function buildPeriodReport(from: string, to: string, prevFrom: stri
     { $group: { _id: "$storeId", c: { $sum: 1 } } },
   ]);
   const warn = [
-    ...neg.map((x) => `${x.s}: ${x.cnt} lần âm két, tổng ${n(Math.abs(x.sum))} đ`),
+    ...neg.map((x) => `${x.s}: ${x.cnt} ngày âm két, tổng ${n(Math.abs(x.sum))} đ`),
     ...late.map((x) => `${stores.find((s) => s._id === String(x._id))?.short ?? "?"}: ${x.c} lượt đi muộn`),
   ];
   if (warn.length) lines.push("", "⚠️ Cần chú ý", ...warn.map((x) => `• ${x}`));

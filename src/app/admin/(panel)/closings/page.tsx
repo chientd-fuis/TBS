@@ -1,23 +1,23 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { DayRevenue, ShiftClosing, Store, User } from "@/lib/models";
+import { ShiftClosing, Store, User } from "@/lib/models";
 import { isYmd, localDate, localTime, viDate } from "@/lib/time";
 import { telegramConfigured } from "@/lib/telegram";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
-import { deleteClosing, editClosingRevenue, resendClosing, syncDayRevenue } from "../../actions/closing";
+import { deleteClosing, editClosingRevenue, resendClosing } from "../../actions/closing";
 import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { addDays } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
-const SHEET = { SENT: ["Đã ghi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Chờ ca cuối", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 const vnd = (n?: number | null) => (n == null ? "" : n.toLocaleString("vi-VN"));
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
 /** Danh sách chốt ca (ảnh) + trạng thái gửi Telegram */
-export default async function ClosingsPage({ searchParams }: { searchParams: Promise<{ store?: string; date?: string; status?: string; nodt?: string }> }) {
+export default async function ClosingsPage({ searchParams }: { searchParams: Promise<{ store?: string; date?: string; status?: string; nodt?: string; shift?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
@@ -25,18 +25,15 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   if (sp.store) q.storeId = sp.store;
   if (isYmd(sp.date)) q.workDate = sp.date;
   if (sp.status) q["telegram.status"] = sp.status;
+  if (sp.shift && ["Sáng", "Chiều", "Tối"].includes(sp.shift)) q.shiftName = sp.shift;
   if (sp.nodt) Object.assign(q, { "revenue.dt": null, "revenue.tm": { $ne: null } });
   const noDtCount = await ShiftClosing.countDocuments({ "revenue.dt": null, "revenue.tm": { $ne: null }, workDate: { $gte: addDays(localDate(new Date()), -45) } });
   const list = await ShiftClosing.find(q).sort({ createdAt: -1 }).limit(100).lean();
   const users = new Map((await User.find({ _id: { $in: list.map((c) => c.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const storeMap = new Map(stores.map((s) => [String(s._id), s]));
-  // doanh thu theo ngày (14 ngày gần nhất, hoặc đúng ngày đang lọc)
-  const dq: Record<string, unknown> = isYmd(sp.date) ? { date: sp.date } : { date: { $gte: addDays(localDate(new Date()), -13) } };
-  if (sp.store) dq.storeId = sp.store;
-  const days = await DayRevenue.find(dq).sort({ date: -1, storeId: 1 }).lean();
   return (
     <>
-      <PageTitle sub="Số liệu nhân viên nhập khi chốt ca – tự gửi (kèm ảnh) vào nhóm Telegram của cơ sở; ảnh không lưu trong app">Chốt ca</PageTitle>
+      <PageTitle sub="Mới nhất ở trên. Số chốt ca là LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày). Doanh thu theo ngày xem ở Tài chính → Doanh thu theo ngày.">Lịch sử chốt ca</PageTitle>
       {noDtCount > 0 && !sp.nodt && (
         <Alert tone="orange">
           Có <b>{noDtCount}</b> ca chưa có <b>Doanh thu máy</b> (45 ngày gần đây) – cần nhập để tính âm/dương & lãi lỗ.{" "}
@@ -46,11 +43,24 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
       <Card>
+        <div className="mb-3 flex flex-wrap gap-2 text-sm">
+          {[{ id: "", name: "Tất cả" }, ...stores.map((s) => ({ id: String(s._id), name: s.name.replace(/^TBS\s*/i, "") }))].map((s) => {
+            const qs = new URLSearchParams(Object.entries({ ...sp, store: s.id }).filter(([, v]) => v) as [string, string][]).toString();
+            return (
+              <Link key={s.id || "all"} href={`/admin/closings${qs ? `?${qs}` : ""}`} className={`rounded-lg px-3 py-1.5 ${(sp.store ?? "") === s.id ? "bg-secondary font-bold text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                {s.name}
+              </Link>
+            );
+          })}
+        </div>
         <AutoFilterForm className="flex flex-wrap items-end gap-2">
-          <Field label="Cơ sở">
-            <Select name="store" defaultValue={sp.store || ""} className="!w-44">
+          {sp.store && <input type="hidden" name="store" value={sp.store} />}
+          <Field label="Ca">
+            <Select name="shift" defaultValue={sp.shift || ""} className="!w-32">
               <option value="">Tất cả</option>
-              {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name}</option>)}
+              <option value="Sáng">Sáng</option>
+              <option value="Chiều">Chiều</option>
+              <option value="Tối">Tối</option>
             </Select>
           </Field>
           <Field label="Ngày"><Input type="date" name="date" defaultValue={sp.date || ""} className="!w-44" /></Field>
@@ -63,50 +73,6 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
             </Select>
           </Field>
         </AutoFilterForm>
-      </Card>
-      <Card title="Doanh thu theo ngày (cộng các lượt chốt ca)">
-        {days.length === 0 ? (
-          <Empty>Chưa có doanh thu</Empty>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbs">
-              <thead>
-                <tr>
-                  <th>Ngày</th><th>Cơ sở</th><th className="text-center">Số ca</th>
-                  {REVENUE_KEYS.map((k) => <th key={k} className="text-right">{REVENUE_LABEL[k]}</th>)}
-                  <th className="text-right">Âm/Dương</th><th>Google Sheet</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((d) => {
-                  const st = SHEET[(d.sheet?.status ?? "PENDING") as keyof typeof SHEET];
-                  const diff = revenueDiff(d as unknown as Revenue);
-                  return (
-                    <tr key={String(d._id)}>
-                      <td className="whitespace-nowrap">{viDate(d.date)}</td>
-                      <td className="text-xs">{storeMap.get(String(d.storeId))?.name}</td>
-                      <td className="text-center">{d.closings}</td>
-                      {REVENUE_KEYS.map((k) => <td key={k} className={`text-right tabular-nums ${k === "dt" ? "font-bold" : ""}`}>{vnd(d[k])}</td>)}
-                      <td className={`text-right tabular-nums ${diff ? "font-bold text-danger" : ""}`}>{vnd(diff)}</td>
-                      <td className="text-xs">
-                        <Badge tone={st[1]}>{st[0]}</Badge>
-                        {d.sheet?.range && d.sheet.status === "SENT" && <div className="text-ink/60">{d.sheet.range}</div>}
-                        {d.sheet?.error && d.sheet.status !== "SENT" && <div className="mt-1 max-w-48 text-danger">{d.sheet.error}</div>}
-                      </td>
-                      <td>
-                        <ActionForm action={syncDayRevenue} submitLabel={d.sheet?.status === "SENT" ? "Ghi lại" : "Ghi sheet"} variant="outline" successText="Đã ghi">
-                          <input type="hidden" name="storeId" value={String(d.storeId)} />
-                          <input type="hidden" name="date" value={d.date} />
-                        </ActionForm>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="mt-2 text-xs text-ink/60">Tự ghi Google Sheet khi chốt <b>ca cuối ngày</b>; ngày nào chưa ghi được sẽ được cron đêm ghi lại. Cột ghi theo “Mẫu cột sheet” của từng cơ sở (mục Cơ sở); cột Chênh lệch / DT thực tế giữ công thức của sheet.</p>
       </Card>
 
       <Card>
@@ -128,7 +94,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                       <td className="font-semibold">{c.employeeName || users.get(String(c.userId))}{c.employeePhone && <div className="text-xs font-normal text-ink/60">{c.employeePhone}</div>}</td>
                       <td className="text-xs">{store?.name}{c.distanceM != null && <div className={c.distanceM > (store?.radiusM ?? 100) ? "text-danger" : "text-ink/60"}>cách quán {c.distanceM}m</div>}</td>
                       <td className="text-xs">
-                        {c.shiftLabel || "Ngoài ca"}
+                        {c.shiftLabel || "Ngoài ca"} <span className="text-ink/50">(luỹ kế)</span>
                         {c.checkInAt && <div className="text-ink/60">Vào {localTime(new Date(c.checkInAt), tz).slice(0, 5)}{c.checkOutAt ? ` · Ra ${localTime(new Date(c.checkOutAt), tz).slice(0, 5)}` : ""}</div>}
                         {c.coworkers?.length ? <div className="text-ink/60">Cùng ca: {c.coworkers.join(", ")}</div> : null}
                       </td>

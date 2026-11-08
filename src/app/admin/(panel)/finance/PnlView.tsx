@@ -64,9 +64,9 @@ export default function PnlView({
     { key: "platformFee", label: "Phí sàn Shopee/Grab", value: t.platformFee, color: "#e87ba4" },
     { key: "cashbox", label: "Chi phí két", value: t.cashbox, color: "#eda100" },
   ];
-  /** Tổng chi phí = Lương + Chi phí + Mặt bằng + Phí sàn + Chi phí két (két đã trừ trong tiền mặt nên Lãi không trừ lại) */
-  const totalCost = t.cost + t.cashbox;
-  const prevTotalCost = pt.cost + pt.cashbox;
+  /** Tổng chi phí = Lương + Chi phí + Mặt bằng + Phí sàn + Chi phí két; Lãi = Doanh thu thật − Tổng chi phí */
+  const totalCost = t.cost;
+  const prevTotalCost = pt.cost;
 
   return (
     <div className="space-y-4">
@@ -79,7 +79,7 @@ export default function PnlView({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="p-3">
-          <p className="text-xs text-ink/60">Doanh thu 3 cơ sở</p>
+          <p className="text-xs text-ink/60">Doanh thu thật 3 cơ sở</p>
           <p className="text-xl font-bold tabular-nums">{vnd(t.revenue)}</p>
           <Delta now={t.revenue} prev={pt.revenue} />
         </Card>
@@ -137,7 +137,10 @@ export default function PnlView({
                 return (
                   <>
                     <tr className="border-t-2 border-[#f1e6c8]">
-                      <td className="pt-2.5 pb-1 font-bold text-accent">Doanh thu (chốt ca)</td>
+                      <td className="pt-2.5 pb-1 font-bold text-accent">
+                        Doanh thu thật (chốt ca)
+                        <span className="block text-xs font-normal text-ink/55">= TK + TM + Shopee/Grab + Chi phí két (két là tiền doanh thu lấy ra chi)</span>
+                      </td>
                       <td className="pt-2.5 pb-1 text-right font-bold tabular-nums">{vnd(t.revenue)}</td>
                     </tr>
                     {stores.map((st) => {
@@ -153,6 +156,7 @@ export default function PnlView({
                               ["+ Tài khoản", l.tk],
                               ["+ Tiền mặt", l.tm],
                               ["+ Shopee / Grab", l.shopee + l.grab],
+                              ["+ Chi phí két", l.cashbox],
                             ] as [string, number][]
                           ).map(([k, v]) => (
                             <tr key={k} className="text-xs text-ink/65">
@@ -160,13 +164,15 @@ export default function PnlView({
                               <td className="text-right tabular-nums">{vnd(v)}</td>
                             </tr>
                           ))}
-                          <tr className="text-xs text-ink/45 italic">
-                            <td className="pb-1 pl-10">Chi phí két (đã chi, trừ sẵn trong tiền mặt)</td>
-                            <td className="pb-1 text-right tabular-nums">{vnd(l.cashbox)}</td>
+                          <tr className="text-xs text-ink/45">
+                            <td className="pb-1 pl-10" colSpan={2}>
+                              DT máy {l.machine ? vnd(l.machine) : "—"} · Âm/Dương {l.machine ? `${l.machine - l.revenue > 0 ? "+" : ""}${vnd(l.machine - l.revenue)}` : "—"}
+                            </td>
                           </tr>
                         </Fragment>
                       );
                     })}
+                    {group("Chi phí két (chi trong ca)", t.cashbox, per((l) => l.cashbox), "−", "Sữa chua, ship… lấy từ tiền doanh thu trong két")}
                     {group("Lương NV", t.labor, per((l) => l.labor), "−", "Giờ công × lương giờ ± thưởng/phạt + phụ cấp (ước tính, tính cho cơ sở nơi làm)")}
                     {group("Chi phí (admin nhập)", t.shared, costItems, "−")}
                     {group("Chi phí cố định – Mặt bằng", t.fixed, per((l) => l.fixed), "−")}
@@ -181,14 +187,14 @@ export default function PnlView({
                     <tr className="border-t-2 border-[#f1e6c8] bg-cream font-bold">
                       <td className="py-2 pl-1">
                         Tổng chi phí
-                        <span className="block text-xs font-normal text-ink/55">Lương NV + Chi phí + Mặt bằng + Phí sàn + Chi phí két {vnd(t.cashbox)}</span>
+                        <span className="block text-xs font-normal text-ink/55">Chi phí két + Lương NV + Chi phí + Mặt bằng + Phí sàn</span>
                       </td>
                       <td className="py-2 text-right tabular-nums">{vnd(totalCost)}</td>
                     </tr>
                     <tr className="border-t-2 border-[#f1e6c8] bg-[#e3f3e7] text-base font-bold">
                       <td className="py-2 pl-1">
                         = LÃI
-                        <span className="block text-xs font-normal text-ink/55">Doanh thu 3 cơ sở − Lương − Chi phí − Mặt bằng − Phí sàn (không trừ chi phí két – đã trừ trong tiền mặt)</span>
+                        <span className="block text-xs font-normal text-ink/55">Doanh thu thật − Tổng chi phí</span>
                       </td>
                       <td className={cn("py-2 text-right tabular-nums", profitCls(t.profit))}>{signed(t.profit)}</td>
                     </tr>
@@ -236,8 +242,7 @@ export default function PnlView({
                 );
                 return (
                   <>
-                    {row("Doanh thu (chốt ca)", cols.map((l) => l.revenue), "font-bold")}
-                    {row("Chi phí két (đã trừ, để biết)", cols.map((l) => l.cashbox), "text-xs text-ink/50")}
+                    {row("Doanh thu thật (chốt ca)", cols.map((l) => l.revenue), "font-bold")}
                     {row("DT máy (đối chiếu)", cols.map((l) => l.machine), "text-xs text-ink/50")}
                     {storeKeys.map((k) => row(`− ${COST_LABEL[k]}`, cols.map((l) => l[k]), "text-ink/70"))}
                     {row("= Lãi gộp cơ sở", cols.map((l) => l.contribution), "bg-cream font-bold", true)}
@@ -303,8 +308,8 @@ export default function PnlView({
       </Card>
 
       <p className="text-xs text-ink/60">
-        T{viMonth(month)} · Lãi = Doanh thu 3 cơ sở (TM + TK + Grab + Shopee từ chốt ca) − Lương NV − Chi phí admin nhập (có tick &quot;Tính vào chi phí&quot;) − Mặt bằng.
-        Chi phí két trong ca đã trừ sẵn trong tiền mặt nên chỉ hiện để biết.
+        T{viMonth(month)} · Doanh thu thật = TK + TM + Grab + Shopee + Chi phí két (từ chốt ca, lấy ca Tối). Âm/Dương = DT máy − Doanh thu thật.
+        Lãi = Doanh thu thật − Chi phí két − Lương NV − Chi phí admin nhập (có tick &quot;Tính vào chi phí&quot;) − Mặt bằng − Phí sàn.
       </p>
     </div>
   );

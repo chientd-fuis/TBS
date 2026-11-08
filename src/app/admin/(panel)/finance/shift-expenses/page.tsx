@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { ShiftClosing, Store } from "@/lib/models";
-import { moneyExprItems } from "@/lib/revenue";
+import { dayClosing, moneyExprItems } from "@/lib/revenue";
 import { foldVi } from "@/lib/finance";
 import { localMonth, monthRange, viDate, weekdayVi } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
@@ -23,7 +23,15 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
   const short = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]));
   const q: Record<string, unknown> = { workDate: { $gte: first, $lte: last }, $or: [{ "revenue.cp": { $nin: [0, null] } }, { "revenueInput.cp": { $nin: ["", null] } }] };
   if (sp.store) q.storeId = sp.store;
-  const list = await ShiftClosing.find(q).sort({ workDate: -1, createdAt: -1 }).select("storeId workDate shiftName employeeName revenue revenueInput").lean();
+  const all = await ShiftClosing.find(q).sort({ workDate: -1, createdAt: -1 }).select("storeId workDate shiftName employeeName revenue revenueInput createdAt").lean();
+  // chốt ca LUỸ KẾ (ca Tối = cả ngày) → mỗi cơ sở mỗi ngày chỉ lấy lượt chốt cuối, tránh cộng trùng
+  const groups = new Map<string, typeof all>();
+  for (const c of all) {
+    const k = `${c.workDate}|${c.storeId}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(c);
+  }
+  const list = [...groups.values()].map((g) => dayClosing(g)!).sort((a, b) => b.workDate.localeCompare(a.workDate));
 
   const rows = list.map((c) => {
     const raw = c.revenueInput?.cp?.trim() || (c.revenue?.cp ? String(c.revenue.cp) : "");
@@ -60,14 +68,14 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
           </AutoFilterForm>
         </div>
         <p className="mt-3 text-sm text-ink/70">
-          Tổng chi trong ca: <b className="text-lg text-accent">{vnd(total)} đ</b> <span className="text-xs">({rows.length} lượt chốt ca có thu chi)</span>
+          Tổng chi trong ca: <b className="text-lg text-accent">{vnd(total)} đ</b> <span className="text-xs">({rows.length} ngày × cơ sở có thu chi)</span>
         </p>
         {byStore.length > 1 && <p className="text-xs text-ink/60">{byStore.map((b) => `${b.name}: ${vnd(b.sum)}`).join(" · ")}</p>}
-        <p className="mt-1 text-xs text-ink/50">Nhân viên nhập ở ô &quot;Thu chi&quot; khi chốt ca (VD &quot;30k sữa chua + 20k ship&quot;). Tiền lấy từ két nên đã trừ thẳng vào lãi lỗ – không cần nhập bill lại.</p>
+        <p className="mt-1 text-xs text-ink/50">Nhân viên nhập ở ô &quot;Thu chi&quot; khi chốt ca (VD &quot;30k sữa chua + 20k ship&quot;). Chốt ca là số luỹ kế nên mỗi ngày lấy lượt chốt cuối (ca Tối). Tiền lấy từ két nên đã trừ thẳng vào lãi lỗ – không cần nhập bill lại.</p>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-        <Card title="Theo ca">
+        <Card title="Theo ngày (lượt chốt cuối)">
           {!rows.length ? (
             <Empty>Không có chi phí trong ca tháng này.</Empty>
           ) : (

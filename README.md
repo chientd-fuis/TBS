@@ -97,11 +97,13 @@ Không có key → vẫn chụp ảnh gửi kèm, số liệu nhập tay.
 - **Bill / chuyển khoản** (admin): bill mua hàng hoặc ảnh chụp màn hình CK → Gemini đọc số tiền, ngày, người nhận, nội dung CK, chi cho việc gì. Người nhận trùng tên nhân viên hoặc nội dung có "lương / tạm ứng" → tự chọn danh mục **Lương NV**: chỉ lưu chứng từ, **không cộng vào chi phí** (lương đã tính từ giờ công).
 - **Chi phí (cách nhập)**: chụp / chọn ảnh bill → Gemini đọc số tiền, ngày, nơi bán, danh mục → kiểm tra → **Lưu & gửi nhóm**. Ảnh chỉ gửi vào nhóm Telegram **Quản lý doanh thu**, không lưu. Chi phí tính cho 1 cơ sở hoặc **chung** (chia theo tỷ lệ doanh thu tháng / chia đều / % tự đặt). Bill trả bằng **tiền két** chỉ lưu chứng từ, không cộng lại (đã nằm trong "Thu chi" chốt ca). Trùng ngày + số tiền → hỏi lại.
 - **Tiền thuê nhà** (chi phí cố định duy nhất): mỗi cơ sở 1 khoản / tháng, tự chia đều theo ngày. Tăng giá → đặt "Đến tháng" cho khoản cũ rồi thêm khoản mới.
-- **Lãi lỗ** (chỉ chủ): **Lãi = Doanh thu 3 cơ sở (TM + TK + Grab + Shopee từ chốt ca) − Lương NV (từng cơ sở) − Chi phí admin nhập (Nguyên liệu / Điện nước / Khác) − Mặt bằng**. Chi phí két trong ca đã trừ sẵn trong tiền mặt nên chỉ hiện để biết. Có biểu đồ tròn cơ cấu chi phí; xem theo cơ sở là phần tham khảo.
+- **Lãi lỗ** (chỉ chủ): **Doanh thu thật = TK + TM + Grab + Shopee + Chi phí két** (két là tiền doanh thu lấy ra chi); **Âm/Dương = DT máy − Doanh thu thật**; **Lãi = Doanh thu thật − Chi phí két − Lương NV − Chi phí admin nhập − Mặt bằng − Phí sàn**. Có biểu đồ tròn cơ cấu chi phí; xem theo cơ sở là phần tham khảo.
 - **Báo cáo Telegram** (chủ bật/tắt ở tab Cài đặt): ngày (khi cơ sở cuối cùng chốt ca Tối, hoặc ~1h sáng hôm sau), tuần (~1h sáng thứ 2), tháng (~1h sáng ngày 1). Có cảnh báo âm két, chưa chốt ca, doanh thu lệch > 30% so với TB cùng thứ, đi muộn / về sớm / bỏ ca, và nhận xét AI (Gemini).
 - Cài đặt: tab **Tài chính → Cài đặt** nhập chat ID nhóm Quản lý doanh thu (hoặc env `TELEGRAM_FINANCE_CHAT_ID`), thêm bot vào nhóm, bấm **Gửi tin thử**.
 
 ### 5c. Doanh thu chốt ca → Google Sheet
+
+> **Chốt ca là số LUỸ KẾ**: ca Chiều đã gồm ca Sáng, ca Tối = doanh thu cả ngày. Doanh thu ngày (Google Sheet, Lãi lỗ, báo cáo, Excel) = số chốt ca **Tối**; chưa chốt Tối → tạm tính theo ca chốt gần nhất. Xem ở **Tài chính → Doanh thu theo ngày** (bấm dòng để xem 3 ca, "DT riêng ca" = luỹ kế ca này − ca trước). Dữ liệu cũ (trước đây cộng dồn 3 ca) được cron tự tính lại và ghi lại Google Sheet.
 Nhân viên nhập tay số liệu ca (gõ được phép cộng). Mỗi lần chốt ca gửi ảnh + số vào nhóm Telegram; **ca cuối ngày** (ca mẫu có giờ bắt đầu muộn nhất) cộng các ca trong ngày và ghi lên sheet.
 
 **Google Sheet** (mỗi cơ sở 1 file, mỗi tháng 1 tab `T11`, dòng 3 = ngày 1):

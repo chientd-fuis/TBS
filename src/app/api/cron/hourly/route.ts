@@ -5,7 +5,7 @@ import { retryPendingPhotos } from "@/lib/drive";
 import { autoPublishPayrolls, ensureDraftPayrolls } from "@/lib/payroll";
 import { connectDB } from "@/lib/db";
 import { retryFailedClosings } from "@/lib/closing";
-import { syncPendingDays } from "@/lib/day-revenue";
+import { migrateDayCalc, syncPendingDays } from "@/lib/day-revenue";
 import { runScheduledReports } from "@/lib/finance-report";
 
 // Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
@@ -21,7 +21,8 @@ export async function GET(req: Request) {
   await ensureDraftPayrolls();
   const published = await autoPublishPayrolls(); // dự phòng nếu cron ngày 5 bị lỡ
   const closingsResent = await retryFailedClosings(); // gửi lại ảnh chốt ca lên Telegram
+  const recalculated = await migrateDayCalc(); // tính lại doanh thu ngày theo cách luỹ kế (dữ liệu cũ)
   const sheetDays = await syncPendingDays(); // ghi Google Sheet các ngày chưa ghi được
   const reports = await runScheduledReports().catch((e: Error) => ({ error: e.message })); // báo cáo ngày/tuần/tháng → nhóm Quản lý doanh thu
-  return NextResponse.json({ missing, uploaded, published, closingsResent, sheetDays, reports });
+  return NextResponse.json({ missing, uploaded, published, closingsResent, recalculated, sheetDays, reports });
 }

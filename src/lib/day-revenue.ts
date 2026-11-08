@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { DayRevenue, ShiftClosing, ShiftTemplate, Store } from "./models";
-import { REVENUE_KEYS, sumRevenue, type Revenue } from "./revenue";
+import { dayClosing, REVENUE_KEYS, sumRevenue, type Revenue } from "./revenue";
 import { sheetsConfigured, writeDayRow } from "./sheets";
 import { DEFAULT_TZ, localDate } from "./time";
 
@@ -14,21 +14,29 @@ export async function isDayEndShift(storeId: Id, shiftStart?: string | null) {
   return !!last && shiftStart >= last.startTime;
 }
 
-/** Cộng lại doanh thu 1 ngày từ các lượt chốt ca. Số thay đổi so với lần đã ghi sheet → chờ ghi lại. */
+/** Phiên bản cách tính doanh thu ngày – đổi số này để cron tự tính lại dữ liệu cũ. 2 = luỹ kế (lấy ca Tối). */
+export const DAY_CALC_VERSION = 2;
+
+/**
+ * Doanh thu 1 ngày từ các lượt chốt ca. Chốt ca là số LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày)
+ * → doanh thu ngày = lượt chốt ca muộn nhất (Tối; chưa chốt Tối thì ca gần nhất). Số đổi so với lần đã ghi sheet → chờ ghi lại.
+ */
 export async function recomputeDay(storeId: Id, date: string) {
   await connectDB();
   const list = await ShiftClosing.find({ storeId, workDate: date, "revenue.tm": { $ne: null } })
     .sort({ createdAt: 1 })
-    .select("revenue revenueInput note shiftName employeeName")
+    .select("revenue revenueInput note shiftName employeeName createdAt")
     .lean();
-  const total = sumRevenue(list.map((c) => (c.revenue ?? {}) as Partial<Revenue>));
+  const last = dayClosing(list);
+  const total = sumRevenue(last ? [(last.revenue ?? {}) as Partial<Revenue>] : []);
+  const dtMissing = !!last && last.revenue?.dt == null;
   // Ghi chú ngày (cột J): chi tiết thu chi (nếu có mô tả) + ghi chú của từng ca
   const note = [
     ...list
       .map((c) => {
         const who = c.shiftName ? `Ca ${c.shiftName}` : c.employeeName;
         const tc = c.revenueInput?.cp && /[a-zA-ZÀ-ỹ]/.test(c.revenueInput.cp) ? `TC: ${c.revenueInput.cp}` : "";
-        const parts = [c.revenue?.dt == null ? "chưa có DT máy" : "", tc, c.note].filter(Boolean);
+        const parts = [c === last && c.revenue?.dt == null ? "chưa có DT máy" : "", tc, c.note].filter(Boolean);
         return parts.length ? `${who}: ${parts.join("; ")}` : "";
       })
       .filter(Boolean),
@@ -37,6 +45,7 @@ export async function recomputeDay(storeId: Id, date: string) {
     .slice(0, 500);
   const prev = await DayRevenue.findOne({ storeId, date }).lean();
   const changed = !prev || REVENUE_KEYS.some((k) => (prev[k] ?? 0) !== total[k]) || (prev.note ?? "") !== note;
+  const lastShift = last?.shiftName ?? "";
   const day = await DayRevenue.findOneAndUpdate(
     { storeId, date },
     {
@@ -44,6 +53,9 @@ export async function recomputeDay(storeId: Id, date: string) {
         month: date.slice(0, 7),
         ...total,
         closings: list.length,
+        lastShift,
+        dtMissing,
+        calcVersion: DAY_CALC_VERSION,
         note,
         ...(changed && prev?.sheet?.status === "SENT" ? { "sheet.status": "PENDING" } : {}),
       },
@@ -89,18 +101,20 @@ export async function syncDaySheet(storeId: Id, date: string) {
 }
 
 /** Sau mỗi lượt chốt ca: cộng lại ngày; ghi sheet nếu là ca cuối ngày, hoặc ngày đã ghi trước đó (cập nhật số mới). */
+/** Sau mỗi lượt chốt: lưu DB (tính lại doanh thu ngày). CHỈ ca Tối mới ghi Google Sheet; ca Sáng/Chiều chỉ báo nhóm + lưu DB. */
 export async function afterClosing(storeId: Id, date: string, isDayEnd: boolean) {
-  const { wasSynced, changed } = await recomputeDay(storeId, date);
-  if (isDayEnd || (wasSynced && changed)) return syncDaySheet(storeId, date);
+  await recomputeDay(storeId, date);
+  if (isDayEnd) return syncDaySheet(storeId, date);
   return null;
 }
 
-/** Cron: ghi các ngày đã qua mà chưa ghi được (ca tối quên chốt, lỗi mạng…). */
+/** Cron: ghi lại các ngày đã chốt ca Tối mà lần ghi sheet lúc chốt bị lỗi (mạng, quyền…). */
 export async function syncPendingDays(limit = 30) {
   await connectDB();
   const today = localDate(new Date(), DEFAULT_TZ);
   const list = await DayRevenue.find({
     date: { $lt: today },
+    lastShift: "Tối", // chỉ ngày đã chốt ca Tối mới ghi sheet (ghi lại nếu lần ghi lúc chốt bị lỗi)
     "sheet.status": { $in: ["PENDING", "FAILED"] },
     "sheet.attempts": { $not: { $gte: 10 } },
   })
@@ -111,4 +125,17 @@ export async function syncPendingDays(limit = 30) {
   let ok = 0;
   for (const d of list) if ((await syncDaySheet(d.storeId, d.date)) === "SENT") ok++;
   return ok;
+}
+
+/** Tính lại các ngày còn theo cách tính cũ (cộng dồn 3 ca) → ghi lại Google Sheet nếu số đổi. Chạy dần mỗi lần cron. */
+export async function migrateDayCalc(limit = 200) {
+  await connectDB();
+  const old = await DayRevenue.find({ calcVersion: { $ne: DAY_CALC_VERSION } }).sort({ date: -1 }).limit(limit).select("storeId date").lean();
+  let n = 0;
+  for (const d of old) {
+    const { wasSynced, changed } = await recomputeDay(d.storeId, d.date);
+    if (wasSynced && changed) await syncDaySheet(d.storeId, d.date).catch(() => null);
+    n++;
+  }
+  return n;
 }
