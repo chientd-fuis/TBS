@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   BadgeCheck,
   CalendarClock,
+  CalendarDays,
   CalendarHeart,
   CalendarRange,
   ClipboardList,
@@ -25,6 +26,7 @@ import { cn } from "@/lib/format";
 
 const items = [
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
+  { href: "/admin/work-schedule", label: "Lịch làm việc", icon: CalendarDays },
   { href: "/admin/schedule", label: "Xếp ca tự động", icon: CalendarRange, badge: "shiftRequests" },
   { href: "/admin/bonus-penalty", label: "Thưởng / Phạt", icon: Gift },
   { href: "/admin/attendance", label: "Chấm công", icon: ClipboardList },

@@ -35,7 +35,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
   const acc = decrypt(u.bankAccountEnc);
   return (
     <>
-      <PageTitle sub={u.email}>
+      <PageTitle sub={u.noLogin ? "Không có tài khoản đăng nhập (admin tạo để nhập chấm công / tính lương)" : u.email}>
         <Link href="/admin/employees" className="text-sm font-normal underline">Nhân viên</Link> / {u.name}
       </PageTitle>
       {transferred && <Alert tone="green">Đã chuyển toàn bộ dữ liệu từ tài khoản Gmail cũ sang {u.email} và xoá tài khoản cũ.</Alert>}

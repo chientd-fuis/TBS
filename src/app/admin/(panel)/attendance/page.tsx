@@ -13,8 +13,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Empty, Field, Input, LinkButton, PageTitle, Select, Textarea } from "@/components/ui";
 import { manualAttendance } from "../../actions/ops";
 import QuickEdit from "./QuickEdit";
-import MonthShiftBoard from "./MonthShiftBoard";
-import { loadMonthBoard } from "./month-board-data";
+import BulkDeleteBar, { SelectAllBox } from "./BulkDeleteBar";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import SingleTimeFields from "./SingleTimeFields";
 import BulkAttendance from "./BulkAttendance";
@@ -51,7 +50,6 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
     : [];
   // ===== Bảng chấm công theo ca cả tháng (giống bảng xếp ca – chế độ xem) =====
   const templates = store ? await ShiftTemplate.find({ storeId: store._id, active: { $ne: false } }).sort({ startTime: 1 }).lean() : [];
-  const board = store ? await loadMonthBoard(String(store._id), month, tz, stores) : null;
   const visitorNames = new Map(
     (await User.find({ _id: { $in: visitors.map((v) => v.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]),
   );
@@ -98,9 +96,12 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
           }
         >
           {selected && <SummaryLine rows={rows} />}
+          {/* bảng của 1 nhân viên: tích nhiều lượt rồi xoá hàng loạt */}
+          {selected && !locked && rows.length > 0 && <BulkDeleteBar formId="att-bulk-delete" />}
           <AttendanceTable
             rows={rows as AttRow[]}
             tz={tz}
+            select={selected && !locked ? { formId: "att-bulk-delete", header: <SelectAllBox formId="att-bulk-delete" /> } : undefined}
             actions={(r) => (
               <div className="flex flex-col gap-1 text-xs">
                 {!selected && <span className="font-semibold">{name.get(String((r as AttRow & { userId: unknown }).userId))}</span>}
@@ -130,15 +131,10 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
         </Card>
       ) : (
         <>
-          {board && (
-            <Card title={`Chấm công theo ca – tháng ${month.slice(5)}/${month.slice(0, 4)}`}>
-              {board.templates.length ? (
-                <MonthShiftBoard month={month} today={localDate(new Date(), tz)} {...board} />
-              ) : (
-                <p className="text-sm text-ink/60">Cơ sở chưa có ca làm việc.</p>
-              )}
-            </Card>
-          )}
+          <p className="text-xs text-ink/60">
+            Bảng chấm công theo ca (ca × ngày) đã chuyển sang mục{" "}
+            <Link className="text-accent underline" href={`/admin/work-schedule?store=${store?._id}&month=${month}`}>Lịch làm việc</Link>.
+          </p>
           <Card title="Tổng hợp tháng">
             <SummaryTable rows={rows} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
             {rows.some((r) => r.supportLabel) && <p className="mt-2 text-xs text-ink/60">Đã gồm giờ nhân viên đi hỗ trợ cơ sở khác (lương do {store?.name} trả).</p>}
@@ -162,7 +158,8 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
             storeId={String(store?._id)}
             month={month}
             ocrEnabled={geminiConfigured()}
-            staff={staff.filter((u) => u.status === "ACTIVE").map((u) => ({ id: String(u._id), name: u.name }))}
+            // gồm cả nhân viên đã nghỉ việc (nhập chấm công / tính lương tháng cũ)
+            staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status !== "ACTIVE" }))}
             templates={templates.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }))}
             single={
                 <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">

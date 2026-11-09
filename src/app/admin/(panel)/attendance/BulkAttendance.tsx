@@ -22,8 +22,9 @@ import {
   type ImportSession,
 } from "@/lib/attendance-import";
 import { bulkAttendance, type BulkResult } from "../../actions/ops";
+import { quickCreateOfflineStaff } from "../../actions/people";
 
-type Staff = { id: string; name: string };
+type Staff = { id: string; name: string; inactive?: boolean };
 type Tpl = { id: string; name: string; startTime: string; endTime: string };
 type Group = { key: string; label: string; userId: string };
 type Row = ImportSession & {
@@ -110,7 +111,7 @@ function TimeBox({
 /** Chấm công hộ: 1 lượt · nhiều ngày (theo ca / tự nhập giờ) · import Excel · AI đọc ảnh. */
 export default function BulkAttendance({
   single,
-  staff,
+  staff: staffProp,
   templates,
   storeId,
   month,
@@ -124,6 +125,8 @@ export default function BulkAttendance({
   ocrEnabled: boolean;
 }) {
   const router = useRouter();
+  // gồm cả nhân viên đã nghỉ (nhập chấm công tháng cũ) + nhân viên vừa tạo nhanh
+  const [staff, setStaff] = useState<Staff[]>(staffProp);
   const [tab, setTab] = useState<Tab>("one");
   const [groups, setGroups] = useState<Group[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -417,6 +420,20 @@ export default function BulkAttendance({
           : r,
       ),
     );
+  /** Sheet không khớp ai (VD nhân viên đã nghỉ, chưa từng có tài khoản) → tạo nhanh nhân viên nghỉ việc rồi gán luôn. */
+  async function createStaffFor(g: Group) {
+    const name = window.prompt("Họ tên nhân viên (đã nghỉ việc, không có tài khoản đăng nhập):", g.label)?.trim();
+    if (!name) return;
+    const wageRaw = window.prompt(`Lương giờ của ${name} (VND, để tính bảng lương):`, "");
+    if (wageRaw == null) return;
+    const wage = Number(wageRaw.replace(/[^\d]/g, ""));
+    if (!wage) return setMsg({ tone: "red", text: "Nhập lương giờ (số tiền) để tính lương" });
+    const r = await quickCreateOfflineStaff(name, storeId, wage);
+    if (r.error || !r.id) return setMsg({ tone: "red", text: r.error || "Không tạo được nhân viên" });
+    setStaff((xs) => [...xs, { id: r.id!, name: r.name ?? name, inactive: true }]);
+    setGroupUser(g.key, r.id);
+    setMsg({ tone: "green", text: `Đã tạo nhân viên nghỉ việc ${r.name ?? name} – nhớ bấm Kiểm tra / Ghi` });
+  }
   const setGroupUser = (key: string, userId: string) => {
     setGroups((gs) => gs.map((g) => (g.key === key ? { ...g, userId } : g)));
     setRows((rs) =>
@@ -477,7 +494,7 @@ export default function BulkAttendance({
               {staff.map((s) =>
                 chip(
                   bUsers.includes(s.id),
-                  s.name,
+                  s.inactive ? `${s.name} (nghỉ)` : s.name,
                   () =>
                     setBUsers((u) =>
                       u.includes(s.id)
@@ -779,15 +796,21 @@ export default function BulkAttendance({
                   <span className="w-44 shrink-0">
                     <Select
                       value={g.userId}
-                      onChange={(e) => setGroupUser(g.key, e.target.value)}
+                      onChange={(e) =>
+                        e.target.value === "__new__"
+                          ? void createStaffFor(g)
+                          : setGroupUser(g.key, e.target.value)
+                      }
                       className={`py-1 ${g.userId ? "" : "border-warn"}`}
                     >
                       <option value="">— Bỏ qua —</option>
                       {staff.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
+                          {s.inactive ? " (nghỉ)" : ""}
                         </option>
                       ))}
+                      <option value="__new__">➕ Tạo NV đã nghỉ việc…</option>
                     </Select>
                   </span>
                 </label>

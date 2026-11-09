@@ -94,6 +94,8 @@ const UserSchema = new Schema(
     registeredAt: Date,
     consentFaceAt: Date,
     // quyền quản lý admin cấp cho nhân viên (lib/permissions.ts): schedule | bonus | cover
+    // nhân viên admin tự tạo, không có Gmail đăng nhập (VD đã nghỉ việc – để nhập chấm công / tính lương tháng cũ)
+    noLogin: { type: Boolean, default: false },
     managerPerms: { type: [String], default: [] },
     managerStoreIds: { type: [Schema.Types.ObjectId], default: [] }, // cơ sở được quản lý thêm (ngoài cơ sở gốc)
   },

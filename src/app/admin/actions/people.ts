@@ -179,3 +179,56 @@ export async function setStaffPerms(_: FormState, fd: FormData): Promise<FormSta
     return errMsg(e);
   }
 }
+
+/* ===== Nhân viên không có tài khoản đăng nhập (VD đã nghỉ việc – để import chấm công / tính lương tháng cũ) ===== */
+async function makeOfflineStaff(admin: Awaited<ReturnType<typeof assertAdmin>>, input: { name: string; storeId: string; hourlyWage: number; active: boolean; phone?: string }) {
+  const { randomUUID } = await import("node:crypto");
+  const name = input.name.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (name.length < 2) throw new Error("Nhập họ tên");
+  if (!(await Store.exists({ _id: input.storeId }))) throw new Error("Chọn cơ sở");
+  if (!(input.hourlyWage >= 0)) throw new Error("Lương giờ không hợp lệ");
+  await connectDB();
+  const user = await User.create({
+    // email giả (không đăng nhập được bằng Google) – sau này có Gmail thì dùng "Chuyển sang tài khoản Gmail mới"
+    email: `nv-${randomUUID()}@khong-dang-nhap.local`,
+    name,
+    phone: input.phone ?? "",
+    storeId: input.storeId,
+    hourlyWage: Math.round(input.hourlyWage),
+    status: input.active ? "ACTIVE" : "INACTIVE",
+    noLogin: true,
+    joinedAt: new Date(),
+  });
+  if (input.hourlyWage > 0) await WageHistory.create({ userId: user._id, hourlyWage: Math.round(input.hourlyWage), effectiveFrom: "2000-01-01", createdBy: adminActor(admin).name });
+  await audit(adminActor(admin), "user.createOffline", { type: "User", id: String(user._id) }, null, { name, storeId: input.storeId, hourlyWage: input.hourlyWage, status: user.status });
+  revalidatePath("/admin", "layout");
+  return user;
+}
+
+/** Form ở trang Nhân viên. */
+export async function createOfflineStaff(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    await makeOfflineStaff(admin, {
+      name: str(fd.get("name")),
+      storeId: str(fd.get("storeId")),
+      hourlyWage: num(fd.get("hourlyWage")),
+      active: str(fd.get("status")) === "ACTIVE",
+      phone: str(fd.get("phone")),
+    });
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Tạo nhanh từ màn Import Excel (sheet không khớp nhân viên nào) → trả id để gán luôn. */
+export async function quickCreateOfflineStaff(name: string, storeId: string, hourlyWage: number): Promise<{ id?: string; name?: string; error?: string }> {
+  try {
+    const admin = await assertAdmin();
+    const u = await makeOfflineStaff(admin, { name, storeId, hourlyWage, active: false });
+    return { id: String(u._id), name: u.name };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

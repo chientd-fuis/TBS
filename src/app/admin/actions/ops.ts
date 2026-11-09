@@ -503,3 +503,36 @@ export async function replyFeedback(_: FormState, fd: FormData): Promise<FormSta
     return errMsg(e);
   }
 }
+
+/** Xoá hàng loạt lượt chấm công đã tích (bảng chấm công của 1 nhân viên). Tháng đã chốt lương → bỏ qua lượt đó. */
+export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const actor = adminActor(admin);
+    const ids = [...new Set(fd.getAll("ids").map(String))].filter((x) => Types.ObjectId.isValid(x));
+    if (!ids.length) return { error: "Chưa tích lượt nào" };
+    if (ids.length > 300) return { error: "Tối đa 300 lượt mỗi lần" };
+    const reason = str(fd.get("reason")) || "Xoá hàng loạt";
+    const list = await Attendance.find({ _id: { $in: ids } });
+    let done = 0;
+    const lockedMonths = new Set<string>();
+    for (const a of list) {
+      try {
+        await assertNotLocked(payStoreOf(a), a.month);
+      } catch {
+        lockedMonths.add(a.month);
+        continue;
+      }
+      await AttendanceAdjustment.create({ attendanceId: a._id, adminName: actor.name, action: "DELETE", before: a.toObject(), reason });
+      await a.deleteOne();
+      done++;
+    }
+    await audit(actor, "attendance.bulkDelete", { type: "Attendance" }, null, { n: done, userIds: [...new Set(list.map((a) => String(a.userId)))], reason });
+    revalidatePath("/admin/attendance", "layout");
+    revalidatePath("/admin/work-schedule");
+    if (lockedMonths.size) return { error: `Đã xoá ${done} lượt. Bỏ qua lượt thuộc tháng đã chốt lương: ${[...lockedMonths].join(", ")}` };
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}

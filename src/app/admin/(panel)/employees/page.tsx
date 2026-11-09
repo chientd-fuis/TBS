@@ -2,7 +2,9 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { Store, User } from "@/lib/models";
 import { vnd } from "@/lib/format";
-import { Badge, Card, Empty, Input, PageTitle, Select } from "@/components/ui";
+import { Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
+import { ActionForm } from "@/components/ActionForm";
+import { createOfflineStaff } from "../../actions/people";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +57,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                 {users.map((u) => (
                   <tr key={String(u._id)}>
                     <td className="font-semibold">{u.name || u.googleName}</td>
-                    <td className="text-xs">{u.email}</td>
+                    <td className="text-xs">{u.noLogin ? <Badge tone="gray">Không có tài khoản</Badge> : u.email}</td>
                     <td>{u.phone}</td>
                     <td>{storeName.get(String(u.storeId))}</td>
                     <td className="text-right">{vnd(u.hourlyWage)}</td>
@@ -67,6 +69,28 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
         )}
+      </Card>
+      <Card title="➕ Thêm nhân viên không có tài khoản (VD đã nghỉ việc)">
+        <p className="mb-2 text-xs text-ink/70">
+          Dùng khi cần nhập chấm công / tính lương tháng cũ cho người chưa từng đăng nhập app (thường là đã nghỉ việc). Nhân viên này không đăng nhập được;
+          nếu sau này họ dùng Gmail thì vào Chi tiết → <b>Chuyển sang tài khoản Gmail mới</b> để gộp dữ liệu.
+        </p>
+        <ActionForm action={createOfflineStaff} submitLabel="Thêm nhân viên" successText="Đã thêm" className="flex flex-wrap items-end gap-2">
+          <Field label="Họ tên"><Input name="name" required className="!w-52" /></Field>
+          <Field label="Cơ sở">
+            <Select name="storeId" defaultValue={sp.store || String(stores[0]?._id ?? "")} required className="!w-44">
+              {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Lương giờ (VND)"><Input name="hourlyWage" inputMode="numeric" required placeholder="VD 25000" className="!w-32 text-right" /></Field>
+          <Field label="SĐT"><Input name="phone" className="!w-36" /></Field>
+          <Field label="Trạng thái">
+            <Select name="status" defaultValue="INACTIVE" className="!w-36">
+              <option value="INACTIVE">Đã nghỉ việc</option>
+              <option value="ACTIVE">Đang làm</option>
+            </Select>
+          </Field>
+        </ActionForm>
       </Card>
     </>
   );

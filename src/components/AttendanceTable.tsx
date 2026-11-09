@@ -30,13 +30,28 @@ export type AttRow = {
 };
 
 /** Bảng chấm công theo mẫu: Ngày | Giờ Đến | Giờ Về | Tổng | Format | Giờ tính công | Ca | Cảnh báo | Ảnh | Ghi chú (spec 5) */
-export function AttendanceTable({ rows, tz, actions, staffView = false }: { rows: AttRow[]; tz: string; actions?: (r: AttRow) => ReactNode; /** trang nhân viên: cột Ghi chú chỉ hiện ghi chú admin để lại */ staffView?: boolean }) {
+export function AttendanceTable({
+  rows,
+  tz,
+  actions,
+  staffView = false,
+  select,
+}: {
+  rows: AttRow[];
+  tz: string;
+  actions?: (r: AttRow) => ReactNode;
+  /** trang nhân viên: cột Ghi chú chỉ hiện ghi chú admin để lại */
+  staffView?: boolean;
+  /** cột tích chọn (xoá hàng loạt): ô thuộc form formId; header = ô "chọn tất cả" */
+  select?: { formId: string; header?: ReactNode; disabled?: boolean };
+}) {
   if (!rows.length) return <Empty>Chưa có dữ liệu chấm công</Empty>;
   return (
     <div className="max-h-[70vh] overflow-auto rounded-xl ring-1 ring-[#f1e6c8]">
       <table className="tbs">
         <thead>
           <tr>
+            {select && <th className="w-8 text-center">{select.header}</th>}
             <th>Ngày</th>
             <th>Giờ Đến</th>
             <th>Giờ Về</th>
@@ -65,6 +80,11 @@ export function AttendanceTable({ rows, tz, actions, staffView = false }: { rows
             const hasOut = !!(r.checkOutPhotoId || r.checkOutPendingPhotoId);
             return (
               <tr key={id} className={cls}>
+                {select && (
+                  <td className="text-center">
+                    <input type="checkbox" name="ids" value={id} form={select.formId} disabled={select.disabled} aria-label="Chọn lượt này" className="h-4 w-4 accent-[#c0392b]" />
+                  </td>
+                )}
                 <td className="whitespace-nowrap">{viDate(r.workDate)}</td>
                 <td>{localTime(r.checkInAt, tz)}</td>
                 <td>{r.checkOutAt ? localTime(r.checkOutAt, tz) : ""}</td>
