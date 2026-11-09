@@ -4,7 +4,7 @@
  * Cấu hình lưu ở Settings.ai (Mixed) – thiếu khoá nào thì dùng mặc định dưới đây.
  */
 import { connectDB } from "./db";
-import { AiUsage, Settings } from "./models";
+import { AiUsage, Settings, User } from "./models";
 import { DEFAULT_TZ, localDate, localMonth, zonedToDate } from "./time";
 import { RULES_TEMPLATE } from "./rules-format";
 
@@ -25,7 +25,8 @@ export type AiFeatureKey =
   | "anomaly"
   | "payExplain"
   | "forecast"
-  | "ask";
+  | "ask"
+  | "rulesSummary";
 
 export const AI_MODELS = [
   { key: "", label: "Mặc định (GEMINI_MODEL)" },
@@ -54,6 +55,7 @@ export const AI_FEATURES: {
   { key: "anomaly", label: "Phát hiện bất thường chốt ca & két", hint: "Rà theo từng nhân viên mỗi ngày, AI viết tóm tắt", unit: "day", limit: 3, enabled: true, model: "gemini-2.5-flash-lite", roles: [] },
   { key: "payExplain", label: "Giải thích lương cho nhân viên", hint: "NV hỏi “vì sao lương tháng này là X”", unit: "monthActor", limit: 3, enabled: false, model: "gemini-2.5-flash-lite", roles: ["manager", "staff"] },
   { key: "forecast", label: "Dự báo → gợi ý số người / ca", hint: "Thống kê doanh thu theo thứ / ngày lễ; AI viết lý do", unit: "month", limit: 10, enabled: true, model: "gemini-2.5-flash-lite", roles: ["admin"] },
+  { key: "rulesSummary", label: "Tóm tắt nội quy", hint: "Lưu nội quy đầy đủ → AI tóm tắt ~10 điều cho nút “Nội quy” của nhân viên", unit: "month", limit: 30, enabled: true, model: "gemini-2.5-flash-lite", roles: [] },
   { key: "ask", label: "Hỏi đáp dữ liệu (admin)", hint: "Hỏi bằng tiếng Việt, AI tra dữ liệu theo quyền", unit: "dayActor", limit: 30, enabled: true, model: "", roles: ["admin"] },
 ];
 export const UNIT_LABEL: Record<LimitUnit, string> = { month: "lượt / tháng", day: "lượt / ngày", dayActor: "câu / ngày / người", monthActor: "lượt / tháng / người" };
@@ -67,6 +69,8 @@ export type AiConfig = {
   warnPct: number;
   features: Record<AiFeatureKey, AiFeatureCfg>;
   assistant: AssistantContent;
+  /** nội quy tóm tắt (AI tóm tắt từ assistant.rules, admin sửa được) – hiện ở nút "Nội quy" */
+  rulesSummary: string;
   anomaly: AnomalyCfg;
 };
 
@@ -105,9 +109,13 @@ export function mergeAiConfig(raw: unknown): AiConfig {
       // nội quy trống → dùng mẫu 10 điều (nút “Nội quy” không bao giờ trống)
       rules: String(r.assistant?.rules ?? "").trim() ? String(r.assistant!.rules) : DEFAULT_ASSISTANT.rules,
     },
+    rulesSummary: typeof r.rulesSummary === "string" ? r.rulesSummary : "",
     anomaly: { ...DEFAULT_ANOMALY, ...(r.anomaly ?? {}) },
   };
 }
+
+/** Nội quy hiện cho nhân viên: bản tóm tắt; chưa có thì dùng bản đầy đủ. */
+export const rulesShown = (cfg: AiConfig) => (cfg.rulesSummary.trim() ? cfg.rulesSummary : cfg.assistant.rules);
 
 export async function getAiConfig(): Promise<AiConfig> {
   await connectDB();
@@ -135,7 +143,6 @@ export async function actorRole(actor: string): Promise<ActorRole> {
   if (actor === "admin:owner") return "owner";
   if (actor.startsWith("admin:")) return "admin";
   if (actor.startsWith("user:")) {
-    const { User } = await import("./models");
     const id = actor.slice(5);
     const u = /^[a-f\d]{24}$/i.test(id) ? await User.findById(id).select("managerPerms").lean() : null;
     return userAiRole(u ?? {});

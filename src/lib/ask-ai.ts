@@ -13,6 +13,9 @@ import { matchStaff } from "./attendance-import";
 import { loadHolidays } from "./holiday";
 import { geminiGenerate } from "./ocr";
 import type { AdminSession } from "./admin-session";
+import { loadWeek } from "./schedule-data";
+import { slotLevel, targetFor } from "./schedule";
+import { loadDayRevenue } from "./finance-data";
 
 type Args = { month?: string | null; store?: string | null; person?: string | null; from?: string | null; to?: string | null; compareFrom?: string | null; compareTo?: string | null };
 type Tool = { key: string; desc: string; allowed: (a: AdminSession) => boolean; run: (args: Args, ctx: Ctx) => Promise<unknown> };
@@ -41,7 +44,7 @@ async function findPerson(name: string | null | undefined, storeIds: string[]) {
   return one ? { person: one } : { error: `Không tìm thấy nhân viên "${name}"` };
 }
 
-const TOOLS: Tool[] = [
+export const TOOLS: Tool[] = [
   {
     key: "late_ranking",
     desc: "Xếp hạng đi muộn / về sớm / quên check-out theo nhân viên trong 1 tháng (args: month, store?)",
@@ -123,8 +126,6 @@ const TOOLS: Tool[] = [
     desc: "Ca thiếu người / ít người so với định mức trong 1 tuần (args: from = ngày đầu tuần, store?)",
     allowed: () => true,
     run: async (a, ctx) => {
-      const { loadWeek } = await import("./schedule-data");
-      const { slotLevel, targetFor } = await import("./schedule");
       const ws = weekStartOf(isDate(a.from) ? a.from! : addDays(ctx.today, 7));
       const out: { store: string; date: string; shift: string; approved: number; min: number; target: number; level: string }[] = [];
       for (const sid of storeIdsOf(a, ctx)) {
@@ -144,7 +145,6 @@ const TOOLS: Tool[] = [
     desc: "Doanh thu (thực thu) theo cơ sở trong 1 khoảng ngày, so với khoảng khác (args: from, to, compareFrom?, compareTo?, store?). CHỈ Admin Tổng",
     allowed: (a) => a.kind === "OWNER",
     run: async (a, ctx) => {
-      const { loadDayRevenue } = await import("./finance-data");
       const ids = storeIdsOf(a, ctx);
       const from = isDate(a.from) ? a.from! : weekStartOf(ctx.today);
       const to = isDate(a.to) ? a.to! : ctx.today;

@@ -7,6 +7,8 @@ import { normalizeOcr, type Revenue } from "./revenue";
  */
 
 import type { AiFeatureKey } from "./ai";
+import { aiGuard, recordAiUsage } from "./ai";
+import { normalizeStatement } from "./finance";
 
 export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean; provider: string };
 
@@ -159,13 +161,11 @@ export async function geminiGenerate(opts: {
   if (!keys.length) throw new Error("Chưa cấu hình GEMINI_API_KEY");
   let preferred = opts.model ?? "";
   if (opts.feature && !opts.followUp) {
-    const { aiGuard } = await import("./ai");
     const g = await aiGuard(opts.feature, opts.actor); // ném lỗi dễ hiểu nếu tắt / hết lượt / hết ngân sách
     preferred = preferred || g.model;
   }
   const record = async (body: unknown, model: string) => {
     if (!opts.feature) return;
-    const { recordAiUsage } = await import("./ai");
     const tokens = (body as { usageMetadata?: { totalTokenCount?: number } })?.usageMetadata?.totalTokenCount ?? 0;
     await recordAiUsage(opts.feature, opts.actor ?? "system", tokens, model, !opts.followUp);
   };
@@ -302,7 +302,6 @@ export async function readStatementPhoto(photo: string, refDate: string, categor
       },
     },
   });
-  const { normalizeStatement } = await import("./finance");
   return normalizeStatement(json, refDate);
 }
 

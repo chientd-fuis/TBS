@@ -8,6 +8,9 @@ import { AnomalyResolved, AnomalyRun, ReportLog, ShiftClosing, Store } from "./m
 import { closingSum, shiftDeltas, type Revenue } from "./revenue";
 import { addDays, DEFAULT_TZ, localDate, zonedToDate } from "./time";
 import { getAiConfig, type AnomalyCfg } from "./ai";
+import { geminiGenerate } from "./ocr";
+import { financeChatId } from "./finance-report";
+import { sendTelegramText, telegramConfigured } from "./telegram";
 
 export type Sev = 3 | 2 | 1; // 3 nghiêm trọng · 2 cần xem · 1 lưu ý
 export const SEV_LABEL: Record<Sev, string> = { 3: "Nghiêm trọng", 2: "Cần xem", 1: "Lưu ý" };
@@ -156,7 +159,6 @@ export async function runAnomaly(opts: { days?: number; actor?: string } = {}) {
   let summary = ruleSummary(withStore, closings.length, stores.length);
   if (withStore.length) {
     try {
-      const { geminiGenerate } = await import("./ocr");
       const t = await geminiGenerate({
         feature: "anomaly",
         actor: opts.actor ?? "system",
@@ -218,8 +220,6 @@ export async function runDailyAnomaly() {
   const run = await runAnomaly();
   const items = run.items as (AnomalyItem & { storeName: string })[];
   if (cfg.anomaly.telegram && items.some((i) => i.sev >= 2)) {
-    const { financeChatId } = await import("./finance-report");
-    const { sendTelegramText, telegramConfigured } = await import("./telegram");
     const chat = await financeChatId();
     if (telegramConfigured() && chat) {
       const top = items.filter((i) => i.sev >= 2).slice(0, 8);

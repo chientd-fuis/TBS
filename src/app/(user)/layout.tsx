@@ -7,7 +7,7 @@ import BottomNav from "@/components/user/BottomNav";
 import RegRequestAlert from "@/components/user/RegRequestAlert";
 import UserNotices from "@/components/user/UserNotices";
 import RulesButton from "@/components/user/RulesButton";
-import { getAiConfig, roleAllowed, userAiRole } from "@/lib/ai";
+import { getAiConfig, roleAllowed, rulesShown, userAiRole } from "@/lib/ai";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -16,7 +16,7 @@ export default async function UserLayout({ children }: { children: React.ReactNo
   const user = await requireActiveUser();
   const store = await Store.findById(user.storeId).select("name timezone").lean();
   const ai = await getAiConfig().catch(() => null);
-  const rules = ai?.assistant.rules ?? "";
+  const rules = ai ? rulesShown(ai) : "";
   const showAssistant = !!ai && ai.enabled && ai.features.assistant.enabled && roleAllowed(ai, "assistant", userAiRole(user));
   return (
     <div className="mx-auto min-h-screen max-w-lg pb-24">

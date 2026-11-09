@@ -16,3 +16,12 @@ test("mẫu 10 điều; nội quy trống → dùng mẫu", () => {
   assert.equal(mergeAiConfig({ assistant: { rules: "  " } }).assistant.rules, RULES_TEMPLATE);
   assert.equal(mergeAiConfig({ assistant: { rules: "1. Riêng quán" } }).assistant.rules, "1. Riêng quán");
 });
+
+test("nội quy tóm tắt: bỏ ``` bọc ngoài, phải có điều mục; chưa có tóm tắt → nhân viên xem bản đầy đủ", async () => {
+  const { cleanSummary } = await import("../src/lib/rules-summary");
+  const { rulesShown } = await import("../src/lib/ai");
+  assert.equal(cleanSummary("```markdown\n# NỘI QUY TÓM TẮT\n1. **Đúng giờ:** trước 5 phút\n```"), "# NỘI QUY TÓM TẮT\n1. **Đúng giờ:** trước 5 phút");
+  assert.throws(() => cleanSummary("Xin lỗi, tôi không thể"));
+  assert.equal(rulesShown(mergeAiConfig({ assistant: { rules: "1. Đầy đủ" } })), "1. Đầy đủ");
+  assert.equal(rulesShown(mergeAiConfig({ assistant: { rules: "1. Đầy đủ" }, rulesSummary: "1. Tóm tắt" })), "1. Tóm tắt");
+});

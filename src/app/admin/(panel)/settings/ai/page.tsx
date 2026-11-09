@@ -7,7 +7,7 @@ import { storeManagers } from "@/lib/assistant";
 import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, PageTitle, Select, Textarea } from "@/components/ui";
-import { saveAiSettings, saveAssistantContent } from "../../../actions/ai";
+import { regenRulesSummary, saveAiSettings, saveAssistantContent, saveRulesSummary } from "../../../actions/ai";
 import RulesView from "@/components/RulesView";
 
 export const dynamic = "force-dynamic";
@@ -138,7 +138,7 @@ export default async function AiSettingsPage() {
         </p>
         <ActionForm action={saveAssistantContent} submitLabel="Lưu nội dung trợ lý" successText="Đã lưu" className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-2">
-            <Field label="📋 Nội quy, quy định" hint="Hiện ở nút “Nội quy” trên header app nhân viên (badge NEW khi sửa) + trợ lý dùng để trả lời. Định dạng: # tiêu đề · 1. điều mục · - ý nhỏ · **đậm** · ! lưu ý">
+            <Field label="📋 Nội quy, quy định (bản đầy đủ)" hint="Trợ lý dùng bản này để trả lời. Lưu → AI tự tóm tắt ~10 điều cho nút “Nội quy” của nhân viên (xem ở thẻ bên dưới). Định dạng: # tiêu đề · 1. điều mục · - ý nhỏ · **đậm** · ! lưu ý">
               <Textarea name="rules" rows={14} defaultValue={cfg.assistant.rules} className="font-mono text-xs" />
             </Field>
             <Field label="👤 Ai là quản lý (bổ sung SĐT, ghi chú)" hint="Danh sách quản lý tự lấy từ admin & nhân viên được cấp quyền (bên dưới) – ghi thêm SĐT / ca phụ trách ở đây">
@@ -149,17 +149,32 @@ export default async function AiSettingsPage() {
             <Field label="🧾 Hướng dẫn chốt ca"><Textarea name="closing" rows={5} defaultValue={cfg.assistant.closing} /></Field>
             <Field label="⏰ Hướng dẫn chấm công"><Textarea name="attendance" rows={5} defaultValue={cfg.assistant.attendance} /></Field>
           </div>
-          <details className="rounded-xl bg-cream p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-accent">👁 Xem trước nội quy nhân viên thấy (bản đã lưu)</summary>
-            <div className="mx-auto mt-3 max-w-lg">
-              <RulesView text={cfg.assistant.rules} />
-            </div>
-          </details>
           <div className="rounded-xl bg-cream p-3 text-xs">
             <b>Quản lý tự động:</b>{" "}
             {managers.length ? managers.map((m) => `${m.store}: ${m.names.join(", ")}`).join(" · ") : "chưa có (cấp quyền quản lý cho nhân viên ở trang Nhân viên)"}
           </div>
         </ActionForm>
+      </Card>
+
+      <Card title="📖 Nội quy tóm tắt – nhân viên thấy ở nút “Nội quy”">
+        <p className="mb-3 text-xs text-ink/70">
+          AI tự tóm tắt mỗi khi bạn lưu nội quy đầy đủ (có thay đổi). Nhân viên thấy badge <b className="text-danger">NEW</b> khi bản này đổi.{" "}
+          {cfg.rulesSummary.trim() ? "" : <b>Chưa có bản tóm tắt – nhân viên đang xem bản đầy đủ.</b>}
+        </p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl bg-cream p-3">
+            <p className="mb-2 text-xs font-semibold text-accent">👁 Nhân viên đang thấy</p>
+            <RulesView text={cfg.rulesSummary.trim() ? cfg.rulesSummary : cfg.assistant.rules} />
+          </div>
+          <div className="space-y-3">
+            <ActionForm action={regenRulesSummary} submitLabel="✨ AI tóm tắt lại từ bản đầy đủ" variant="outline" successText="Đã tóm tắt lại" />
+            <ActionForm action={saveRulesSummary} submitLabel="Lưu bản tóm tắt" successText="Đã lưu" className="space-y-2">
+              <Field label="Sửa tay bản tóm tắt" hint="Để trống = nhân viên xem bản đầy đủ. Lưu nội quy đầy đủ lần sau sẽ bị AI tóm tắt đè lên.">
+                <Textarea name="rulesSummary" rows={14} defaultValue={cfg.rulesSummary} className="font-mono text-xs" />
+              </Field>
+            </ActionForm>
+          </div>
+        </div>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
