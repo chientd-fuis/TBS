@@ -305,11 +305,21 @@ export default function BulkAttendance({
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "Không đọc được file");
-      const sheets = j.sheets as {
+      const all = j.sheets as {
         sheet: string;
         name: string;
         sessions: ImportSession[];
       }[];
+      // chỉ lấy lượt của tháng đang chọn – các ngày khác trong file bỏ qua
+      let skipped = 0;
+      const sheets = all
+        .map((s) => {
+          const inMonth = s.sessions.filter((x) => x.date.startsWith(bMonth));
+          skipped += s.sessions.length - inMonth.length;
+          return { ...s, sessions: inMonth };
+        })
+        .filter((s) => s.sessions.length);
+      if (!sheets.length) throw new Error(`File không có lượt chấm công nào trong tháng ${+bMonth.slice(5)}/${bMonth.slice(0, 4)}`);
       const gs: Group[] = sheets.map((s) => ({
         key: `s:${s.sheet}`,
         label: s.name || s.sheet,
@@ -327,6 +337,7 @@ export default function BulkAttendance({
         ),
         `Import Excel ${f.name}`,
       );
+      if (skipped) setProgress(`Đã bỏ qua ${skipped} lượt ngoài tháng ${+bMonth.slice(5)}/${bMonth.slice(0, 4)}`);
     } catch (e) {
       setMsg({ tone: "red", text: (e as Error).message });
     } finally {
@@ -618,11 +629,20 @@ export default function BulkAttendance({
       {tab === "excel" && (
         <div className="space-y-2 text-sm">
           <p className="text-xs text-ink/70">
-            File .xlsx, mỗi nhân viên 1 sheet, cột{" "}
+            File .xlsx, mỗi nhân viên 1 sheet. Đọc được 2 mẫu: <b>(1)</b> cột{" "}
             <b>Ngày | Thời gian | Hình thức chấm công | … | Ca làm việc</b> (mỗi
-            lượt 2 dòng vào/ra – giống file IN_OUT của máy chấm công cũ). Đọc
-            xong bạn chọn lại nhân viên cho từng sheet trước khi ghi.
+            lượt 2 dòng vào/ra – file IN_OUT của máy chấm công cũ);{" "}
+            <b>(2)</b> mỗi dòng 1 lượt <b>Ngày | Giờ Đến | Giờ Về</b> (tên sheet
+            = tên nhân viên, VD Le_Thi_Nga – Google Sheet tải về dạng .xlsx).
+            Chỉ lấy các ngày thuộc tháng chọn bên dưới. Đọc xong bạn chọn lại
+            nhân viên cho từng sheet trước khi ghi.
           </p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">Chỉ lấy tháng</span>
+            <span className="w-40">
+              <Input type="month" value={bMonth} onChange={(e) => setBMonth(e.target.value)} className="py-1" />
+            </span>
+          </div>
           <div className="flex flex-wrap gap-2">
             <a
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 font-semibold"

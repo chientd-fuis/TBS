@@ -353,7 +353,7 @@ export function formatExpenseCaption(e: ExpenseCaption) {
   ];
   if (e.vendor) lines.push(`🛒 Nơi bán: ${e.vendor}`);
   if (e.items) lines.push(`📝 Nội dung: ${e.items}`);
-  lines.push(`💳 Nguồn tiền: ${e.paidFrom === "CASHBOX" ? "Tiền két (đã trừ trong thu chi ca)" : "Chủ trả / chuyển khoản"}`);
+  lines.push(`💳 Nguồn tiền: ${e.paidFrom === "CASHBOX" ? "Tiền két (đã trừ trong thu chi ca)" : "Admin Tổng trả / chuyển khoản"}`);
   if (e.transferNote) lines.push(`🏦 Nội dung CK: ${e.transferNote}`);
   if (e.note) lines.push(`🗒 Ghi chú: ${e.note}`);
   if (!isCountedExpense(e)) lines.push("ℹ️ Chỉ lưu chứng từ – không tính vào chi phí");

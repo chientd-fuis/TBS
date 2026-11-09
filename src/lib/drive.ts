@@ -5,7 +5,7 @@ import { decrypt, encrypt } from "./crypto";
 import { PendingPhoto, Settings, Store } from "./models";
 import { getSettings } from "./settings";
 
-/* Google Drive (OAuth bằng Google account của Chủ) – chỉ dùng lưu ảnh chấm công. Spec 2.1, 6.1 */
+/* Google Drive (OAuth bằng Google account của Admin Tổng) – chỉ dùng lưu ảnh chấm công. Spec 2.1, 6.1 */
 
 export const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file", "openid", "email"];
 const ROOT_FOLDER_NAME = "TBS Chấm công";

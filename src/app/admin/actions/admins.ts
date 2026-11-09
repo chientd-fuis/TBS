@@ -9,7 +9,7 @@ import { isOwnerEmail } from "@/lib/auth";
 import { isAdminPerm } from "@/lib/permissions";
 import { errMsg, str, type FormState } from "./types";
 
-/* Chủ quản lý admin (đăng nhập Gmail): thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
+/* Admin Tổng quản lý admin (đăng nhập Gmail): thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const permsOf = (fd: FormData) => fd.getAll("perms").map(String).filter(isAdminPerm);
@@ -37,7 +37,7 @@ async function load(fd: FormData) {
   return { owner, acc, actor: adminActor(owner) };
 }
 
-/** Chủ thêm Gmail admin – có hiệu lực ngay. */
+/** Admin Tổng thêm Gmail admin – có hiệu lực ngay. */
 export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
@@ -45,7 +45,7 @@ export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormS
     const email = str(fd.get("email")).toLowerCase();
     const name = str(fd.get("name")).replace(/\s+/g, " ").slice(0, 60);
     if (!EMAIL_RE.test(email)) return { error: "Gmail không hợp lệ" };
-    if (isOwnerEmail(email)) return { error: "Đây là Gmail của Chủ" };
+    if (isOwnerEmail(email)) return { error: "Đây là Gmail của Admin Tổng" };
     if (name.length < 2) return { error: "Nhập tên hiển thị" };
     if (await AdminAccount.exists({ email })) return { error: "Gmail này đã có trong danh sách" };
     const perms = permsOf(fd);
@@ -82,16 +82,16 @@ export async function setAdminStatus(_: FormState, fd: FormData): Promise<FormSt
   try {
     const { acc, actor } = await load(fd);
     const op = str(fd.get("op"));
-    if (op === "logout") await revoke(acc._id, "Chủ đăng xuất");
+    if (op === "logout") await revoke(acc._id, "Admin Tổng đăng xuất");
     else if (op === "block") {
       acc.status = "BLOCKED";
       await acc.save();
-      await revoke(acc._id, "Chủ khoá tài khoản");
+      await revoke(acc._id, "Admin Tổng khoá tài khoản");
     } else if (op === "unblock") {
       acc.status = "ACTIVE";
       await acc.save();
     } else if (op === "delete") {
-      await revoke(acc._id, "Chủ xoá tài khoản");
+      await revoke(acc._id, "Admin Tổng xoá tài khoản");
       await AdminAccount.deleteOne({ _id: acc._id });
     } else return { error: "Thao tác không hợp lệ" };
     await audit(actor, `admin.account.${op}`, { type: "AdminAccount", id: String(acc._id) }, { name: acc.name, email: acc.email }, null);

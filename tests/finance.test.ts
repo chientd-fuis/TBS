@@ -81,7 +81,7 @@ test("caption chi phí gửi nhóm Quản lý doanh thu", () => {
   });
   assert.match(c, /^💸 CHI PHÍ\n📅 Ngày: 05\/11\/2026 \(Thứ 5\)\n💰 Số tiền: 1\.250\.000 đ/);
   assert.match(c, /Chi phí chung chuỗi/);
-  assert.match(c, /Nguồn tiền: Chủ trả/);
+  assert.match(c, /Nguồn tiền: Admin Tổng trả/);
   assert.match(formatExpenseCaption({ date: "2026-11-05", weekday: "Thứ 5", amount: 1, category: "KHAC", storeName: "TBS Văn Phú", by: "x", deleted: true }), /^🗑 ĐÃ XOÁ CHI PHÍ[\s\S]*Gắn riêng cơ sở: Văn Phú/);
 });
 

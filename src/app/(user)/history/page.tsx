@@ -35,7 +35,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
         <Card className="!p-3"><p className="text-xs">Muộn / Sớm</p><p className="text-xl font-bold text-warn">{sum.late} / {sum.early}</p></Card>
       </div>
       {sum.missing > 0 && <p className="text-sm text-danger">Có {sum.missing} lượt quên check-out – hãy gửi yêu cầu điều chỉnh bên dưới.</p>}
-      <AttendanceTable rows={rows} tz={tz} hideNote />
+      <AttendanceTable rows={rows} tz={tz} staffView />
 
       <Card title="Gửi yêu cầu điều chỉnh">
         <ActionForm action={submitAdjustment} submitLabel="Gửi yêu cầu" successText="Đã gửi – chờ admin duyệt">

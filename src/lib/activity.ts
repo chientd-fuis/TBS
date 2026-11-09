@@ -1,4 +1,4 @@
-/* Lịch sử hoạt động của admin (không gồm Chủ) – giữ 7 ngày. Ghi tự động từ audit(). */
+/* Lịch sử hoạt động của admin (không gồm Admin Tổng) – giữ 7 ngày. Ghi tự động từ audit(). */
 
 export type ActivityGroup = "attendance" | "schedule" | "bonus" | "people" | "payroll" | "revenue" | "finance" | "system" | "login";
 export const GROUP_LABEL: Record<ActivityGroup, string> = {

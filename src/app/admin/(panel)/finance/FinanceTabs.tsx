@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/format";
 
-// owner = chỉ Chủ; perm = quyền Chủ cấp cho admin (lib/permissions.ts)
+// owner = chỉ Admin Tổng; perm = quyền Admin Tổng cấp cho admin (lib/permissions.ts)
 const TABS: { href: string; label: string; owner?: boolean; perm?: string }[] = [
   { href: "/admin/finance", label: "Lãi lỗ", owner: true },
   { href: "/admin/finance/revenue", label: "Doanh thu theo ngày", owner: true },

@@ -1,8 +1,8 @@
 /*
  * Phân quyền.
- *  - Chủ (Google): toàn quyền.
- *  - Admin (đăng nhập Gmail được Chủ thêm / duyệt): mặc định KHÔNG có các quyền dưới đây – Chủ cấp thêm từng quyền.
- *    Lãi lỗ, Doanh thu theo ngày (+ sổ quỹ tiền mặt / tài khoản) và Quản lý admin: CHỈ Chủ, không cấp được.
+ *  - Admin Tổng (Google): toàn quyền.
+ *  - Admin (đăng nhập Gmail được Admin Tổng thêm / duyệt): mặc định KHÔNG có các quyền dưới đây – Admin Tổng cấp thêm từng quyền.
+ *    Lãi lỗ, Doanh thu theo ngày (+ sổ quỹ tiền mặt / tài khoản) và Quản lý admin: CHỈ Admin Tổng, không cấp được.
  *  - Nhân viên: admin cấp quyền quản lý (xếp ca / thưởng-phạt / duyệt đổi ca-làm hộ) trong các cơ sở được giao.
  */
 export const ADMIN_PERMS = [
@@ -23,7 +23,7 @@ export const FINANCE_PERMS: AdminPerm[] = ["finance.shiftExpenses", "finance.bil
 export const isAdminPerm = (v: unknown): v is AdminPerm => typeof v === "string" && (ADMIN_PERM_KEYS as string[]).includes(v);
 
 type WithPerms = { kind: "OWNER" | "ADMIN"; perms?: readonly string[] };
-/** Chủ luôn có quyền; admin cần được cấp. */
+/** Admin Tổng luôn có quyền; admin cần được cấp. */
 export const can = (a: WithPerms | null | undefined, perm: AdminPerm) => !!a && (a.kind === "OWNER" || !!a.perms?.includes(perm));
 export const canAny = (a: WithPerms | null | undefined, perms: AdminPerm[]) => perms.some((p) => can(a, p));
 

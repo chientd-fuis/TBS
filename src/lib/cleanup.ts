@@ -28,7 +28,7 @@ import { addDays, DEFAULT_TZ, localDate, localMonth, nextMonth, prevMonth, zoned
 import { trashOldPhotoFolders } from "./drive";
 import { AUTO_KEYS_UI as AUTO_KEYS, CLEANUP_ITEMS, CLEANUP_KEYS, fmtBytes, type CleanupCounts, type CleanupKey, type CleanupPart } from "./cleanup-items";
 
-/* Dọn dữ liệu cũ (chỉ Chủ). KHÔNG xoá bản ghi chấm công, ca làm chính thức, thưởng/phạt, lương, chi phí. */
+/* Dọn dữ liệu cũ (chỉ Admin Tổng). KHÔNG xoá bản ghi chấm công, ca làm chính thức, thưởng/phạt, lương, chi phí. */
 
 export type { CleanupCounts, CleanupKey } from "./cleanup-items";
 export type CleanupOpts = { beforeMonth: string; drivePhotos?: boolean } & Partial<Record<CleanupKey, boolean>>;
@@ -40,7 +40,7 @@ const DAY = 86_400_000;
 export function safeCutoff(now = new Date()) {
   return prevMonth(prevMonth(localMonth(now, DEFAULT_TZ)));
 }
-/** Mốc xa nhất Chủ được chọn tay: tháng sau = xoá cả tháng hiện tại (và tháng trước). */
+/** Mốc xa nhất Admin Tổng được chọn tay: tháng sau = xoá cả tháng hiện tại (và tháng trước). */
 export function latestCutoff(now = new Date()) {
   return nextMonth(localMonth(now, DEFAULT_TZ));
 }

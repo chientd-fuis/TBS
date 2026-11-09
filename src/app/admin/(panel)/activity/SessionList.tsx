@@ -17,7 +17,7 @@ const ago = (iso: string, now: number) => {
 };
 const vn = (iso: string) => vnTime(iso);
 
-/** Chủ: các phiên admin đang đăng nhập + đăng xuất từng phiên / tất cả. */
+/** Admin Tổng: các phiên admin đang đăng nhập + đăng xuất từng phiên / tất cả. */
 export default function SessionList({ sessions, now }: { sessions: SessionRow[]; now: number }) {
   const router = useRouter();
   const [ask, setAsk] = useState<SessionRow | "ALL" | null>(null);

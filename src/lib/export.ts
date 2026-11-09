@@ -8,7 +8,7 @@ import { daysOfMonth, localTime, monthRange, nextMonth, viDate, viDateTime, viMo
 /* Xuất Excel cho admin – spec 3.8 */
 
 export const EXPORT_TYPES = {
-  tonghopthang: "Tổng hợp tháng – doanh thu, chi phí, lãi (mỗi tháng 1 sheet, chỉ chủ)",
+  tonghopthang: "Tổng hợp tháng – doanh thu, chi phí, lãi (mỗi tháng 1 sheet, chỉ Admin Tổng)",
   chamcong: "Bảng chấm công chi tiết + Tổng hợp",
   tonghop: "Tổng hợp chấm công tháng",
   luong: "Bảng lương tháng",

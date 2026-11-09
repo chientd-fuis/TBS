@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ month?: string; alloc?: string }> }) {
   const admin = await requireAdmin();
   if (admin.kind !== "OWNER") {
-    // Lãi lỗ chỉ Chủ – admin vào tab tài chính đầu tiên được cấp
+    // Lãi lỗ chỉ Admin Tổng – admin vào tab tài chính đầu tiên được cấp
     const first = (
       [
         ["finance.shiftExpenses", "/admin/finance/shift-expenses"],

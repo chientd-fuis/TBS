@@ -248,7 +248,8 @@ const AttendanceSchema = new Schema(
     createdByAdminName: String,
     manualReason: String,
     status: { type: String, enum: ["OPEN", "COMPLETED", "MISSING_CHECKOUT"], default: "OPEN" },
-    note: String,
+    note: String, // ghi chú nội bộ (admin xem): "Sửa bởi …"
+    staffNote: String, // ghi chú admin để lại cho nhân viên – hiện ở Lịch sử chấm công của nhân viên
     photosPurgedAt: Date, // ảnh check-in/out đã bị xoá khi dọn dữ liệu cũ
   },
   { timestamps: true },
@@ -460,7 +461,7 @@ const ExpenseSchema = new Schema(
     storeId: { type: Schema.Types.ObjectId, ref: "Store" },
     allocation: { type: String, enum: ["REVENUE", "EQUAL", "CUSTOM"], default: "REVENUE" },
     customShares: [ShareSchema],
-    // OWNER = chủ trả / chuyển khoản · CASHBOX = lấy tiền két (đã nằm trong "Thu chi" chốt ca → không cộng lại)
+    // OWNER = Admin Tổng trả / chuyển khoản · CASHBOX = lấy tiền két (đã nằm trong "Thu chi" chốt ca → không cộng lại)
     paidFrom: { type: String, enum: ["OWNER", "CASHBOX"], default: "OWNER" },
     // có tính vào chi phí lãi lỗ không (trống = theo mục: lương/thưởng không tính, còn lại tính)
     countInCost: Boolean,
@@ -614,10 +615,10 @@ const AdminLoginLogSchema = new Schema({
 });
 export const AdminLoginLog = getModel("AdminLoginLog", AdminLoginLogSchema);
 
-/* ---------- Tài khoản admin: đăng nhập bằng Gmail được Chủ thêm / duyệt, phân quyền ---------- */
+/* ---------- Tài khoản admin: đăng nhập bằng Gmail được Admin Tổng thêm / duyệt, phân quyền ---------- */
 const AdminDeviceSchema = new Schema(
   {
-    deviceId: { type: String, required: true }, // cookie thiết bị admin (tbs_admin_dev) – chỉ để Chủ xem
+    deviceId: { type: String, required: true }, // cookie thiết bị admin (tbs_admin_dev) – chỉ để Admin Tổng xem
     userAgent: String,
     ip: String,
     status: { type: String, enum: ["PENDING", "APPROVED"], default: "PENDING" },
@@ -688,7 +689,7 @@ export const AuditLog = getModel("AuditLog", AuditLogSchema);
 
 export { mongoose };
 
-/* ---------- Phiên đăng nhập admin (mật khẩu chung) – Chủ xem & đăng xuất từng phiên ---------- */
+/* ---------- Phiên đăng nhập admin (mật khẩu chung) – Admin Tổng xem & đăng xuất từng phiên ---------- */
 const AdminLoginSessionSchema = new Schema({
   sid: { type: String, required: true, unique: true },
   name: String, // tên hiển thị admin tự nhập khi đăng nhập
@@ -705,7 +706,7 @@ const AdminLoginSessionSchema = new Schema({
 AdminLoginSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const AdminLoginSession = getModel("AdminLoginSession", AdminLoginSessionSchema);
 
-/* ---------- Lịch sử hoạt động admin (không gồm Chủ) – chỉ giữ 7 ngày ---------- */
+/* ---------- Lịch sử hoạt động admin (không gồm Admin Tổng) – chỉ giữ 7 ngày ---------- */
 export const ACTIVITY_DAYS = 7;
 const AdminActivitySchema = new Schema({
   sid: String,

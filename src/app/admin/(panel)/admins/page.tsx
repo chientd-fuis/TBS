@@ -36,7 +36,7 @@ function PermBoxes({ value = [] }: { value?: readonly string[] }) {
   );
 }
 
-/** Chủ: danh sách admin (đăng nhập Gmail) – thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
+/** Admin Tổng: danh sách admin (đăng nhập Gmail) – thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
 export default async function AdminsPage() {
   await requireOwner();
   const list = await AdminAccount.find().sort({ status: 1, lastLoginAt: -1, createdAt: -1 }).lean();
@@ -49,7 +49,7 @@ export default async function AdminsPage() {
 
   return (
     <>
-      <PageTitle sub="Admin đăng nhập bằng Gmail. Chủ thêm Gmail ở đây, hoặc admin tự đăng nhập Gmail tại /admin/login rồi gửi yêu cầu để Chủ duyệt. Mặc định admin KHÔNG có các quyền bên dưới – tick để cấp. Lãi lỗ, Doanh thu theo ngày và trang này chỉ Chủ xem.">
+      <PageTitle sub="Admin đăng nhập bằng Gmail. Admin Tổng thêm Gmail ở đây, hoặc admin tự đăng nhập Gmail tại /admin/login rồi gửi yêu cầu để Admin Tổng duyệt. Mặc định admin KHÔNG có các quyền bên dưới – tick để cấp. Lãi lỗ, Doanh thu theo ngày và trang này chỉ Admin Tổng xem.">
         Quản lý admin
       </PageTitle>
       {pending > 0 && <Alert tone="orange">Có {pending} yêu cầu làm admin đang chờ duyệt.</Alert>}

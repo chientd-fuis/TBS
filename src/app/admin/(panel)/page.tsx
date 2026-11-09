@@ -39,7 +39,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const todoTotal = todo.reduce((a, x) => a + x.n, 0);
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
-  // yêu cầu làm admin (Gmail) đang chờ Chủ duyệt
+  // yêu cầu làm admin (Gmail) đang chờ Admin Tổng duyệt
   const pendingAdmins = admin.kind === "OWNER" ? await AdminAccount.countDocuments({ status: "PENDING" }) : 0;
 
   const showPay = can(admin, "payEstimate");
@@ -100,12 +100,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </ul>
         </div>
       )}
-      {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Chủ.</Alert>}
-      {error === "forbidden" && <Alert tone="red">Bạn chưa được Chủ cấp quyền cho chức năng này.</Alert>}
+      {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Admin Tổng.</Alert>}
+      {error === "forbidden" && <Alert tone="red">Bạn chưa được Admin Tổng cấp quyền cho chức năng này.</Alert>}
       {!settings.googleRefreshTokenEnc && (
         <Alert tone="orange">
           Chưa kết nối Google Drive để lưu ảnh chấm công – ảnh đang được giữ tạm.{" "}
-          {admin.kind === "OWNER" ? <Link className="underline" href="/admin/settings">Kết nối ngay</Link> : "Hãy báo Chủ kết nối."}
+          {admin.kind === "OWNER" ? <Link className="underline" href="/admin/settings">Kết nối ngay</Link> : "Hãy báo Admin Tổng kết nối."}
         </Alert>
       )}
       {pendingAdmins > 0 && (
@@ -134,7 +134,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             )}
             <div className="mt-2 grid grid-cols-4 gap-2 text-center text-sm">
               <div className="rounded-xl bg-primary-light p-2"><p className="text-xs">Ca hôm nay</p><p className="text-xl font-bold">{b.shifts.length}</p></div>
-              <div className="rounded-xl bg-[#e3f3e7] p-2"><p className="flex items-center justify-center gap-1.5 text-xs">{b.working.length > 0 && <span className="tbs-live-dot" aria-hidden />}Đang làm</p><p className="text-xl font-bold text-secondary-dark">{b.working.length}</p></div>
+              <div className="rounded-xl bg-[#e3f3e7] p-2"><p className="text-xs">Đang làm</p><p className="text-xl font-bold text-secondary-dark">{b.working.length}</p></div>
               <div className="rounded-xl bg-[#ffe8d9] p-2"><p className="text-xs">Đi muộn</p><p className="text-xl font-bold text-warn">{b.late.length}</p></div>
               <div className="rounded-xl bg-[#fde2e2] p-2"><p className="text-xs">Chưa đến</p><p className="text-xl font-bold text-danger">{b.absent.length}</p></div>
             </div>
@@ -191,7 +191,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   );
 }
 
-/** Cuối trang tổng quan (Chủ): hoạt động của admin hôm nay + hôm qua. */
+/** Cuối trang tổng quan (Admin Tổng): hoạt động của admin hôm nay + hôm qua. */
 async function AdminActivityCard() {
   const days = activityDays();
   const [rows, sessions] = await Promise.all([loadActivities({ days: days.slice(0, 2), limit: 300 }), loadSessions()]);

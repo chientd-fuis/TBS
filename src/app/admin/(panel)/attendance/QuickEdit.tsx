@@ -58,7 +58,7 @@ export default function QuickEdit({
               <Field label="Giờ ra"><TimeInput seconds name="outTime" defaultValue={outTime} autoFocus={missingOut} /></Field>
             </div>
             <p className="text-[11px] text-ink/60">Giờ ra nhỏ hơn giờ vào = ca qua đêm (tự cộng sang ngày hôm sau).</p>
-            <Field label="Lý do sửa (bắt buộc)"><Textarea name="reason" rows={2} required placeholder="VD: NV quên check-out, ra về lúc 22:00" /></Field>
+            <Field label="Ghi chú" hint="Không bắt buộc · nhân viên xem được ở Lịch sử chấm công"><Textarea name="note" rows={2} placeholder="VD: Quên check-out, đã sửa giờ ra 22:00" /></Field>
             {state?.error && <Alert tone="red">{state.error}</Alert>}
             <Button type="submit" disabled={pending} className="w-full">{pending ? "Đang lưu…" : "Lưu"}</Button>
           </form>

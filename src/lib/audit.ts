@@ -33,7 +33,7 @@ export async function audit(
     const { recordStaffActivity } = await import("./activity-server");
     await recordStaffActivity({ name: actor.name, ...actor.staff }, action, target, before, after);
   }
-  // admin (không phải Chủ) → thêm vào lịch sử hoạt động 7 ngày
+  // admin (không phải Admin Tổng) → thêm vào lịch sử hoạt động 7 ngày
   if (actor.kind === "ADMIN") {
     const { recordActivity } = await import("./activity-server");
     await recordActivity(actor, action, target, before, after);

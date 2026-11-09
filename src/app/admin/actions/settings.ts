@@ -7,11 +7,11 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { dec, errMsg, num, type FormState } from "./types";
 
-/** Cấu hình chấm công (làm tròn, ngưỡng muộn/sớm…) – Chủ. */
+/** Cấu hình chấm công (làm tròn, ngưỡng muộn/sớm…) – Admin Tổng. */
 export async function saveConfig(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
-    if (admin.kind !== "OWNER") return { error: "Chỉ Chủ được đổi cấu hình" };
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
     const data = {
       roundStepHours: dec(fd.get("roundStepHours"), 0.5),
       roundGraceMinutes: num(fd.get("roundGraceMinutes"), 0),
@@ -39,7 +39,7 @@ export async function saveConfig(_: FormState, fd: FormData): Promise<FormState>
 export async function disconnectDrive(_: FormState): Promise<FormState> {
   try {
     const admin = await assertAdmin();
-    if (admin.kind !== "OWNER") return { error: "Chỉ Chủ" };
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng" };
     await Settings.updateOne({ key: "main" }, { $set: { googleRefreshTokenEnc: "", googleAccountEmail: "" } });
     await audit(adminActor(admin), "google.disconnect", { type: "Settings" });
     revalidatePath("/admin/settings");
@@ -49,12 +49,12 @@ export async function disconnectDrive(_: FormState): Promise<FormState> {
   }
 }
 
-/* ===== Dọn dữ liệu cũ (chỉ Chủ) ===== */
+/* ===== Dọn dữ liệu cũ (chỉ Admin Tổng) ===== */
 export type CleanupResult = { ok?: boolean; error?: string; counts?: import("@/lib/cleanup").CleanupCounts };
 
 async function ownerOnly() {
   const admin = await assertAdmin();
-  if (admin.kind !== "OWNER") throw new Error("Chỉ Chủ được dọn dữ liệu");
+  if (admin.kind !== "OWNER") throw new Error("Chỉ Admin Tổng được dọn dữ liệu");
   return admin;
 }
 
@@ -102,7 +102,7 @@ export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error
 export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, apply: boolean): Promise<CleanupResult> {
   try {
     const admin = await assertAdmin();
-    if (admin.kind !== "OWNER") return { error: "Chỉ Chủ được dọn dữ liệu" };
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được dọn dữ liệu" };
     const { previewCleanup, runCleanup } = await import("@/lib/cleanup");
     if (!apply) return { ok: true, counts: await previewCleanup(opts) };
     const counts = await runCleanup(opts);

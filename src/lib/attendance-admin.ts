@@ -19,6 +19,8 @@ export async function upsertAttendance(
     outTime: string;
     reason: string;
     source: "ADMIN_MANUAL" | "REQUEST";
+    /** sửa giờ: ghi chú hiện cho nhân viên (trống = giữ ghi chú cũ) */
+    staffNote?: string;
     /** cơ sở làm việc (đi hỗ trợ). Bỏ trống → theo ca đã xếp, không có ca thì cơ sở gốc */
     workStoreId?: string;
     /** chấm hộ hàng loạt: không ghi nhật ký từng lượt (ghi 1 dòng tổng) */
@@ -30,7 +32,8 @@ export async function upsertAttendance(
   if (!DATE_RE.test(opts.date)) throw new Error("Ngày không hợp lệ");
   if (opts.inTime && !TIME_RE.test(opts.inTime.slice(0, 5))) throw new Error("Giờ vào không hợp lệ");
   if (opts.outTime && !TIME_RE.test(opts.outTime.slice(0, 5))) throw new Error("Giờ ra không hợp lệ");
-  if (opts.reason.length < 3) throw new Error("Bắt buộc nhập lý do");
+  // sửa giờ: ghi chú không bắt buộc · chấm hộ / tạo mới: bắt buộc lý do
+  if (!opts.id && opts.reason.length < 3) throw new Error("Bắt buộc nhập lý do");
 
   const existing = opts.id ? await Attendance.findById(opts.id) : null;
   const homeStoreId = existing ? payStoreOf(existing) : user.storeId;
@@ -81,7 +84,11 @@ export async function upsertAttendance(
   const actor = adminActor(admin);
   if (existing) {
     const before = existing.toObject();
-    existing.set({ ...set, note: [existing.note, `Sửa bởi ${admin.name}: ${opts.reason}`].filter(Boolean).join(" | ") });
+    existing.set({
+      ...set,
+      note: [existing.note, `Sửa bởi ${admin.name}${opts.reason ? `: ${opts.reason}` : ""}`].filter(Boolean).join(" | "),
+      ...(opts.staffNote ? { staffNote: opts.staffNote.slice(0, 300) } : {}),
+    });
     await existing.save();
     await AttendanceAdjustment.create({
       attendanceId: existing._id,

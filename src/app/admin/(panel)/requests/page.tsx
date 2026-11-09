@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 /** Yêu cầu điều chỉnh chấm công + phản hồi bảng lương của nhân viên */
 export default async function RequestsPage() {
   const admin = await requireAdmin();
-  const canAdj = can(admin, "adjustments"); // duyệt chấm công bù: Chủ hoặc admin được cấp quyền
+  const canAdj = can(admin, "adjustments"); // duyệt chấm công bù: Admin Tổng hoặc admin được cấp quyền
   const [covers, coversDone, reqs, done, fbs] = await Promise.all([
     CoverRequest.find({ status: "PENDING" }).sort({ date: 1 }).lean(),
     CoverRequest.find({ status: { $ne: "PENDING" } }).sort({ decidedAt: -1 }).limit(10).lean(),
@@ -104,7 +104,7 @@ export default async function RequestsPage() {
       </Card>
       <Card title={`Yêu cầu chấm công bù chờ duyệt (${reqs.length})`}>
         {!canAdj && reqs.length > 0 && (
-          <p className="mb-2 text-xs text-warn">Chỉ Chủ hoặc admin được Chủ cấp quyền &quot;Duyệt yêu cầu chấm công bù&quot; mới duyệt được – bạn chỉ xem.</p>
+          <p className="mb-2 text-xs text-warn">Chỉ Admin Tổng hoặc admin được Admin Tổng cấp quyền &quot;Duyệt yêu cầu chấm công bù&quot; mới duyệt được – bạn chỉ xem.</p>
         )}
         {reqs.length === 0 ? (
           <Empty>Không có yêu cầu</Empty>

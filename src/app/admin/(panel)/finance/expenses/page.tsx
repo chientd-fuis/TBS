@@ -79,7 +79,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   return (
     <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
       <div className="space-y-3">
-        {!chat && <Alert tone="orange">Chưa có <b>chat ID nhóm Quản lý doanh thu</b> – vào tab Cài đặt (chủ) hoặc đặt env TELEGRAM_FINANCE_CHAT_ID.</Alert>}
+        {!chat && <Alert tone="orange">Chưa có <b>chat ID nhóm Quản lý doanh thu</b> – vào tab Cài đặt (Admin Tổng) hoặc đặt env TELEGRAM_FINANCE_CHAT_ID.</Alert>}
         {edit ? (
           <Card title="Sửa khoản chi" actions={<Link href={`/admin/finance/expenses?month=${month}`} className="text-sm text-accent underline">Huỷ sửa</Link>}>
             <ExpenseForm key={String(edit._id)} stores={storeOpts} today={today} initial={initial} />

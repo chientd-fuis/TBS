@@ -43,7 +43,7 @@ export default async function ExportPage() {
       <Card title="Nội dung từng loại">
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>
-            <b>Tổng hợp tháng</b> (chỉ chủ, cả chuỗi – bỏ qua lọc cơ sở / nhân viên): <b>mỗi tháng 1 sheet</b> gồm A. Lãi lỗ tháng (doanh thu từng cơ sở: TK, TM,
+            <b>Tổng hợp tháng</b> (chỉ Admin Tổng, cả chuỗi – bỏ qua lọc cơ sở / nhân viên): <b>mỗi tháng 1 sheet</b> gồm A. Lãi lỗ tháng (doanh thu từng cơ sở: TK, TM,
             Shopee/Grab, két, DT máy · lương từng cơ sở · chi phí nguyên liệu / điện nước / khác · mặt bằng · phí sàn · tổng chi phí · lãi, biên lãi) · B. Doanh thu &amp; lãi
             theo ngày × cơ sở · C. Chi tiết từng lượt chốt ca (âm/dương, NV cộng đúng/sai) · D. Chi phí admin nhập · E. Mặt bằng · F. Chấm công theo cơ sở (không chi tiết
             từng nhân viên).

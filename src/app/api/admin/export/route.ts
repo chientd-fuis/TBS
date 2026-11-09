@@ -11,12 +11,12 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   const admin = await getAdmin();
   if (!admin) return new NextResponse("Unauthorized", { status: 401 });
-  if (!can(admin, "export")) return new NextResponse("Bạn chưa được Chủ cấp quyền Xuất Excel", { status: 403 });
+  if (!can(admin, "export")) return new NextResponse("Bạn chưa được Admin Tổng cấp quyền Xuất Excel", { status: 403 });
   await connectDB();
   const sp = new URL(req.url).searchParams;
   const type = sp.get("type") as ExportType;
   if (!type || !(type in EXPORT_TYPES)) return new NextResponse("Loại báo cáo không hợp lệ", { status: 400 });
-  if (type === "tonghopthang" && admin.kind !== "OWNER") return new NextResponse("Chỉ chủ được xuất báo cáo tài chính", { status: 403 });
+  if (type === "tonghopthang" && admin.kind !== "OWNER") return new NextResponse("Chỉ Admin Tổng được xuất báo cáo tài chính", { status: 403 });
   const from = sp.get("from") || "";
   const to = sp.get("to") || from;
   if (!/^\d{4}-\d{2}$/.test(from) || !/^\d{4}-\d{2}$/.test(to) || to < from) return new NextResponse("Khoảng tháng không hợp lệ", { status: 400 });

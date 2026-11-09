@@ -131,7 +131,7 @@ export default function ExpenseForm({
       <div>
         <p className="mb-1 text-xs font-semibold text-accent">Nguồn tiền</p>
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={pill(f.paidFrom === "OWNER")} onClick={() => set("paidFrom", "OWNER")}>Chủ trả / chuyển khoản</button>
+          <button type="button" className={pill(f.paidFrom === "OWNER")} onClick={() => set("paidFrom", "OWNER")}>Admin Tổng trả / chuyển khoản</button>
           <button type="button" className={pill(f.paidFrom === "CASHBOX")} onClick={() => set("paidFrom", "CASHBOX")}>Tiền két</button>
         </div>
         {f.paidFrom === "CASHBOX" && <p className="mt-1 text-[11px] text-warn">Tiền két đã nằm trong ô &quot;Thu chi&quot; khi chốt ca → chỉ lưu chứng từ, không cộng thêm vào chi phí.</p>}

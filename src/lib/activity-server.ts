@@ -85,7 +85,7 @@ export async function recordStaffActivity(
   }
 }
 
-/** Ghi 1 dòng lịch sử hoạt động cho admin (Chủ không ghi). Không bao giờ throw. */
+/** Ghi 1 dòng lịch sử hoạt động cho admin (Admin Tổng không ghi). Không bao giờ throw. */
 export async function recordActivity(actor: Actor, action: string, target?: { type: string; id?: string }, before?: unknown, after?: unknown) {
   if (actor.kind !== "ADMIN") return;
   try {

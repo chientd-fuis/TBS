@@ -63,7 +63,7 @@ test("đọc file chấm công dạng IN_OUT", async () => {
       ["2026-11-07", "13:03", null, "Ca Chiều"],
     ],
   );
-  assert.match(s.sessions[0].warn ?? "", /dài/);
+  assert.equal(s.sessions[0].warn, undefined); // 08:12–23:24 ≈ 15 tiếng: bình thường (ngưỡng cảnh báo 16 tiếng)
   assert.equal(s.sessions[5].warn, "Thiếu giờ ra");
 });
 
@@ -122,4 +122,31 @@ test("AI đọc ảnh: thiếu giờ → lấy giờ ca, thiếu năm → năm t
     tpl,
   );
   assert.deepEqual(r.map((x) => [x.date, x.inTime, x.outTime, x.shift ?? null]), [["2026-11-04", "08:05", "13:00", null], ["2026-11-05", "18:00", "23:00", "Ca Tối"]]);
+});
+
+test("import Excel mẫu 2: mỗi dòng 1 lượt (Ngày | Giờ Đến | Giờ Về), tên sheet = tên nhân viên", async () => {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Le_Thi_Nga");
+  ws.getRow(2).values = ["Ngày", "Giờ Đến", "Giờ Về", "Tổng", "Format", ""];
+  ws.addRow(["31/10/2026", "07:55:37", "23:28:03", 15.54, "15:32", 15.5]);
+  ws.addRow(["01/11/2026", "08:00:45", "22:56:28", 14.93, "14:55", 15]);
+  ws.addRow(["01/11/2026", 0.75, 0.9375, 4.5]); // giờ dạng số (Excel / Google Sheet)
+  ws.addRow(["02/11/2026", "", "", 5]); // không có giờ → bỏ qua
+  ws.addRow(["03/11/2026", "18:06:09", ""]); // thiếu giờ về
+  const buf = await wb.xlsx.writeBuffer();
+  const [s] = await readAttendanceWorkbook(buf as ArrayBuffer);
+  assert.equal(s.name, "Le Thi Nga");
+  assert.deepEqual(
+    s.sessions.map((x) => [x.date, x.inTime, x.outTime]),
+    [
+      ["2026-10-31", "07:55", "23:28"],
+      ["2026-11-01", "08:00", "22:56"],
+      ["2026-11-01", "18:00", "22:30"],
+      ["2026-11-03", "18:06", null],
+    ],
+  );
+  assert.equal(s.sessions[0].warn, undefined); // 15,5 tiếng: bình thường (ngưỡng 16 tiếng)
+  assert.equal(s.sessions[3].warn, "Thiếu giờ ra");
+  assert.equal(matchStaff(s.name, [{ id: "1", name: "Lê Thị Nga" }, { id: "2", name: "Trần Lâm" }])?.id, "1");
 });

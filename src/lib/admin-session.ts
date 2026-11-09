@@ -7,12 +7,12 @@ import type { Actor } from "./audit";
 
 /*
  * Đăng nhập trang quản lý:
- *  - Chủ: Gmail OWNER_EMAIL.
- *  - Admin: Gmail được Chủ thêm / duyệt (AdminAccount). Sau khi đăng nhập Google, bấm "Vào trang quản lý" → tạo PHIÊN admin
- *    (cookie tbs_admin, lưu DB) để Chủ xem / đăng xuất từng phiên. Phiên chỉ hợp lệ khi đúng Gmail đang đăng nhập + tài khoản đang hoạt động.
+ *  - Admin Tổng: Gmail OWNER_EMAIL.
+ *  - Admin: Gmail được Admin Tổng thêm / duyệt (AdminAccount). Sau khi đăng nhập Google, bấm "Vào trang quản lý" → tạo PHIÊN admin
+ *    (cookie tbs_admin, lưu DB) để Admin Tổng xem / đăng xuất từng phiên. Phiên chỉ hợp lệ khi đúng Gmail đang đăng nhập + tài khoản đang hoạt động.
  */
 const COOKIE = "tbs_admin";
-/** cookie thiết bị – chỉ để Chủ xem admin đăng nhập từ những máy nào */
+/** cookie thiết bị – chỉ để Admin Tổng xem admin đăng nhập từ những máy nào */
 export const ADMIN_DEVICE_COOKIE = "tbs_admin_dev";
 
 export async function adminDeviceId() {
@@ -36,13 +36,13 @@ export type AdminSession = {
   name: string;
   email?: string;
   sid?: string;
-  /** tài khoản admin (không có với Chủ) */
+  /** tài khoản admin (không có với Admin Tổng) */
   accountId?: string;
-  /** quyền được Chủ cấp (Chủ: rỗng – luôn có mọi quyền, xem lib/permissions.ts can()) */
+  /** quyền được Admin Tổng cấp (Admin Tổng: rỗng – luôn có mọi quyền, xem lib/permissions.ts can()) */
   perms: string[];
 };
 
-/** Tạo phiên admin (lưu DB để Chủ xem / đăng xuất từng phiên) + cookie. */
+/** Tạo phiên admin (lưu DB để Admin Tổng xem / đăng xuất từng phiên) + cookie. */
 export async function createAdminCookie(
   name: string,
   days: number,
@@ -108,11 +108,11 @@ export async function clearAdminCookie(by = "Tự đăng xuất") {
   jar.delete(COOKIE);
 }
 
-/** Phiên quản lý hiện tại: Chủ hoặc admin (Gmail được duyệt + phiên còn hiệu lực). */
+/** Phiên quản lý hiện tại: Admin Tổng hoặc admin (Gmail được duyệt + phiên còn hiệu lực). */
 export async function getAdmin(): Promise<AdminSession | null> {
   const email = await getSessionEmail();
   if (!email) return null;
-  if (isOwnerEmail(email)) return { kind: "OWNER", name: "Chủ", email, perms: [] };
+  if (isOwnerEmail(email)) return { kind: "OWNER", name: "Admin Tổng", email, perms: [] };
 
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
@@ -128,5 +128,5 @@ export async function getAdmin(): Promise<AdminSession | null> {
 }
 
 export function adminActor(a: AdminSession): Actor {
-  return { kind: a.kind === "OWNER" ? "OWNER" : "ADMIN", name: a.kind === "OWNER" ? `Chủ (${a.email})` : a.name, sid: a.sid };
+  return { kind: a.kind === "OWNER" ? "OWNER" : "ADMIN", name: a.kind === "OWNER" ? `Admin Tổng (${a.email})` : a.name, sid: a.sid };
 }

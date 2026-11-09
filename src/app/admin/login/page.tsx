@@ -12,7 +12,7 @@ import { adminEnter, adminRequest } from "../actions/auth";
 
 export const dynamic = "force-dynamic";
 
-/** Đăng nhập trang quản lý bằng Gmail: Chủ (OWNER_EMAIL) hoặc admin được Chủ thêm / duyệt. */
+/** Đăng nhập trang quản lý bằng Gmail: Admin Tổng (OWNER_EMAIL) hoặc admin được Admin Tổng thêm / duyệt. */
 export default async function AdminLoginPage({ searchParams }: { searchParams: Promise<{ out?: string }> }) {
   await ensureSeed();
   if (await getAdmin()) redirect("/admin");
@@ -29,7 +29,7 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
       {out && <Alert tone="green">Đã thoát trang quản lý.</Alert>}
       {!email ? (
         <Card className="w-full" title="Đăng nhập bằng Gmail">
-          <p className="mb-3 text-sm text-ink/70">Dành cho Chủ và admin. Admin dùng Gmail đã được Chủ thêm vào danh sách.</p>
+          <p className="mb-3 text-sm text-ink/70">Dành cho Admin Tổng và admin. Admin dùng Gmail đã được Admin Tổng thêm vào danh sách.</p>
           <GoogleSignIn callbackUrl="/admin/login" />
         </Card>
       ) : (
@@ -41,12 +41,12 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
               </p>
             </ActionForm>
           ) : acc?.status === "PENDING" ? (
-            <Alert tone="yellow">Đã gửi yêu cầu làm admin – chờ Chủ duyệt và phân quyền, sau đó tải lại trang này.</Alert>
+            <Alert tone="yellow">Đã gửi yêu cầu làm admin – chờ Admin Tổng duyệt và phân quyền, sau đó tải lại trang này.</Alert>
           ) : acc?.status === "BLOCKED" ? (
-            <Alert tone="red">Tài khoản admin này đã bị Chủ khoá.</Alert>
+            <Alert tone="red">Tài khoản admin này đã bị Admin Tổng khoá.</Alert>
           ) : (
-            <ActionForm action={adminRequest} submitLabel="Gửi yêu cầu làm admin" successText="Đã gửi – chờ Chủ duyệt">
-              <p className="text-sm text-ink/70">Gmail này chưa có quyền quản lý. Gửi yêu cầu để Chủ duyệt.</p>
+            <ActionForm action={adminRequest} submitLabel="Gửi yêu cầu làm admin" successText="Đã gửi – chờ Admin Tổng duyệt">
+              <p className="text-sm text-ink/70">Gmail này chưa có quyền quản lý. Gửi yêu cầu để Admin Tổng duyệt.</p>
               <Field label="Tên hiển thị" hint="Ghi vào lịch sử thao tác, VD: Lan – Văn Phú">
                 <Input name="name" required />
               </Field>

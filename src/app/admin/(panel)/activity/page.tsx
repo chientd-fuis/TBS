@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type SP = { day?: string; admin?: string; group?: string };
 
-/** Chủ: admin đang đăng nhập + lịch sử hoạt động 7 ngày của các admin (không gồm Chủ). */
+/** Admin Tổng: admin đang đăng nhập + lịch sử hoạt động 7 ngày của các admin (không gồm Admin Tổng). */
 export default async function ActivityPage({ searchParams }: { searchParams: Promise<SP> }) {
   const admin = await requirePerm("activity");
   const sp = await searchParams;
@@ -40,7 +40,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageTitle sub={`Thao tác của các admin (không gồm Chủ) – tự xoá sau ${ACTIVITY_DAYS} ngày`}>Hoạt động admin</PageTitle>
+      <PageTitle sub={`Thao tác của các admin (không gồm Admin Tổng) – tự xoá sau ${ACTIVITY_DAYS} ngày`}>Hoạt động admin</PageTitle>
       {admin.kind === "OWNER" && (
         <Card title="Admin đang đăng nhập">
           <SessionList sessions={sessions} now={Date.now()} />

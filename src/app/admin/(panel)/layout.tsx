@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">
           <span className="text-ink/70">
-            {admin.kind === "OWNER" ? "👑 Chủ" : "Admin"}: <b>{admin.kind === "OWNER" ? admin.email : `${admin.name} (${admin.email})`}</b>
+            {admin.kind === "OWNER" ? "👑 Admin Tổng" : "Admin"}: <b>{admin.kind === "OWNER" ? admin.email : `${admin.name} (${admin.email})`}</b>
           </span>
           {admin.kind === "OWNER" ? (
             <SignOutButton callbackUrl="/admin/login" />

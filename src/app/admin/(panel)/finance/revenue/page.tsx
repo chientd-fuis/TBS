@@ -19,7 +19,7 @@ const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
  * Chưa chốt Tối → tạm tính theo ca chốt gần nhất. Bấm dòng → chi tiết 3 ca.
  */
 export default async function DailyRevenuePage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string }> }) {
-  await requireOwner(); // doanh thu: chỉ Chủ
+  await requireOwner(); // doanh thu: chỉ Admin Tổng
   await connectDB();
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());

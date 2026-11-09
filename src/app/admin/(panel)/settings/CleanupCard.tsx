@@ -15,7 +15,7 @@ const prevMonthOf = (m: string) => {
 const GROUPS = Object.keys(GROUP_LABEL) as CleanupItem["group"][];
 const viTime = (iso: string) => new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "short", timeStyle: "short" });
 
-/** Chủ: dọn dữ liệu rác theo tháng. Không đụng tới chấm công / lương / chi phí. */
+/** Admin Tổng: dọn dữ liệu rác theo tháng. Không đụng tới chấm công / lương / chi phí. */
 export default function CleanupCard({
   months,
   safe,

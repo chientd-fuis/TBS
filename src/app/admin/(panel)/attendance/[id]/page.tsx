@@ -43,7 +43,7 @@ export default async function EditAttendance({ params }: { params: Promise<{ id:
                 <Field label="Giờ vào"><TimeInput seconds name="inTime" defaultValue={localTime(a.checkInAt, tz)} /></Field>
                 <Field label="Giờ ra"><TimeInput seconds name="outTime" defaultValue={a.checkOutAt ? localTime(a.checkOutAt, tz) : ""} /></Field>
               </div>
-              <Field label="Lý do sửa (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
+              <Field label="Ghi chú" hint="Không bắt buộc · nhân viên xem được ở Lịch sử chấm công"><Textarea name="note" rows={2} defaultValue={a.staffNote ?? ""} /></Field>
             </ActionForm>
           </Card>
           <Card title="Xoá lượt chấm công">

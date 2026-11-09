@@ -301,7 +301,9 @@ export async function editAttendance(_: FormState, fd: FormData): Promise<FormSt
       date: str(fd.get("date")) || a.workDate,
       inTime: str(fd.get("inTime")),
       outTime: str(fd.get("outTime")),
-      reason: str(fd.get("reason")),
+      // ghi chú (không bắt buộc) – nhân viên xem được ở Lịch sử chấm công
+      reason: str(fd.get("note")),
+      staffNote: str(fd.get("note")),
       source: "ADMIN_MANUAL",
     });
     revalidatePath("/admin/attendance", "layout");
@@ -448,7 +450,7 @@ export async function savePayrollExtras(_: FormState, fd: FormData): Promise<For
 /* ===== Yêu cầu điều chỉnh & phản hồi lương ===== */
 export async function resolveAdjustment(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertPerm("adjustments"); // mặc định chỉ Chủ; admin cần được cấp quyền
+    const admin = await assertPerm("adjustments"); // mặc định chỉ Admin Tổng; admin cần được cấp quyền
     const req = await AdjustmentRequest.findById(str(fd.get("id")));
     if (!req || req.status !== "PENDING") return { error: "Yêu cầu đã được xử lý" };
     const op = str(fd.get("op"));

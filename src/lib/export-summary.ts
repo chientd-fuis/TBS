@@ -300,7 +300,7 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
       isCountedExpense(e) ? "Có" : "Không",
       [e.items, e.transferNote].filter(Boolean).join(" · "),
       e.vendor ?? "",
-      e.paidFrom === "CASHBOX" ? "Tiền két" : "Chủ / CK",
+      e.paidFrom === "CASHBOX" ? "Tiền két" : "Admin Tổng / CK",
       e.createdBy ?? "",
       e.note ?? "",
     ]);

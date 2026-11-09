@@ -73,12 +73,32 @@ export function spanMinutes(inTime: string, outTime: string) {
   if (b <= a) b += 1440;
   return b - a;
 }
-export const LONG_SHIFT_MIN = 14 * 60;
+/** > 16 tiếng mới cảnh báo (quán làm 08:00–23:00 ≈ 15 tiếng là bình thường) */
+export const LONG_SHIFT_MIN = 16 * 60;
 
 function warnOf(s: ImportSession) {
   if (!s.outTime) return "Thiếu giờ ra";
   if (spanMinutes(s.inTime, s.outTime) > LONG_SHIFT_MIN) return "Ca dài bất thường (quên check-out?)";
   return undefined;
+}
+
+/**
+ * Mẫu 2 (Google Sheet tự làm): mỗi dòng 1 lượt – Ngày | Giờ Đến | Giờ Về | Tổng | Format | …; tên sheet = tên nhân viên (VD Le_Thi_Nga).
+ * Dòng thiếu giờ đến bị bỏ qua; thiếu giờ về = chưa check-out.
+ */
+function parseRowSheet(grid: GridCell[][], headerRow: number, col: { date: number; in: number; out: number }, out: ParsedSheet, refMonth?: string) {
+  for (let r = headerRow + 1; r < grid.length; r++) {
+    const row = grid[r] ?? [];
+    const date = parseDate(row[col.date]?.v, refMonth);
+    const inTime = parseTime(row[col.in]?.v);
+    if (!date || !inTime) continue;
+    const s: ImportSession = { date, inTime, outTime: parseTime(row[col.out]?.v) };
+    const w = warnOf(s);
+    if (w) s.warn = w;
+    out.sessions.push(s);
+  }
+  if (!out.sessions.length) out.warnings.push("Không có lượt chấm công nào");
+  return out;
 }
 
 /**
@@ -88,7 +108,13 @@ function warnOf(s: ImportSession) {
  *   mỗi lượt = 2 dòng (vào, ra) – các cột Ca làm việc / Tổng thời gian gộp 2 dòng; "Chưa kết thúc chấm công" = thiếu giờ ra.
  */
 export function parseSheetGrid(grid: GridCell[][], sheetName: string): ParsedSheet | null {
-  const out: ParsedSheet = { sheet: sheetName, name: sheetName.replace(/^\s*\d+\s*[_.\-\s]\s*/, "").trim(), sessions: [], warnings: [] };
+  const out: ParsedSheet = {
+    sheet: sheetName,
+    // "1_Nga Le" → "Nga Le" · "Le_Thi_Nga" → "Le Thi Nga"
+    name: sheetName.replace(/^\s*\d+\s*[_.\-\s]\s*/, "").replace(/_+/g, " ").trim(),
+    sessions: [],
+    warnings: [],
+  };
   let refMonth: string | undefined;
   let headerRow = -1;
   const col = { date: -1, time: -1, method: -1, shift: -1, total: -1 };
@@ -102,6 +128,10 @@ export function parseSheetGrid(grid: GridCell[][], sheetName: string): ParsedShe
       if (pm && /^\s*t[uừ]/i.test(t.normalize("NFC"))) refMonth = `${pm[3]}-${pad(+pm[2])}`;
     }
     const iDate = cells.findIndex((c) => c === "NGAY");
+    // mẫu 2: mỗi dòng 1 lượt (Giờ Đến / Giờ Về)
+    const iIn = cells.findIndex((c) => ["GIO DEN", "GIO VAO", "CHECK IN", "VAO"].includes(c));
+    const iOut = cells.findIndex((c) => ["GIO VE", "GIO RA", "CHECK OUT", "RA"].includes(c));
+    if (iDate >= 0 && iIn >= 0 && iOut >= 0) return parseRowSheet(grid, r, { date: iDate, in: iIn, out: iOut }, out, refMonth);
     const iTime = cells.findIndex((c) => c === "THOI GIAN" || c === "GIO");
     if (iDate >= 0 && iTime >= 0) {
       headerRow = r;

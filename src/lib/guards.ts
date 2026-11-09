@@ -19,7 +19,7 @@ export async function requireOwner(): Promise<AdminSession> {
   return a;
 }
 
-/** Trang cần quyền (Chủ luôn qua). Thiếu quyền → về Tổng quan. */
+/** Trang cần quyền (Admin Tổng luôn qua). Thiếu quyền → về Tổng quan. */
 export async function requirePerm(...perms: AdminPerm[]): Promise<AdminSession> {
   const a = await requireAdmin();
   if (!canAny(a, perms)) redirect("/admin?error=forbidden");
@@ -29,13 +29,13 @@ export async function requirePerm(...perms: AdminPerm[]): Promise<AdminSession> 
 /** Server action / API cần quyền. */
 export async function assertPerm(perm: AdminPerm): Promise<AdminSession> {
   const a = await assertAdmin();
-  if (!can(a, perm)) throw new Error("Bạn chưa được Chủ cấp quyền cho chức năng này");
+  if (!can(a, perm)) throw new Error("Bạn chưa được Admin Tổng cấp quyền cho chức năng này");
   return a;
 }
 
 export async function assertOwner(): Promise<AdminSession> {
   const a = await assertAdmin();
-  if (a.kind !== "OWNER") throw new Error("Chỉ Chủ được làm thao tác này");
+  if (a.kind !== "OWNER") throw new Error("Chỉ Admin Tổng được làm thao tác này");
   return a;
 }
 

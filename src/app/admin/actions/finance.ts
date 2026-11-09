@@ -14,7 +14,7 @@ import { dec, errMsg, str, type FormState } from "./types";
 
 async function assertOwner() {
   const a = await assertAdmin();
-  if (a.kind !== "OWNER") throw new Error("Chỉ chủ (tài khoản Google chủ) được làm thao tác này");
+  if (a.kind !== "OWNER") throw new Error("Chỉ Admin Tổng được làm thao tác này");
   return a;
 }
 
@@ -111,7 +111,7 @@ export async function deleteFixedCost(_: FormState, fd: FormData): Promise<FormS
   }
 }
 
-/** Cài đặt tài chính (chủ): nhóm Telegram, bật/tắt báo cáo, % phí sàn từng cơ sở. */
+/** Cài đặt tài chính (Admin Tổng): nhóm Telegram, bật/tắt báo cáo, % phí sàn từng cơ sở. */
 export async function saveFinanceSettings(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("finance.settings");
@@ -167,7 +167,7 @@ export async function sendReportNow(_: FormState, fd: FormData): Promise<FormSta
   }
 }
 
-/* ===== Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (chỉ Chủ – doanh thu không đổi) ===== */
+/* ===== Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (chỉ Admin Tổng – doanh thu không đổi) ===== */
 export async function saveCashTransfer(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
