@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Bất thường chốt ca &amp; két</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Tiệm Bơ Sầu<small>Quản lý chấm công</small></div>
+    <a>Tổng quan</a><a>Lịch làm việc</a><a>Xếp ca tự động</a><a>Chấm công</a><a>Nhân viên</a><a>Bảng lương</a><a>Tài chính</a><a class="on">Chốt ca</a><a>Cài đặt</a>
+  </nav>
+  <div class="main">
+    <div class="top">👑 Admin Tổng</div>
+    <div class="wrap">
+      <div class="row" style="justify-content:space-between">
+        <div><h1>Bất thường chốt ca &amp; két</h1><div class="muted small">Tab mới trong mục Chốt ca · AI rà tự động mỗi sáng 08:30 (cài ở Cài đặt → AI)</div></div>
+        <div class="row">
+          <select><option>Tất cả cơ sở</option></select>
+          <select><option>7 ngày qua</option><option>30 ngày</option></select>
+          <button class="btn btn-o">Rà lại ngay</button>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#ddd6fe;background:#fdfcff">
+        <h2><span class="ai">AI tóm tắt</span> 02–08/11 · 3 cơ sở · 63 lượt chốt ca</h2>
+        <ul style="margin:0;padding-left:18px">
+          <li><b>Trần Lâm (CS2)</b> âm tiền 4/6 ca tối, tổng −1.250.000 ₫ – lặp lại ở tuần trước. <b>Nên kiểm tra két ca tối CS2.</b></li>
+          <li>Chi phí két CS1 tăng <b>2,3 lần</b> so với trung bình 4 tuần (chủ yếu “mua đá, ship”).</li>
+          <li><b>Nga Lê</b> ghi tổng sai 3 lần trong tuần (lệch nhỏ, có vẻ do cộng tay).</li>
+          <li>Còn lại bình thường. Không có ca nào chốt quá trễ so với giờ ra ca.</li>
+        </ul>
+        <div class="small muted" style="margin-top:6px">Số liệu do hệ thống tính; AI chỉ viết tóm tắt &amp; xếp mức. Bấm từng dòng bên dưới để mở lượt chốt ca.</div>
+      </div>
+
+      <div class="grid4">
+        <div class="card"><div class="small muted">Nghiêm trọng</div><div style="font-size:26px;font-weight:700;color:var(--danger)">2</div></div>
+        <div class="card"><div class="small muted">Cần xem</div><div style="font-size:26px;font-weight:700;color:var(--warn)">5</div></div>
+        <div class="card"><div class="small muted">Lưu ý</div><div style="font-size:26px;font-weight:700;color:var(--accent)">7</div></div>
+        <div class="card"><div class="small muted">Đã xử lý</div><div style="font-size:26px;font-weight:700;color:var(--green-dark)">4</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Danh sách bất thường</h2>
+        <table>
+          <thead><tr><th>Mức</th><th>Loại</th><th>Nhân viên</th><th>Cơ sở · Ca</th><th>Chi tiết</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge b-red">Nghiêm trọng</span></td><td>Âm tiền lặp lại</td><td><b>Trần Lâm</b></td><td>CS2 · Tối 07/11</td><td>Âm −420.000 ₫ · lần thứ 4 trong 7 ngày</td><td><a class="small" href="#">Mở lượt chốt ca →</a> <button class="btn btn-o btn-sm">Đã xử lý</button></td></tr>
+            <tr><td><span class="badge b-red">Nghiêm trọng</span></td><td>Chi phí két bất thường</td><td>Mai Anh</td><td>CS1 · Chiều 06/11</td><td>Két chi 680.000 ₫ (TB ca: 150.000 ₫) · “ship + đá + ??”</td><td><a class="small" href="#">Mở →</a> <button class="btn btn-o btn-sm">Đã xử lý</button></td></tr>
+            <tr><td><span class="badge b-orange">Cần xem</span></td><td>Cộng sai tổng</td><td>Nga Lê</td><td>CS1 · Sáng 05/11</td><td>NV ghi 4.215.000, đúng 4.251.000 (lệch 36.000)</td><td><a class="small" href="#">Mở →</a></td></tr>
+            <tr><td><span class="badge b-orange">Cần xem</span></td><td>Chốt ca lệch giờ ra ca</td><td>Hùng</td><td>CS3 · Tối 04/11</td><td>Chốt lúc 01:40, check-out 23:05 (trễ 2h35)</td><td><a class="small" href="#">Mở →</a></td></tr>
+            <tr><td><span class="badge b-orange">Cần xem</span></td><td>Thiếu DT máy</td><td>Trần Lâm</td><td>CS2 · Tối 03/11</td><td>Chưa nhập doanh thu máy → không tính được âm/dương</td><td><a class="small" href="#">Mở →</a></td></tr>
+            <tr><td><span class="badge b-yellow">Lưu ý</span></td><td>Âm tiền nhỏ</td><td>Mai Anh</td><td>CS1 · Sáng 02/11</td><td>Âm −20.000 ₫</td><td><a class="small" href="#">Mở →</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Theo nhân viên (7 ngày)</h2>
+          <table>
+            <thead><tr><th>Nhân viên</th><th class="num">Số ca chốt</th><th class="num">Ca âm</th><th class="num">Tổng âm/dương</th><th class="num">Cộng sai</th></tr></thead>
+            <tbody>
+              <tr><td><b>Trần Lâm</b> · CS2</td><td class="num">6</td><td class="num" style="color:var(--danger);font-weight:700">4</td><td class="num" style="color:var(--danger)">−1.250.000</td><td class="num">0</td></tr>
+              <tr><td>Nga Lê · CS1</td><td class="num">7</td><td class="num">0</td><td class="num">+15.000</td><td class="num" style="color:var(--warn);font-weight:700">3</td></tr>
+              <tr><td>Mai Anh · CS1</td><td class="num">5</td><td class="num">1</td><td class="num">−20.000</td><td class="num">0</td></tr>
+              <tr><td>Hùng · CS3</td><td class="num">6</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Ngưỡng cảnh báo (trong Cài đặt → AI)</h2>
+          <div class="grid2">
+            <label class="f">Âm tiền ≥ (₫ / ca)<input value="100.000"></label>
+            <label class="f">Âm lặp lại ≥ (lần / 7 ngày)<input value="3"></label>
+            <label class="f">Chi phí két ≥ (× trung bình 4 tuần)<input value="2"></label>
+            <label class="f">Chốt ca trễ hơn giờ ra ca ≥ (phút)<input value="60"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Ô mới trên Tổng quan (mỗi cơ sở)</h2>
+          <div style="border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff">
+            <div class="row" style="justify-content:space-between"><b>⚠ Bất thường 7 ngày</b><a class="small" href="#">Xem tất cả →</a></div>
+            <div class="small" style="margin-top:6px"><span class="badge b-red">2</span> nghiêm trọng · <span class="badge b-orange">3</span> cần xem</div>
+            <div class="small" style="margin-top:6px">• Trần Lâm âm 4/6 ca tối (−1,25tr)<br>• Két chiều 06/11 chi 680.000 ₫</div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Tin Telegram gửi nhóm quản lý (08:30)</h2>
+          <div style="background:#e7f1fb;border-radius:14px;padding:12px;font-size:13px;white-space:pre-line">🔎 BẤT THƯỜNG CHỐT CA 08/11
+🔴 Trần Lâm (CS2): âm 4/6 ca tối, −1.250.000 ₫ – lặp lại tuần trước
+🔴 Két CS1 chiều 06/11: chi 680.000 ₫ (gấp 4,5 lần TB)
+🟠 Nga Lê: cộng sai tổng 3 lần
+🟠 Hùng: chốt ca trễ 2h35 (04/11)
+👉 Xem chi tiết: tbs-plum.vercel.app/admin/closings/anomaly</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mock">MOCKUP – chưa làm thật</div>
+</body>
+</html>

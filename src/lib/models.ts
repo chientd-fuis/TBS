@@ -34,6 +34,8 @@ const SettingsSchema = new Schema(
     financeReportWeekly: { type: Boolean, default: true },
     financeReportMonthly: { type: Boolean, default: true },
     financeAiComment: { type: Boolean, default: true }, // Gemini viết nhận xét trong báo cáo
+    // Cài đặt AI (lib/ai.ts): bật/tắt + giới hạn từng chức năng, ngân sách token, nội dung Trợ lý cửa hàng
+    ai: { type: Schema.Types.Mixed, default: {} },
     autoCleanup: { type: Boolean, default: false }, // tự dọn dữ liệu rác mỗi tháng (cron)
   },
   { timestamps: true },
@@ -160,6 +162,8 @@ const ShiftTemplateSchema = new Schema(
     endTime: { type: String, required: true }, // HH:mm (nhỏ hơn start → qua đêm)
     minStaff: { type: Number, default: 0 }, // tối thiểu – dưới mức này cảnh báo "Thiếu người"
     targetStaff: { type: Number, default: 0 }, // định mức – dưới mức này cảnh báo "Ít người"; xếp tự động lấp tới mức này
+    // định mức riêng từng ngày (VD áp dụng gợi ý AI cho 1 tuần) – có thì thay targetStaff cho ngày đó
+    staffByDate: { type: [{ date: String, target: Number, _id: false }], default: [] },
     active: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -680,6 +684,46 @@ const StaffActivitySchema = new Schema({
 });
 StaffActivitySchema.index({ storeId: 1, createdAt: -1 });
 export const StaffActivity = getModel("StaffActivity", StaffActivitySchema);
+
+/* ---------- AI: mỗi lần gọi Gemini 1 dòng – thống kê token, giới hạn theo chức năng ---------- */
+const AiUsageSchema = new Schema({
+  feature: { type: String, required: true },
+  actor: String, // "user:<id>" | "admin:<id|owner>" | "system"
+  tokens: { type: Number, default: 0 },
+  model: String,
+  ok: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now, expires: 400 * 86_400 },
+});
+AiUsageSchema.index({ feature: 1, createdAt: -1 });
+AiUsageSchema.index({ createdAt: -1 });
+export const AiUsage = getModel("AiUsage", AiUsageSchema);
+
+/** Trợ lý cửa hàng: câu hỏi của nhân viên (để admin biết câu nào chưa trả lời được). */
+const AssistantLogSchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: "User" },
+  storeId: { type: Schema.Types.ObjectId, ref: "Store" },
+  question: String,
+  status: { type: String, enum: ["ANSWERED", "MISSING", "OUT_OF_SCOPE", "ERROR"] },
+  createdAt: { type: Date, default: Date.now, expires: 90 * 86_400 },
+});
+export const AssistantLog = getModel("AssistantLog", AssistantLogSchema);
+
+/** Bất thường chốt ca & két: kết quả mỗi lần rà + đánh dấu đã xử lý. */
+const AnomalyRunSchema = new Schema({
+  from: String,
+  to: String,
+  items: { type: [Schema.Types.Mixed], default: [] },
+  byStaff: { type: [Schema.Types.Mixed], default: [] },
+  summary: String,
+  createdAt: { type: Date, default: Date.now, expires: 120 * 86_400 },
+});
+export const AnomalyRun = getModel("AnomalyRun", AnomalyRunSchema);
+const AnomalyResolvedSchema = new Schema({
+  key: { type: String, required: true, unique: true },
+  by: String,
+  createdAt: { type: Date, default: Date.now, expires: 120 * 86_400 },
+});
+export const AnomalyResolved = getModel("AnomalyResolved", AnomalyResolvedSchema);
 
 const AuditLogSchema = new Schema({
   actorKind: { type: String, enum: ["OWNER", "ADMIN", "USER", "SYSTEM"] },

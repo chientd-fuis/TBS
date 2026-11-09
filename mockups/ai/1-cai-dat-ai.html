@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Cài đặt AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Tiệm Bơ Sầu<small>Quản lý chấm công</small></div>
+    <a>Tổng quan</a><a>Lịch làm việc</a><a>Xếp ca tự động</a><a>Chấm công</a><a>Nhân viên</a><a>Bảng lương</a><a>Tài chính</a><a>Chốt ca</a><a>Quản lý admin</a><a class="on">Cài đặt</a>
+  </nav>
+  <div class="main">
+    <div class="top">👑 Admin Tổng: <b>chientd2@…</b></div>
+    <div class="wrap">
+      <h1>Cài đặt AI</h1>
+      <div class="sub">Bật / tắt từng chức năng AI, đặt giới hạn để kiểm soát token (chi phí Gemini). Hết giới hạn → chức năng tự tạm dừng tới kỳ sau.</div>
+
+      <div class="grid4">
+        <div class="card">
+          <div class="muted small">Token dùng tháng 11</div>
+          <div style="font-size:24px;font-weight:700">1,24 triệu</div>
+          <div class="meter" style="margin:8px 0 4px"><i style="width:41%"></i></div>
+          <div class="small muted">41% ngân sách 3 triệu token/tháng</div>
+        </div>
+        <div class="card">
+          <div class="muted small">Chi phí ước tính</div>
+          <div style="font-size:24px;font-weight:700">0 ₫ <span class="badge b-green">miễn phí</span></div>
+          <div class="small muted" style="margin-top:6px">Đang trong hạn mức miễn phí. Bật billing: ~38.000 ₫ nếu tính tiền.</div>
+        </div>
+        <div class="card">
+          <div class="muted small">API key Gemini</div>
+          <div class="row small" style="margin-top:6px;gap:6px">
+            <span class="badge b-orange">Key 1: hết lượt hôm nay</span>
+            <span class="badge b-green">Key 2: OK</span>
+            <span class="badge b-green">Key 3: OK</span>
+          </div>
+          <div class="small muted" style="margin-top:6px">Tự chuyển key khi hết lượt</div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between"><b>Bật AI toàn hệ thống</b><span class="toggle on"></span></div>
+          <label class="f" style="margin-top:10px">Khi hết ngân sách tháng
+            <select><option>Tạm dừng các chức năng AI (trừ đọc ảnh chốt ca)</option></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Chức năng & giới hạn</h2>
+        <table>
+          <thead><tr><th>Chức năng</th><th>Bật</th><th>Model</th><th>Giới hạn</th><th>Lịch / kênh</th><th class="num">Đã dùng (tháng)</th><th style="width:160px">Mức dùng</th></tr></thead>
+          <tbody>
+            <tr><td><b>Đọc ảnh tờ chốt ca</b><div class="small muted">Nhân viên chụp tờ chốt ca → tự điền số</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash</option></select></td><td><input value="1.000" style="width:70px"> lượt/tháng</td><td class="small muted">Khi chốt ca</td><td class="num">286 lượt · 410K</td><td><div class="meter"><i style="width:29%"></i></div></td></tr>
+            <tr><td><b>Đọc bill / sao kê</b><div class="small muted">Nhập chi phí từ ảnh</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash</option></select></td><td><input value="300" style="width:70px"> lượt/tháng</td><td class="small muted">Khi admin tải ảnh</td><td class="num">54 lượt · 180K</td><td><div class="meter"><i style="width:18%"></i></div></td></tr>
+            <tr><td><b>Đọc ảnh bảng chấm công</b><div class="small muted">Chấm công hộ → Đọc ảnh (AI)</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash</option></select></td><td><input value="100" style="width:70px"> lượt/tháng</td><td class="small muted">Khi admin tải ảnh</td><td class="num">12 lượt · 95K</td><td><div class="meter"><i style="width:12%"></i></div></td></tr>
+            <tr><td><b>Nhận xét báo cáo tài chính</b><div class="small muted">Đoạn nhận xét trong tin Telegram</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash-Lite</option></select></td><td><input value="40" style="width:70px"> lượt/tháng</td><td class="small muted">Ngày · tuần · tháng</td><td class="num">11 lượt · 60K</td><td><div class="meter"><i style="width:28%"></i></div></td></tr>
+            <tr style="background:#faf5ff"><td><b>Phát hiện bất thường chốt ca & két</b> <span class="ai">MỚI</span><div class="small muted">Rà theo từng nhân viên, xếp mức nghiêm trọng</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash-Lite</option></select></td><td><input value="1" style="width:50px"> lần/ngày</td><td class="small">Hằng ngày 08:30 · <b>Telegram + Tổng quan</b></td><td class="num">9 lượt · 72K</td><td><div class="meter"><i style="width:30%"></i></div></td></tr>
+            <tr style="background:#faf5ff"><td><b>Hỏi đáp dữ liệu (admin)</b> <span class="ai">MỚI</span><div class="small muted">Hỏi bằng tiếng Việt, AI tra dữ liệu theo quyền</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash</option></select></td><td><input value="30" style="width:50px"> câu/ngày/admin</td><td class="small muted">Nút “Hỏi AI” trên Tổng quan</td><td class="num">138 câu · 390K</td><td><div class="meter warn"><i style="width:72%"></i></div></td></tr>
+            <tr style="background:#faf5ff"><td><b>Dự báo → gợi ý số người / ca</b> <span class="ai">MỚI</span><div class="small muted">Thống kê doanh thu theo thứ / lễ; AI viết lý do</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash-Lite</option></select></td><td><input value="8" style="width:50px"> lần/tháng</td><td class="small muted">Khi bấm ở Xếp ca</td><td class="num">3 lượt · 21K</td><td><div class="meter"><i style="width:38%"></i></div></td></tr>
+            <tr style="background:#faf5ff"><td><b>Trợ lý cửa hàng (nhân viên)</b> <span class="ai">MỚI</span><div class="small muted">Nội quy · quản lý · bảo quản · nguyên liệu · chốt ca · chấm công</div></td><td><span class="toggle on"></span></td><td><select><option>2.5 Flash-Lite</option></select></td><td><input value="10" style="width:50px"> câu/ngày/NV</td><td class="small"><a href="#">Sửa nội dung trợ lý →</a></td><td class="num">412 câu · 260K</td><td><div class="meter"><i style="width:44%"></i></div></td></tr>
+            <tr style="background:#faf5ff"><td><b>Giải thích lương cho nhân viên</b> <span class="ai">MỚI</span><div class="small muted">NV hỏi “vì sao lương tháng này là X”</div></td><td><span class="toggle"></span></td><td><select><option>2.5 Flash-Lite</option></select></td><td><input value="3" style="width:50px"> lượt/tháng/NV</td><td class="small muted">Trang Bảng lương của NV</td><td class="num">0</td><td><div class="meter"><i style="width:0%"></i></div></td></tr>
+          </tbody>
+        </table>
+        <p class="small muted" style="margin:10px 0 0">Đang tắt = nút trong app vẫn hiện nhưng báo “Admin chưa bật chức năng này”. Mỗi lần gọi AI đều ghi lại số token để thống kê.</p>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Ngân sách</h2>
+          <div class="grid2">
+            <label class="f">Tổng token / tháng<input value="3.000.000"></label>
+            <label class="f">Cảnh báo khi dùng tới<select><option>80%</option></select></label>
+            <label class="f">Gửi cảnh báo tới<select><option>Telegram nhóm quản lý</option></select></label>
+            <label class="f">Model mặc định<select><option>gemini-2.5-flash</option></select></label>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Lượt gọi gần đây</h2>
+          <table>
+            <thead><tr><th>Lúc</th><th>Chức năng</th><th>Ai dùng</th><th class="num">Token</th></tr></thead>
+            <tbody>
+              <tr><td>09:14</td><td>Hỏi đáp</td><td>Lan – Văn Phú</td><td class="num">2.840</td></tr>
+              <tr><td>08:30</td><td>Bất thường (tự động)</td><td class="muted">Hệ thống</td><td class="num">7.950</td></tr>
+              <tr><td>07:52</td><td>Đọc ảnh chốt ca</td><td>Nga Lê</td><td class="num">1.420</td></tr>
+              <tr><td>Hôm qua</td><td>Dự báo nhân sự</td><td>Admin Tổng</td><td class="num">6.300</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div><button class="btn btn-p">Lưu cài đặt AI</button></div>
+    </div>
+  </div>
+</div>
+<div class="mock">MOCKUP – chưa làm thật</div>
+</body>
+</html>

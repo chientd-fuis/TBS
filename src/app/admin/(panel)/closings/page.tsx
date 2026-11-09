@@ -22,7 +22,7 @@ const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: [
 
 /** Danh sách chốt ca (ảnh) + trạng thái gửi Telegram */
 export default async function ClosingsPage({ searchParams }: { searchParams: Promise<{ store?: string; date?: string; status?: string; nodt?: string; shift?: string }> }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
   const q: Record<string, unknown> = {};
@@ -63,6 +63,11 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageTitle sub="Mới nhất ở trên. Số chốt ca là LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày). Doanh thu theo ngày xem ở Tài chính → Doanh thu theo ngày.">Lịch sử chốt ca</PageTitle>
+      {admin.kind === "OWNER" && (
+        <Link href="/admin/closings/anomaly" className="inline-flex w-fit items-center gap-1 rounded-xl bg-white px-3 py-1.5 text-sm font-semibold text-accent ring-1 ring-[#f1e6c8] hover:bg-primary-light">
+          ⚠ Bất thường chốt ca &amp; két (AI) →
+        </Link>
+      )}
       {noDtCount > 0 && !sp.nodt && (
         <Alert tone="orange">
           Có <b>{noDtCount}</b> ca chưa có <b>Doanh thu máy</b> (45 ngày gần đây) – cần nhập để tính âm/dương & lãi lỗ.{" "}

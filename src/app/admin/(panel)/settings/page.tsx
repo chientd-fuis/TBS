@@ -35,6 +35,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <PageTitle>Cài đặt</PageTitle>
       <div className="grid gap-4 lg:grid-cols-2">
         {isOwner && (
+          <Card title="✨ Cài đặt AI">
+            <p className="text-sm text-ink/70">
+              Bật / tắt và giới hạn từng chức năng AI (kiểm soát token), nội dung Trợ lý cửa hàng, ngưỡng phát hiện bất thường.{" "}
+              <Link className="text-accent underline" href="/admin/settings/ai">Mở Cài đặt AI →</Link>
+            </p>
+          </Card>
+        )}
+
+        {isOwner && (
           <Card title="Tài khoản admin">
             <p className="text-sm text-ink/70">
               Admin đăng nhập bằng <b>Gmail</b> (không còn mật khẩu chung). Thêm / duyệt / phân quyền admin ở mục{" "}

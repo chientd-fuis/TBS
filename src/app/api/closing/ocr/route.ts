@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       workDate: ctx.workDate,
       shift: ctx.shift ? { name: ctx.shift.shiftName ?? undefined, start: ctx.shift.startTime ?? undefined, end: ctx.shift.endTime ?? undefined } : null,
       employee: user.name || user.email,
+      actor: `user:${user._id}`,
     }).catch((e: Error) => {
       throw new HttpError(502, e.message, { code: "OCR_FAILED" });
     });

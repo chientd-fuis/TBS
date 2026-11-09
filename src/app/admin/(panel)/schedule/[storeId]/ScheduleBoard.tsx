@@ -5,7 +5,7 @@ import { ArrowLeftRight, BellRing, Check, Eye, Pencil, CircleAlert, Loader2, Set
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
-import { slotLevel, type AutoOptions, type Entry, type TplInfo } from "@/lib/schedule";
+import { slotLevel, targetFor, type AutoOptions, type Entry, type TplInfo } from "@/lib/schedule";
 import { viDate, weekdayVi } from "@/lib/time";
 import ExportImage from "./ExportImage";
 import WeekSheet from "./WeekSheet";
@@ -137,7 +137,7 @@ export default function ScheduleBoard(p: Props) {
   const warnings = p.days.flatMap((d) =>
     p.templates.map((t) => {
       const c = cell(t.id, d).filter((e) => e.status === "APPROVED").length;
-      return { d, t, c, level: slotLevel(c, t.minStaff, t.targetStaff) };
+      return { d, t, c, tg: targetFor(t, d), level: slotLevel(c, t.minStaff, targetFor(t, d)) };
     }),
   ).filter((w) => w.level !== "ok");
 
@@ -357,7 +357,8 @@ export default function ScheduleBoard(p: Props) {
           const inCell = new Set(list.map((e) => e.userId));
           const approvedN = list.filter((e) => e.status === "APPROVED").length;
           const tpl = t as TplInfo;
-          const lv = slotLevel(approvedN, tpl.minStaff, tpl.targetStaff);
+          const tgt = targetFor(tpl, d);
+          const lv = slotLevel(approvedN, tpl.minStaff, tgt);
           const props = [...proposed.values()].filter((c) => c.date === d && c.tplId === t.id);
           return (
             <div className="flex min-h-16 flex-col gap-0.5">
@@ -437,8 +438,8 @@ export default function ScheduleBoard(p: Props) {
                   </span>
                 )}
                 {lv === "low" && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tpl.targetStaff} (định mức)`}>
-                    <CircleAlert size={11} /> Ít {approvedN}/{tpl.targetStaff}
+                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tgt} (định mức${tgt !== tpl.targetStaff ? " riêng ngày này" : ""})`}>
+                    <CircleAlert size={11} /> Ít {approvedN}/{tgt}
                   </span>
                 )}
               </div>
@@ -469,7 +470,7 @@ export default function ScheduleBoard(p: Props) {
           <ul className="grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {warnings.map((w) => (
               <li key={`${w.d}${w.t.id}`}>
-                <Badge tone={w.level === "short" ? "red" : "yellow"}>{w.level === "short" ? "Thiếu người" : "Ít người"}</Badge> {w.t.name} · {weekdayVi(w.d)} {viDate(w.d).slice(0, 5)}: {w.c}/{w.level === "short" ? w.t.minStaff : w.t.targetStaff}
+                <Badge tone={w.level === "short" ? "red" : "yellow"}>{w.level === "short" ? "Thiếu người" : "Ít người"}</Badge> {w.t.name} · {weekdayVi(w.d)} {viDate(w.d).slice(0, 5)}: {w.c}/{w.level === "short" ? w.t.minStaff : w.tg}
               </li>
             ))}
           </ul>

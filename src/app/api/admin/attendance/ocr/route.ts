@@ -15,7 +15,8 @@ const Body = z.object({ photo: z.string().startsWith("data:image/"), store: z.st
 /** AI đọc 1 ảnh bảng chấm công → các lượt (tên NV, ngày, giờ vào/ra, ca). Chưa ghi gì vào database. */
 export async function POST(req: Request) {
   try {
-    if (!(await getAdmin())) throw new HttpError(401, "Phiên admin đã hết hạn");
+    const admin = await getAdmin();
+    if (!admin) throw new HttpError(401, "Phiên admin đã hết hạn");
     if (!geminiConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY", { code: "OCR_OFF" });
     const p = Body.safeParse(await req.json());
     if (!p.success) throw new HttpError(400, "Thiếu ảnh");
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       startTime: t.startTime,
       endTime: t.endTime,
     }));
-    const json = await readAttendancePhotos([p.data.photo], p.data.month, templates.map((t) => `${t.name} (${t.startTime}–${t.endTime})`)).catch((e: Error) => {
+    const json = await readAttendancePhotos([p.data.photo], p.data.month, templates.map((t) => `${t.name} (${t.startTime}–${t.endTime})`), `admin:${admin.accountId ?? "owner"}`).catch((e: Error) => {
       throw new HttpError(502, e.message, { code: "OCR_FAILED" });
     });
     return NextResponse.json({ ok: true, records: normalizeAiAttendance(json, p.data.month, templates) });

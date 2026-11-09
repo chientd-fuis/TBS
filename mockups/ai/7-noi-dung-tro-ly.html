@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Nội dung trợ lý</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.sec { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: #fff; }
+.sec h3 { margin: 0 0 6px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+textarea { width: 100%; resize: vertical; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Tiệm Bơ Sầu<small>Quản lý chấm công</small></div>
+    <a>Tổng quan</a><a>Lịch làm việc</a><a>Chấm công</a><a>Nhân viên</a><a class="on">Cài đặt</a>
+  </nav>
+  <div class="main">
+    <div class="top">👑 Admin Tổng</div>
+    <div class="wrap">
+      <div class="row" style="justify-content:space-between">
+        <div><h1>Trợ lý cửa hàng – nội dung</h1><div class="muted small">Cài đặt → AI → Trợ lý cửa hàng. AI CHỈ trả lời dựa trên nội dung dưới đây; câu ngoài phạm vi → từ chối lịch sự.</div></div>
+        <div class="row"><span class="small muted">Áp dụng cho</span><select><option>Tất cả cơ sở</option><option>TBS Văn Phú</option></select><button class="btn btn-p">Lưu</button></div>
+      </div>
+
+      <div class="grid2">
+        <div class="sec">
+          <h3>📋 Nội quy, quy định <span class="badge b-green">Bật</span></h3>
+          <textarea rows="7">1. Đến trước giờ ca 5 phút, mặc đồng phục, buộc tóc.
+2. Đi muộn quá 5 phút: phạt 20.000 ₫ / lần.
+3. Không dùng điện thoại khi đang pha chế.
+4. Nghỉ ca phải báo quản lý trước 24h và nhờ người làm hộ trong app.
+…</textarea>
+        </div>
+        <div class="sec">
+          <h3>👤 Ai là quản lý <span class="badge b-blue">Tự động + bổ sung</span></h3>
+          <table>
+            <thead><tr><th>Cơ sở</th><th>Quản lý</th><th>Liên hệ</th></tr></thead>
+            <tbody>
+              <tr><td>Văn Phú</td><td>Chị Hà <span class="small muted">(admin)</span></td><td>09xx xxx 123</td></tr>
+              <tr><td>Geleximco</td><td>Anh Tuấn <span class="small muted">(NV quản lý xếp ca)</span></td><td>09xx xxx 456</td></tr>
+              <tr><td>Linh Đàm</td><td>Chị Mai</td><td>09xx xxx 789</td></tr>
+            </tbody>
+          </table>
+          <div class="small muted" style="margin-top:6px">Lấy từ danh sách admin &amp; nhân viên được cấp quyền quản lý; sửa / thêm SĐT ở đây.</div>
+        </div>
+        <div class="sec">
+          <h3>🧊 Quy trình bảo quản <span class="badge b-green">Bật</span></h3>
+          <textarea rows="6">- Sầu riêng đã bóc: hộp kín, ngăn mát 2–4°C, dùng trong 24h.
+- Sữa tươi mở nắp: dùng trong 48h, ghi ngày mở lên nắp.
+- Topping trân châu: nấu mỗi 4 tiếng, bỏ phần còn lại cuối ca.
+…</textarea>
+        </div>
+        <div class="sec">
+          <h3>⚠️ Khi nguyên liệu có vấn đề <span class="badge b-green">Bật</span></h3>
+          <textarea rows="6">1. Ngừng dùng ngay, để riêng, dán “KHÔNG DÙNG”.
+2. Chụp ảnh nguyên liệu + hạn sử dụng.
+3. Báo quản lý ca (xem mục Ai là quản lý).
+4. Ghi sổ “Nguyên liệu hỏng”.</textarea>
+        </div>
+        <div class="sec">
+          <h3>🧾 Hướng dẫn chốt ca <span class="badge b-gray">Có sẵn từ app + sửa thêm</span></h3>
+          <textarea rows="5">Cuối ca: mở app → Chốt ca → chụp tờ chốt ca (AI tự điền số) → kiểm tra TM / TK / Grab / Shopee / chi phí két → Gửi.
+Ca Tối là số cả ngày (luỹ kế)…</textarea>
+        </div>
+        <div class="sec">
+          <h3>⏰ Hướng dẫn chấm công <span class="badge b-gray">Có sẵn từ app + sửa thêm</span></h3>
+          <textarea rows="5">Đến quán → mở app → CHECK-IN (chụp mặt, bật vị trí / WiFi quán).
+Quên check-out: Lịch sử → Gửi yêu cầu điều chỉnh.
+Đổi ca / nhờ làm hộ: Lịch ca → Đổi ca / Nhờ làm hộ…</textarea>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Câu hỏi AI không trả lời được (7 ngày)</h2>
+          <table>
+            <thead><tr><th>Câu hỏi</th><th>Lý do</th><th class="num">Số lần</th></tr></thead>
+            <tbody>
+              <tr><td>Kem cheese để được mấy ngày?</td><td><span class="badge b-orange">Chưa có trong nội dung</span></td><td class="num">4</td></tr>
+              <tr><td>Tháng này được nghỉ mấy ngày?</td><td><span class="badge b-orange">Chưa có trong nội dung</span></td><td class="num">2</td></tr>
+              <tr><td>Công thức trà sữa quán khác</td><td><span class="badge b-gray">Ngoài phạm vi</span></td><td class="num">1</td></tr>
+            </tbody>
+          </table>
+          <div class="small muted" style="margin-top:6px">Gợi ý bổ sung nội dung để nhân viên hỏi được.</div>
+        </div>
+        <div class="card">
+          <h2>Phạm vi trả lời</h2>
+          <div class="note">AI <b>chỉ</b> trả lời 6 chủ đề trên, dựa đúng nội dung admin nhập + hướng dẫn có sẵn của app. Không bịa, không tư vấn ngoài lề (công thức, giá, lương người khác, chuyện cá nhân…). Không có thông tin → trả lời “Chưa có trong nội quy, hỏi quản lý: [tên – SĐT]”.</div>
+          <div class="grid2" style="margin-top:10px">
+            <label class="f">Giới hạn<select><option>10 câu / ngày / nhân viên</option></select></label>
+            <label class="f">Model<select><option>2.5 Flash-Lite (rẻ)</option></select></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mock">MOCKUP – chưa làm thật</div>
+</body>
+</html>

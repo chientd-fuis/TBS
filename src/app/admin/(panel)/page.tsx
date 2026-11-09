@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { can } from "@/lib/permissions";
+import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
 import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
@@ -41,6 +42,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const now = new Date();
 
   const showPay = can(admin, "payEstimate");
+  // bất thường chốt ca & két (có số tiền doanh thu từng ca → chỉ Admin Tổng)
+  const anomaly = admin.kind === "OWNER" ? await latestAnomalyRun().catch(() => null) : null;
+  const anomalyOpen = anomaly?.items.filter((i) => !i.resolved && i.sev >= 2) ?? [];
   const blocks = await Promise.all(
     stores.map(async (s) => {
       const tz = s.timezone || "Asia/Ho_Chi_Minh";
@@ -105,6 +109,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           Chưa kết nối Google Drive để lưu ảnh chấm công – ảnh đang được giữ tạm.{" "}
           {admin.kind === "OWNER" ? <Link className="underline" href="/admin/settings">Kết nối ngay</Link> : "Hãy báo Admin Tổng kết nối."}
         </Alert>
+      )}
+      {anomaly && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-accent">
+              ⚠ Bất thường chốt ca &amp; két ({anomaly.from.slice(8)}/{anomaly.from.slice(5, 7)} – {anomaly.to.slice(8)}/{anomaly.to.slice(5, 7)}){" "}
+              <Badge tone={anomalyOpen.some((i) => i.sev === 3) ? "red" : anomalyOpen.length ? "orange" : "green"}>
+                {anomalyOpen.length ? `${anomalyOpen.filter((i) => i.sev === 3).length} nghiêm trọng · ${anomalyOpen.filter((i) => i.sev === 2).length} cần xem` : "Không có"}
+              </Badge>
+            </span>
+            <Link className="text-sm text-accent underline" href="/admin/closings/anomaly">Xem tất cả →</Link>
+          </div>
+          {anomalyOpen.length > 0 && (
+            <ul className="mt-2 space-y-0.5 text-sm">
+              {anomalyOpen.slice(0, 3).map((i) => (
+                <li key={i.key}>• <b>{i.staff}</b> ({i.storeName}, {i.shiftName} {i.workDate.slice(8)}/{i.workDate.slice(5, 7)}): {i.label} – {i.detail}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
       )}
       {showPay && blocks.length > 1 && (
         <Card>

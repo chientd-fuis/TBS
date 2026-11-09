@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Hỏi AI – admin</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.dim { position: relative; }
+.dim::after { content: ""; position: absolute; inset: 0; background: rgba(58,42,26,.35); }
+.panel { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; background: #fff; border-left: 1px solid var(--line); display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0,0,0,.12); }
+.panel header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+.msgs { flex: 1; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: var(--cream); }
+.q { align-self: flex-end; background: var(--primary); border-radius: 14px 14px 4px 14px; padding: 8px 12px; max-width: 80%; font-weight: 500; }
+.a { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 10px 12px; max-width: 92%; }
+.src { font-size: 11px; color: var(--muted); margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 5px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; background: #fff; }
+.composer { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fab { position: fixed; right: 500px; bottom: 24px; }
+</style>
+</head>
+<body>
+<div class="app dim">
+  <nav class="side">
+    <div class="brand">Tiệm Bơ Sầu<small>Quản lý chấm công</small></div>
+    <a class="on">Tổng quan</a><a>Lịch làm việc</a><a>Xếp ca tự động</a><a>Chấm công</a><a>Nhân viên</a><a>Cài đặt</a>
+  </nav>
+  <div class="main">
+    <div class="top">Admin: <b>Lan – Văn Phú</b> · <button class="btn btn-p btn-sm">✨ Hỏi AI</button></div>
+    <div class="wrap">
+      <h1>Tổng quan</h1>
+      <div class="grid3">
+        <div class="card" style="height:150px"><b>TBS Văn Phú</b></div>
+        <div class="card" style="height:150px"><b>TBS Geleximco</b></div>
+        <div class="card" style="height:150px"><b>TBS Linh Đàm</b></div>
+      </div>
+      <div class="card" style="height:300px"></div>
+    </div>
+  </div>
+</div>
+
+<aside class="panel">
+  <header>
+    <div><b style="color:var(--accent)">✨ Hỏi AI</b> <span class="small muted">· tra dữ liệu theo quyền của bạn</span></div>
+    <span class="badge b-yellow">Còn 18/30 câu hôm nay</span>
+  </header>
+  <div class="msgs">
+    <div class="q">Tháng 10 ai đi muộn nhiều nhất?</div>
+    <div class="a">
+      Tháng 10/2026 (3 cơ sở), đi muộn nhiều nhất:
+      <table style="margin-top:6px">
+        <thead><tr><th>Nhân viên</th><th class="num">Số lần</th><th class="num">Tổng phút</th></tr></thead>
+        <tbody>
+          <tr><td>Trần Lâm (CS2)</td><td class="num">9</td><td class="num">142</td></tr>
+          <tr><td>Hùng (CS3)</td><td class="num">6</td><td class="num">75</td></tr>
+          <tr><td>Nga Lê (CS1)</td><td class="num">4</td><td class="num">31</td></tr>
+        </tbody>
+      </table>
+      <div class="src">Nguồn: Bảng chấm công T10/2026 · <a href="#">Mở bảng chấm công Trần Lâm →</a></div>
+    </div>
+
+    <div class="q">Lan làm bao nhiêu giờ ngày lễ?</div>
+    <div class="a">
+      Có 2 nhân viên tên “Lan”. Bạn hỏi ai?
+      <div class="chips" style="margin-top:6px"><span class="chip">Nguyễn Lan (CS1)</span><span class="chip">Phạm Lan (CS3)</span></div>
+    </div>
+    <div class="q">Nguyễn Lan</div>
+    <div class="a">
+      Nguyễn Lan làm <b>8h</b> ngày lễ năm 2026: Quốc khánh 02/09 (ca 08:00–16:00, ×2 lương).
+      <div class="src">Nguồn: Ngày lễ + chấm công 2026 · <a href="#">Mở →</a></div>
+    </div>
+
+    <div class="q">Doanh thu CS2 tuần này so với tuần trước?</div>
+    <div class="a" style="border-color:#fecaca;background:#fff7f7">
+      🔒 Bạn chưa được Admin Tổng cấp quyền xem <b>doanh thu</b> nên mình không trả lời câu này.
+      <div class="src">AI chỉ dùng các truy vấn mà tài khoản của bạn được phép.</div>
+    </div>
+  </div>
+  <div class="composer">
+    <div class="chips">
+      <span class="chip">Hôm nay ai chưa đến ca?</span>
+      <span class="chip">Tuần này ai quên check-out?</span>
+      <span class="chip">Ca nào thiếu người tuần sau?</span>
+    </div>
+    <div class="row" style="flex-wrap:nowrap">
+      <input placeholder="Hỏi về chấm công, lịch ca, nhân viên…" style="flex:1">
+      <button class="btn btn-p">Gửi</button>
+    </div>
+    <div class="small muted">AI chỉ đọc dữ liệu, không sửa gì. Câu trả lời có nguồn để bạn kiểm tra lại.</div>
+  </div>
+</aside>
+<div class="mock">MOCKUP – chưa làm thật</div>
+</body>
+</html>

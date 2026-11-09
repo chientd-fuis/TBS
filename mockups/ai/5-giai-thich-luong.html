@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Giải thích lương</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { width: 390px; }
+.hdr { background: var(--primary); padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.av { width: 34px; height: 34px; border-radius: 50%; background: #fff; }
+.pg { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; margin: 0; font-size: 13px; }
+dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.nav { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; font-size: 11px; padding: 8px 0; color: var(--muted); }
+.nav .on { color: var(--accent); font-weight: 700; }
+.ex { border: 1px solid #ddd6fe; background: #fdfcff; border-radius: 14px; padding: 12px; font-size: 13px; }
+.ex ol { margin: 6px 0 0; padding-left: 18px; }
+.ex li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="hdr"><span class="av"></span><div><b>Nguyễn Lan</b><div class="small">TBS Văn Phú</div></div></div>
+<div class="pg">
+  <div class="row" style="justify-content:space-between"><b style="color:var(--accent);font-size:17px">Bảng lương</b><span class="small">‹ Tháng 10/2026 ›</span></div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Tháng 10/2026</b><span class="badge b-yellow">Đã công bố</span></div>
+    <dl>
+      <dt>Giờ tính công</dt><dd>142,5 h</dd>
+      <dt class="small" style="color:var(--danger);padding-left:10px">trong đó ngày lễ</dt><dd class="small" style="color:var(--danger)">—</dd>
+      <dt>Lương giờ</dt><dd>25.000</dd>
+      <dt>Lương cơ bản</dt><dd>3.562.500</dd>
+      <dt>Phụ cấp</dt><dd>200.000</dd>
+      <dt>Thưởng</dt><dd style="color:var(--green-dark)">+100.000</dd>
+      <dt>Phạt</dt><dd style="color:var(--danger)">−50.000</dd>
+      <dt>Tạm ứng</dt><dd>−1.000.000</dd>
+      <dt style="font-weight:700;border-top:1px solid var(--line);padding-top:6px">Thực nhận</dt><dd style="font-weight:700;font-size:17px;color:var(--green-dark);border-top:1px solid var(--line);padding-top:6px">2.812.500</dd>
+    </dl>
+  </div>
+
+  <button class="btn btn-p" style="width:100%">✨ Vì sao lương tháng này là 2.812.500 ₫?</button>
+
+  <div class="ex">
+    <div class="row" style="justify-content:space-between"><span class="ai">AI giải thích</span><span class="small muted">còn 2/3 lượt tháng này</span></div>
+    <ol>
+      <li><b>Giờ công 142,5h</b> từ 23 ngày đi làm. Có 2 ca được admin cộng <b>+0,5h</b> (05/10, 19/10).</li>
+      <li><b>Lương cơ bản</b> = 142,5h × 25.000 ₫ = <b>3.562.500 ₫</b>.</li>
+      <li><b>+200.000</b> phụ cấp, <b>+100.000</b> thưởng “Khách khen 12/10”.</li>
+      <li><b>−50.000</b> phạt “Đi muộn 18 phút ngày 07/10”.</li>
+      <li><b>−1.000.000</b> tạm ứng ngày 15/10.</li>
+    </ol>
+    <div style="margin-top:6px">So với tháng 9 (3.410.000 ₫): <b>ít hơn 597.500 ₫</b> chủ yếu do tạm ứng 1 triệu; giờ công nhiều hơn 8h.</div>
+    <div class="small muted" style="margin-top:8px">AI chỉ đọc bảng lương của chính bạn. Thấy sai? Gửi phản hồi bên dưới để admin kiểm tra.</div>
+  </div>
+
+  <div class="card">
+    <b class="small">Gửi phản hồi bảng lương</b>
+    <textarea rows="2" style="width:100%;margin-top:6px" placeholder="VD: Ngày 21/10 em làm ca tối nhưng chưa thấy tính"></textarea>
+    <button class="btn btn-o btn-sm" style="margin-top:6px">Gửi admin</button>
+  </div>
+</div>
+<div class="nav"><span>Chấm công</span><span>Lịch sử</span><span>Lịch ca</span><span class="on">Bảng lương</span><span>Tài khoản</span></div>
+<div class="mock">MOCKUP</div>
+</body>
+</html>

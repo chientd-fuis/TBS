@@ -1,0 +1,157 @@
+/*
+ * Cài đặt AI + kiểm soát token.
+ * Mọi lần gọi Gemini có `feature` → kiểm tra bật/tắt, giới hạn lượt, ngân sách token tháng → ghi AiUsage (số token).
+ * Cấu hình lưu ở Settings.ai (Mixed) – thiếu khoá nào thì dùng mặc định dưới đây.
+ */
+import { connectDB } from "./db";
+import { AiUsage, Settings } from "./models";
+import { DEFAULT_TZ, localDate, localMonth, zonedToDate } from "./time";
+
+export type LimitUnit = "month" | "day" | "dayActor" | "monthActor";
+export type AiFeatureKey =
+  | "closingOcr"
+  | "billOcr"
+  | "attendanceOcr"
+  | "reportComment"
+  | "assistant"
+  | "anomaly"
+  | "payExplain"
+  | "forecast"
+  | "ask";
+
+export const AI_MODELS = [
+  { key: "", label: "Mặc định (GEMINI_MODEL)" },
+  { key: "gemini-2.5-flash", label: "2.5 Flash" },
+  { key: "gemini-2.5-flash-lite", label: "2.5 Flash-Lite (rẻ)" },
+] as const;
+
+export const AI_FEATURES: {
+  key: AiFeatureKey;
+  label: string;
+  hint: string;
+  unit: LimitUnit;
+  limit: number;
+  enabled: boolean;
+  model: string;
+  /** vẫn chạy khi hết ngân sách tháng (chức năng chính, không được dừng) */
+  essential?: boolean;
+}[] = [
+  { key: "closingOcr", label: "Đọc ảnh tờ chốt ca", hint: "Nhân viên / admin chụp tờ chốt ca → tự điền số", unit: "month", limit: 2000, enabled: true, model: "", essential: true },
+  { key: "billOcr", label: "Đọc bill / sao kê", hint: "Nhập chi phí từ ảnh", unit: "month", limit: 300, enabled: true, model: "" },
+  { key: "attendanceOcr", label: "Đọc ảnh bảng chấm công", hint: "Chấm công hộ → Đọc ảnh (AI)", unit: "month", limit: 100, enabled: true, model: "" },
+  { key: "reportComment", label: "Nhận xét báo cáo tài chính", hint: "Đoạn nhận xét trong tin Telegram ngày / tuần / tháng", unit: "month", limit: 60, enabled: true, model: "gemini-2.5-flash-lite" },
+  { key: "assistant", label: "Trợ lý cửa hàng (nhân viên)", hint: "Nội quy · quản lý · bảo quản · nguyên liệu · chốt ca · chấm công", unit: "dayActor", limit: 10, enabled: true, model: "gemini-2.5-flash-lite" },
+  { key: "anomaly", label: "Phát hiện bất thường chốt ca & két", hint: "Rà theo từng nhân viên mỗi ngày, AI viết tóm tắt", unit: "day", limit: 3, enabled: true, model: "gemini-2.5-flash-lite" },
+  { key: "payExplain", label: "Giải thích lương cho nhân viên", hint: "NV hỏi “vì sao lương tháng này là X”", unit: "monthActor", limit: 3, enabled: false, model: "gemini-2.5-flash-lite" },
+  { key: "forecast", label: "Dự báo → gợi ý số người / ca", hint: "Thống kê doanh thu theo thứ / ngày lễ; AI viết lý do", unit: "month", limit: 10, enabled: true, model: "gemini-2.5-flash-lite" },
+  { key: "ask", label: "Hỏi đáp dữ liệu (admin)", hint: "Hỏi bằng tiếng Việt, AI tra dữ liệu theo quyền", unit: "dayActor", limit: 30, enabled: true, model: "" },
+];
+export const UNIT_LABEL: Record<LimitUnit, string> = { month: "lượt / tháng", day: "lượt / ngày", dayActor: "câu / ngày / người", monthActor: "lượt / tháng / người" };
+
+export type AiFeatureCfg = { enabled: boolean; limit: number; model: string };
+export type AssistantContent = { rules: string; storage: string; ingredient: string; closing: string; attendance: string; managers: string };
+export type AnomalyCfg = { negDiff: number; negRepeat: number; ketFactor: number; lateCloseMin: number; telegram: boolean };
+export type AiConfig = {
+  enabled: boolean;
+  monthlyTokens: number;
+  warnPct: number;
+  features: Record<AiFeatureKey, AiFeatureCfg>;
+  assistant: AssistantContent;
+  anomaly: AnomalyCfg;
+};
+
+export const DEFAULT_ASSISTANT: AssistantContent = {
+  rules: "",
+  storage: "",
+  ingredient: "",
+  closing:
+    "Cuối ca: mở app → Chốt ca → chụp tờ chốt ca (AI tự điền số) → kiểm tra Tiền mặt / Tài khoản / Grab / Shopee / Chi phí két → Gửi. Số chốt ca là LUỸ KẾ: ca Chiều đã gồm ca Sáng, ca Tối = cả ngày.",
+  attendance:
+    "Đến quán → mở app → bấm CHECK-IN (chụp khuôn mặt, bật vị trí / dùng WiFi quán theo cài đặt cơ sở). Về: bấm CHECK-OUT. Quên check-in / check-out: Lịch sử → Gửi yêu cầu điều chỉnh (nhập giờ + lý do), admin duyệt. Đổi ca / nhờ làm hộ: Lịch ca → Đổi ca / Nhờ làm hộ.",
+  managers: "",
+};
+export const DEFAULT_ANOMALY: AnomalyCfg = { negDiff: 100_000, negRepeat: 3, ketFactor: 2, lateCloseMin: 60, telegram: true };
+
+/** Ghép cấu hình đã lưu với mặc định (hàm thuần – có test). */
+export function mergeAiConfig(raw: unknown): AiConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<AiConfig> & { features?: Partial<Record<AiFeatureKey, Partial<AiFeatureCfg>>> };
+  const features = Object.fromEntries(
+    AI_FEATURES.map((f) => {
+      const v: Partial<AiFeatureCfg> = r.features?.[f.key] ?? {};
+      return [f.key, { enabled: typeof v.enabled === "boolean" ? v.enabled : f.enabled, limit: Number.isFinite(v.limit) ? Math.max(0, Number(v.limit)) : f.limit, model: typeof v.model === "string" ? v.model : f.model }];
+    }),
+  ) as Record<AiFeatureKey, AiFeatureCfg>;
+  return {
+    enabled: r.enabled !== false,
+    monthlyTokens: Number.isFinite(r.monthlyTokens) ? Math.max(0, Number(r.monthlyTokens)) : 3_000_000,
+    warnPct: Number.isFinite(r.warnPct) ? Number(r.warnPct) : 80,
+    features,
+    assistant: { ...DEFAULT_ASSISTANT, ...(r.assistant ?? {}) },
+    anomaly: { ...DEFAULT_ANOMALY, ...(r.anomaly ?? {}) },
+  };
+}
+
+export async function getAiConfig(): Promise<AiConfig> {
+  await connectDB();
+  const s = await Settings.findOne({ key: "main" }).select("ai").lean();
+  return mergeAiConfig(s?.ai);
+}
+
+/** Đầu tháng / đầu ngày theo giờ VN. */
+function periodStart(kind: "day" | "month", now = new Date()) {
+  const d = kind === "day" ? localDate(now, DEFAULT_TZ) : `${localMonth(now, DEFAULT_TZ)}-01`;
+  return zonedToDate(d, "00:00", DEFAULT_TZ);
+}
+
+export async function monthTokens(now = new Date()) {
+  const r = await AiUsage.aggregate<{ t: number }>([{ $match: { createdAt: { $gte: periodStart("month", now) } } }, { $group: { _id: null, t: { $sum: "$tokens" } } }]);
+  return r[0]?.t ?? 0;
+}
+
+export class AiLimitError extends Error {}
+
+/** Kiểm tra trước khi gọi AI: bật/tắt, ngân sách token tháng, giới hạn lượt. Ném AiLimitError (câu dễ hiểu) nếu không được. */
+export async function aiGuard(feature: AiFeatureKey, actor = "system") {
+  const cfg = await getAiConfig();
+  const meta = AI_FEATURES.find((f) => f.key === feature)!;
+  const fc = cfg.features[feature];
+  if (!cfg.enabled && !meta.essential) throw new AiLimitError("Chức năng AI đang tắt (Cài đặt → AI)");
+  if (!fc.enabled) throw new AiLimitError(`Admin chưa bật chức năng “${meta.label}”`);
+  if (cfg.monthlyTokens > 0 && !meta.essential && (await monthTokens()) >= cfg.monthlyTokens)
+    throw new AiLimitError("Đã dùng hết ngân sách AI của tháng – thử lại tháng sau hoặc nhờ Admin Tổng tăng ngân sách");
+  if (fc.limit > 0) {
+    const byDay = meta.unit === "day" || meta.unit === "dayActor";
+    const q: Record<string, unknown> = { feature, ok: true, createdAt: { $gte: periodStart(byDay ? "day" : "month") } };
+    if (meta.unit === "dayActor" || meta.unit === "monthActor") q.actor = actor;
+    const used = await AiUsage.countDocuments(q);
+    if (used >= fc.limit)
+      throw new AiLimitError(`Đã dùng hết ${fc.limit} ${UNIT_LABEL[meta.unit]} cho “${meta.label}”${byDay ? " – thử lại ngày mai" : " – thử lại tháng sau"}`);
+  }
+  return { cfg, model: fc.model };
+}
+
+/** Số lượt còn lại (hiện cho người dùng, VD "còn 9/10 câu hôm nay"). */
+export async function aiRemaining(feature: AiFeatureKey, actor: string) {
+  const cfg = await getAiConfig();
+  const meta = AI_FEATURES.find((f) => f.key === feature)!;
+  const fc = cfg.features[feature];
+  const byDay = meta.unit === "day" || meta.unit === "dayActor";
+  const q: Record<string, unknown> = { feature, ok: true, createdAt: { $gte: periodStart(byDay ? "day" : "month") } };
+  if (meta.unit === "dayActor" || meta.unit === "monthActor") q.actor = actor;
+  const used = await AiUsage.countDocuments(q);
+  return { enabled: cfg.enabled && fc.enabled, limit: fc.limit, left: fc.limit > 0 ? Math.max(0, fc.limit - used) : Infinity, byDay };
+}
+
+export async function recordAiUsage(feature: AiFeatureKey, actor: string, tokens: number, model: string, ok = true) {
+  await AiUsage.create({ feature, actor, tokens: Math.max(0, Math.round(tokens || 0)), model, ok }).catch(() => null);
+}
+
+/** Thống kê cho trang Cài đặt AI: lượt + token tháng này theo chức năng. */
+export async function aiUsageStats(now = new Date()) {
+  const rows = await AiUsage.aggregate<{ _id: string; n: number; t: number }>([
+    { $match: { createdAt: { $gte: periodStart("month", now) } } },
+    // n = số lượt (không tính lần gọi phụ), t = tổng token (cả lần gọi phụ)
+    { $group: { _id: "$feature", n: { $sum: { $cond: ["$ok", 1, 0] } }, t: { $sum: "$tokens" } } },
+  ]);
+  return Object.fromEntries(rows.map((r) => [r._id, { n: r.n, t: r.t }])) as Record<string, { n: number; t: number }>;
+}

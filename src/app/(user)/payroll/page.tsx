@@ -7,6 +7,9 @@ import { MonthPicker } from "@/components/MonthPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Textarea } from "@/components/ui";
 import { submitPayrollFeedback } from "../actions";
+import PayExplain from "@/components/user/PayExplain";
+import { aiRemaining } from "@/lib/ai";
+import { geminiConfigured } from "@/lib/ocr";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
   const visible = payroll && payroll.status !== "DRAFT";
   const bps = visible ? await BonusPenalty.find({ userId: user._id, month }).sort({ date: 1 }).lean() : [];
+  const explain = await aiRemaining("payExplain", `user:${user._id}`);
   const feedbacks = item ? await PayrollFeedback.find({ payrollItemId: item._id }).sort({ createdAt: -1 }).lean() : [];
 
   return (
@@ -67,6 +71,10 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <dd className="border-t border-[#f1e6c8] pt-2 text-right text-lg font-bold text-secondary-dark">{vnd(item.netPay)}</dd>
             </dl>
           </Card>
+          {/* AI giải thích lương – chỉ hiện khi Admin Tổng bật ở Cài đặt → AI */}
+          {explain.enabled && geminiConfigured() && (
+            <PayExplain month={month} netPay={vnd(item.netPay)} left={Number.isFinite(explain.left) ? explain.left : null} limit={explain.limit} />
+          )}
           <Card title="Chi tiết thưởng / phạt">
             {bps.length === 0 ? (
               <p className="text-sm text-ink/60">Không có</p>

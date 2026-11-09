@@ -1,0 +1,65 @@
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap");
+:root {
+  --cream: #fffbef;
+  --line: #f1e6c8;
+  --primary: #fccc18;
+  --primary-light: #fff4c7;
+  --green: #3c9c54;
+  --green-dark: #2e7a41;
+  --accent: #8a5214;
+  --ink: #3a2a1a;
+  --muted: #7a6a58;
+  --danger: #b42318;
+  --warn: #b54708;
+  --blue: #1e40af;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--cream); color: var(--ink); font: 14px/1.5 "Be Vietnam Pro", system-ui, sans-serif; }
+.app { display: flex; min-height: 100vh; }
+.side { width: 220px; background: var(--green-dark); color: #fff; padding: 14px 10px; flex-shrink: 0; }
+.side .brand { font-weight: 700; padding: 4px 8px 14px; }
+.side .brand small { display: block; font-weight: 400; opacity: .8; font-size: 12px; }
+.side a { display: block; color: rgba(255,255,255,.9); text-decoration: none; padding: 7px 10px; border-radius: 10px; font-size: 13px; }
+.side a.on { background: var(--primary); color: var(--ink); font-weight: 700; }
+.main { flex: 1; min-width: 0; }
+.top { background: #fff; border-bottom: 1px solid var(--line); padding: 8px 20px; text-align: right; font-size: 13px; color: var(--muted); }
+.wrap { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; font-size: 22px; color: var(--accent); }
+h1 + .sub { margin-top: -10px; color: var(--muted); font-size: 13px; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+.card h2 { margin: 0 0 10px; font-size: 16px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.badge { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+.b-green { background: #dcf3e2; color: var(--green-dark); }
+.b-red { background: #fde2e1; color: var(--danger); }
+.b-orange { background: #ffe9d5; color: var(--warn); }
+.b-yellow { background: var(--primary-light); color: var(--accent); }
+.b-gray { background: #eee8dc; color: var(--muted); }
+.b-blue { background: #dbeafe; color: var(--blue); }
+.btn { border: 0; border-radius: 12px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.btn-p { background: var(--primary); color: var(--ink); }
+.btn-g { background: var(--green); color: #fff; }
+.btn-o { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 9px; }
+input, select, textarea { font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: #fff; color: var(--ink); }
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.toggle { width: 38px; height: 22px; border-radius: 999px; background: #d8cfbd; position: relative; display: inline-block; flex-shrink: 0; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.toggle.on { background: var(--green); }
+.toggle.on::after { left: 19px; }
+.meter { height: 10px; border-radius: 999px; background: #f3ecdc; overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+.meter.warn > i { background: #e8a33d; }
+.meter.bad > i { background: var(--danger); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-bottom: 1px solid #f7f0dd; vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.ai { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #6d28d9; background: #ede9fe; border-radius: 999px; padding: 1px 8px; }
+.note { background: var(--primary-light); border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+.mock { position: fixed; right: 12px; bottom: 10px; font-size: 11px; color: #b0a38c; }

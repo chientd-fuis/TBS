@@ -6,6 +6,8 @@ import { normalizeOcr, type Revenue } from "./revenue";
  * - Dự phòng: bot riêng qua HTTP (CLOSING_OCR_URL / CLOSING_OCR_SECRET)
  */
 
+import type { AiFeatureKey } from "./ai";
+
 export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean; provider: string };
 
 export const ocrConfigured = () => geminiKeys().length > 0 || !!process.env.CLOSING_OCR_URL;
@@ -138,9 +140,35 @@ export function describeGeminiError(status: number, body: unknown, model: string
  * Gọi Gemini (generateContent). photos = data URL ảnh. schema có → trả JSON đã parse, không có → trả text.
  * Model chính hết lượt / quá tải → tự chuyển sang model dự phòng.
  */
-export async function geminiGenerate(opts: { prompt: string; photos?: string[]; schema?: object; timeoutMs?: number; temperature?: number }): Promise<unknown> {
+export async function geminiGenerate(opts: {
+  prompt: string;
+  photos?: string[];
+  schema?: object;
+  timeoutMs?: number;
+  temperature?: number;
+  /** chức năng AI (Cài đặt → AI): có → kiểm tra bật/tắt + giới hạn, ghi số token */
+  feature?: AiFeatureKey;
+  /** ai dùng – để giới hạn theo người ("user:<id>", "admin:<id>", "system") */
+  actor?: string;
+  /** model ưu tiên (không có → theo cài đặt chức năng / GEMINI_MODEL) */
+  model?: string;
+  /** lần gọi phụ của cùng 1 lượt (VD bước 2 của Hỏi AI): không kiểm tra / không tính lượt, vẫn cộng token */
+  followUp?: boolean;
+}): Promise<unknown> {
   const keys = geminiKeys();
   if (!keys.length) throw new Error("Chưa cấu hình GEMINI_API_KEY");
+  let preferred = opts.model ?? "";
+  if (opts.feature && !opts.followUp) {
+    const { aiGuard } = await import("./ai");
+    const g = await aiGuard(opts.feature, opts.actor); // ném lỗi dễ hiểu nếu tắt / hết lượt / hết ngân sách
+    preferred = preferred || g.model;
+  }
+  const record = async (body: unknown, model: string) => {
+    if (!opts.feature) return;
+    const { recordAiUsage } = await import("./ai");
+    const tokens = (body as { usageMetadata?: { totalTokenCount?: number } })?.usageMetadata?.totalTokenCount ?? 0;
+    await recordAiUsage(opts.feature, opts.actor ?? "system", tokens, model, !opts.followUp);
+  };
   const parts: unknown[] = [{ text: opts.prompt }];
   for (const p of opts.photos ?? []) {
     const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(p);
@@ -158,7 +186,8 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
   let quota = false;
   const badKeys = new Set<string>(); // key sai / bị khoá → bỏ hẳn trong lượt này
   // ưu tiên model tốt nhất: thử model chính với MỌI key trước, hết mới xuống model dự phòng
-  const pairs = geminiModels().flatMap((model) => keys.map((key, ki) => ({ model, key, label: keys.length > 1 ? `${model} (key ${ki + 1})` : model })));
+  const models = preferred ? [preferred, ...geminiModels().filter((m) => m !== preferred)] : geminiModels();
+  const pairs = models.flatMap((model) => keys.map((key, ki) => ({ model, key, label: keys.length > 1 ? `${model} (key ${ki + 1})` : model })));
   const fresh = pairs.filter((p) => !skipKey(p.key, p.model));
   for (const { model, key, label } of fresh.length ? fresh : pairs) {
     if (badKeys.has(key)) continue;
@@ -186,6 +215,7 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
         break; // quá lâu → thử model / key khác
       }
       if (res.ok) {
+        await record(res.body, model);
         if (opts.schema) return parseGeminiResponse(res.body);
         const b = res.body as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
         return (b.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
@@ -221,8 +251,8 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
   );
 }
 
-async function readWithGemini(photos: string[], refDate: string): Promise<OcrResult> {
-  const json = await geminiGenerate({ prompt: GEMINI_PROMPT, photos, schema: SCHEMA });
+async function readWithGemini(photos: string[], refDate: string, actor?: string): Promise<OcrResult> {
+  const json = await geminiGenerate({ prompt: GEMINI_PROMPT, photos, schema: SCHEMA, feature: "closingOcr", actor });
   return { ...normalizeOcr(json, refDate), provider: "gemini" };
 }
 
@@ -243,8 +273,10 @@ Liệt kê TẤT CẢ giao dịch nhìn thấy trong "transactions", mỗi giao 
 Giao dịch bị cắt mất ở mép ảnh, không đọc rõ số tiền → bỏ qua. KHÔNG đoán. "k" = nghìn, "tr" = triệu. Chỉ trả về JSON.`;
 
 /** Đọc 1 ảnh sao kê / biên lai CK / bill → danh sách giao dịch TIỀN RA. */
-export async function readStatementPhoto(photo: string, refDate: string, categories: string[]) {
+export async function readStatementPhoto(photo: string, refDate: string, categories: string[], actor?: string) {
   const json = await geminiGenerate({
+    feature: "billOcr",
+    actor,
     prompt: STATEMENT_PROMPT.replace("{CATS}", categories.join(", ")),
     photos: [photo],
     timeoutMs: 55_000,
@@ -301,10 +333,10 @@ async function readWithBot(photos: string[], ctx: Record<string, unknown>, refDa
 
 export async function readClosingPhotos(
   photos: string[],
-  ctx: { store: { code?: string; name?: string }; workDate: string; shift?: { name?: string; start?: string; end?: string } | null; employee?: string },
+  ctx: { store: { code?: string; name?: string }; workDate: string; shift?: { name?: string; start?: string; end?: string } | null; employee?: string; actor?: string },
 ): Promise<OcrResult> {
   if (!ocrConfigured()) throw new Error("Chưa cấu hình đọc ảnh (GEMINI_API_KEY)");
-  const out = geminiKeys().length ? await readWithGemini(photos, ctx.workDate) : await readWithBot(photos, ctx, ctx.workDate);
+  const out = geminiKeys().length ? await readWithGemini(photos, ctx.workDate, ctx.actor) : await readWithBot(photos, ctx, ctx.workDate);
   if (!Object.keys(out.values).length && !out.date) throw new Error("Không đọc được số liệu nào từ ảnh – chụp rõ hơn hoặc nhập tay");
   return out;
 }
@@ -320,8 +352,10 @@ Bảng dạng mỗi ngày nhiều dòng giờ: dòng giờ vào và dòng giờ 
 Bảng dạng lịch chỉ đánh dấu ca (VD ô ghi "S", "C", "x" theo ngày) → mỗi ô 1 bản ghi, check_in/check_out null, shift = ca.
 Bỏ qua cột Đi trễ, Về sớm, Tổng thời gian, Tiền công. Không bịa số – chữ mờ không đọc được thì bỏ qua lượt đó.`;
 
-export async function readAttendancePhotos(photos: string[], refMonth: string, shiftNames: string[]) {
+export async function readAttendancePhotos(photos: string[], refMonth: string, shiftNames: string[], actor?: string) {
   const json = await geminiGenerate({
+    feature: "attendanceOcr",
+    actor,
     prompt: ATTENDANCE_PROMPT.replace("{SHIFTS}", shiftNames.join(", ") || "không rõ"),
     photos,
     timeoutMs: 55_000,

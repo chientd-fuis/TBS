@@ -125,6 +125,7 @@ CHỈ dùng số có trong dữ liệu, không bịa. Không chào hỏi, không
 ${JSON.stringify(data)}`,
       temperature: 0.3,
       timeoutMs: 25_000,
+      feature: "reportComment",
     });
     const t = String(text ?? "").trim();
     return t ? t.slice(0, 1200) : null;

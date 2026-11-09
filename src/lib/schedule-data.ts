@@ -33,6 +33,7 @@ export async function loadWeek(storeId: string, weekStart: string) {
     endTime: t.endTime,
     minStaff: t.minStaff ?? 0,
     targetStaff: t.targetStaff ?? 0,
+    targetByDate: Object.fromEntries(((t.staffByDate ?? []) as { date?: string | null; target?: number | null }[]).filter((x) => x.date && x.target != null).map((x) => [x.date!, x.target!])),
   }));
   const entries: Entry[] = rows.map((r) => ({
     id: String(r._id),

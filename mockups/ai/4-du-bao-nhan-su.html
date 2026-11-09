@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Dự báo nhân sự</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.wk th, .wk td { text-align: center; border: 1px solid #ede3c8; }
+.wk th:first-child, .wk td:first-child { text-align: left; background: #fffaf0; font-weight: 600; }
+.cell b { font-size: 18px; }
+.up { color: var(--green-dark); font-weight: 700; }
+.dn { color: var(--warn); font-weight: 700; }
+.rev { font-size: 11px; color: var(--muted); }
+.hol { background: #fde8e8 !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Tiệm Bơ Sầu<small>Quản lý chấm công</small></div>
+    <a>Tổng quan</a><a>Lịch làm việc</a><a class="on">Xếp ca tự động</a><a>Chấm công</a><a>Nhân viên</a><a>Cài đặt</a>
+  </nav>
+  <div class="main">
+    <div class="top">👑 Admin Tổng</div>
+    <div class="wrap">
+      <div class="row" style="justify-content:space-between">
+        <div><h1>Xếp ca / TBS Văn Phú</h1><div class="muted small">Tuần 16–22/11/2026 (tuần sau)</div></div>
+        <div class="row"><button class="btn btn-o">Định mức người / ca</button><button class="btn btn-g">⚡ Xếp tự động</button><button class="btn btn-p">✨ Gợi ý số người (AI)</button></div>
+      </div>
+
+      <div class="card" style="border-color:#ddd6fe">
+        <h2><span class="ai">Gợi ý số người / ca</span> dựa trên doanh thu 12 tuần gần nhất</h2>
+        <table class="wk">
+          <thead><tr><th>Ca</th><th>T2 16/11</th><th>T3 17/11</th><th>T4 18/11</th><th>T5 19/11</th><th class="hol">T6 20/11<br><span class="small">Ngày NG VN</span></th><th>T7 21/11</th><th>CN 22/11</th></tr></thead>
+          <tbody>
+            <tr><td>Sáng 08–13</td>
+              <td class="cell"><b>2</b><div class="rev">~1,8tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~1,7tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~1,9tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~1,8tr</div></td>
+              <td class="cell hol"><b>3</b> <span class="up">↑1</span><div class="rev">~3,1tr</div></td>
+              <td class="cell"><b>3</b> <span class="up">↑1</span><div class="rev">~2,9tr</div></td>
+              <td class="cell"><b>3</b> <span class="up">↑1</span><div class="rev">~3,0tr</div></td></tr>
+            <tr><td>Chiều 13–18</td>
+              <td class="cell"><b>1</b> <span class="dn">↓1</span><div class="rev">~1,1tr</div></td>
+              <td class="cell"><b>1</b> <span class="dn">↓1</span><div class="rev">~1,0tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~1,5tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~1,6tr</div></td>
+              <td class="cell hol"><b>3</b> <span class="up">↑1</span><div class="rev">~2,6tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~2,2tr</div></td>
+              <td class="cell"><b>2</b><div class="rev">~2,1tr</div></td></tr>
+            <tr><td>Tối 18–23</td>
+              <td class="cell"><b>3</b><div class="rev">~3,4tr</div></td>
+              <td class="cell"><b>3</b><div class="rev">~3,3tr</div></td>
+              <td class="cell"><b>3</b><div class="rev">~3,5tr</div></td>
+              <td class="cell"><b>3</b><div class="rev">~3,6tr</div></td>
+              <td class="cell hol"><b>4</b> <span class="up">↑1</span><div class="rev">~4,8tr</div></td>
+              <td class="cell"><b>4</b> <span class="up">↑1</span><div class="rev">~5,1tr</div></td>
+              <td class="cell"><b>4</b> <span class="up">↑1</span><div class="rev">~4,9tr</div></td></tr>
+          </tbody>
+        </table>
+        <div class="row small muted" style="margin-top:8px"><span><span class="up">↑1</span> / <span class="dn">↓1</span> = so với định mức hiện tại</span> · <span>Doanh thu ~ = dự báo theo thứ trong tuần, ngày lễ, xu hướng</span></div>
+        <div class="note" style="margin-top:12px">
+          <b>Vì sao gợi ý như vậy (AI):</b> Thứ 7 – CN doanh thu ca tối cao hơn ngày thường ~45%, 4 tuần gần nhất ca tối cuối tuần thường quá tải (hay âm tiền, chốt ca trễ). T6 20/11 là Ngày Nhà giáo – năm ngoái doanh thu ngày này gấp 1,6 lần ngày thường. Chiều T2–T3 vắng (~1tr/ca), có thể bớt 1 người.
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn btn-p">Áp dụng làm định mức tuần này</button>
+          <button class="btn btn-o">Áp dụng rồi xếp tự động</button>
+          <span class="small muted">Chỉ đổi định mức người/ca của tuần 16–22/11 – không tự xếp ai. Bạn vẫn sửa tay được.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Lịch tuần (như hiện tại)</h2>
+        <div class="muted small">… bảng xếp ca giữ nguyên bên dưới …</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mock">MOCKUP – chưa làm thật</div>
+</body>
+</html>

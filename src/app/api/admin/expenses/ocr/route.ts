@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     if (!geminiConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY – nhập tay", { code: "OCR_OFF" });
     const p = Body.safeParse(await req.json());
     if (!p.success) throw new HttpError(400, "Thiếu ảnh");
-    const txs = await readStatementPhoto(p.data.photo, localDate(new Date()), EXPENSE_CATEGORIES.map((c) => c.key)).catch((e: Error) => {
+    const txs = await readStatementPhoto(p.data.photo, localDate(new Date()), EXPENSE_CATEGORIES.map((c) => c.key), `admin:${admin.accountId ?? "owner"}`).catch((e: Error) => {
       throw new HttpError(502, e.message, { code: "OCR_FAILED" });
     });
     await connectDB();

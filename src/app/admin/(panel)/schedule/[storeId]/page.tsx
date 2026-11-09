@@ -9,6 +9,7 @@ import { loadWeek } from "@/lib/schedule-data";
 import { addDays, isYmd, localDate, viDate, weekStartOf } from "@/lib/time";
 import { Alert, LinkButton, PageTitle } from "@/components/ui";
 import ScheduleBoard from "./ScheduleBoard";
+import ForecastPanel from "./ForecastPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           {can(admin, "export") && <LinkButton variant="outline" href={`/api/admin/export?type=lichca&store=${storeId}&from=${ws.slice(0, 7)}&to=${addDays(ws, 6).slice(0, 7)}`}>Xuất Excel</LinkButton>}
         </div>
       </div>
+      {data.templates.length > 0 && <ForecastPanel key={ws} storeId={storeId} weekStart={ws} />}
       {data.templates.length === 0 && weekNav}
       {data.templates.length === 0 ? (
         <Alert tone="orange">

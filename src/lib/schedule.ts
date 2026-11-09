@@ -7,7 +7,11 @@ export type TplInfo = {
   endTime: string;
   minStaff: number;
   targetStaff: number;
+  /** định mức riêng từng ngày (gợi ý AI áp dụng cho 1 tuần) */
+  targetByDate?: Record<string, number>;
 };
+/** Định mức người của ca trong 1 ngày: riêng ngày đó nếu có, không thì định mức chung. */
+export const targetFor = (t: { targetStaff: number; targetByDate?: Record<string, number> }, date: string) => t.targetByDate?.[date] ?? t.targetStaff;
 export type Entry = {
   id: string;
   userId: string;
@@ -125,14 +129,14 @@ export function planAutoSchedule(input: {
           .sort((a, b) => (count.get(a.userId) ?? 0) - (count.get(b.userId) ?? 0) || (a.createdAt ?? 0) - (b.createdAt ?? 0));
         for (const r of reqs) {
           const crew = inSlot(date, t.id);
-          if (t.targetStaff > 0 && crew.length >= t.targetStaff) break; // đủ định mức → để admin quyết
+          if (targetFor(t, date) > 0 && crew.length >= targetFor(t, date)) break; // đủ định mức → để admin quyết
           if (overlaps(r.userId, date, t) || !underCap(r.userId)) continue;
           take(r.userId, date, t.id);
           changes.push({ kind: "approve", entryId: r.id, userId: r.userId, tplId: t.id, date, reason: "Duyệt đăng ký" });
         }
       }
       // 2) bù người cho ca thiếu
-      const goal = opts.fillTo === "target" ? Math.max(t.targetStaff, t.minStaff) : opts.fillTo === "min" ? t.minStaff : 0;
+      const goal = opts.fillTo === "target" ? Math.max(targetFor(t, date), t.minStaff) : opts.fillTo === "min" ? t.minStaff : 0;
       let crew = inSlot(date, t.id);
       while (crew.length < goal) {
         const pendingHere = new Set(pending.filter((p) => p.date === date && p.tplId === t.id).map((p) => p.userId));
@@ -162,7 +166,7 @@ export function planAutoSchedule(input: {
   for (const date of days)
     for (const t of templates) {
       const c = inSlot(date, t.id).length;
-      slots.push({ date, tplId: t.id, count: c, min: t.minStaff, target: t.targetStaff, level: slotLevel(c, t.minStaff, t.targetStaff) });
+      slots.push({ date, tplId: t.id, count: c, min: t.minStaff, target: targetFor(t, date), level: slotLevel(c, t.minStaff, targetFor(t, date)) });
     }
   return { changes, slots, shiftCount: Object.fromEntries(count) };
 }

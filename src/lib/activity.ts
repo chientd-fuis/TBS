@@ -91,6 +91,8 @@ const A: Record<string, [ActivityGroup, string]> = {
   "holiday.delete": ["payroll", "Xoá ngày lễ"],
   "holiday.addSolar": ["payroll", "Thêm nhanh ngày lễ"],
   "closing.sheetSync": ["revenue", "Ghi Google Sheet (bấm tay)"],
+  "ai.settings": ["system", "Đổi cài đặt AI"],
+  "ai.assistant": ["system", "Sửa nội dung Trợ lý cửa hàng"],
 };
 
 export function actionMeta(action: string): { group: ActivityGroup; label: string } {
