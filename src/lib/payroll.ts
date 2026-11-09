@@ -71,7 +71,7 @@ export async function generatePayroll(storeId: string, month: string) {
           month,
           totalHours,
           workDays: new Set(myAtts.map((a) => a.workDate)).size,
-          hourlyWage: user.hourlyWage || 0,
+          hourlyWage: wageAt(history, monthRange(month).last, user.hourlyWage || 0), // lương giờ áp dụng cuối tháng này
           basePay,
           totalBonus,
           totalPenalty,

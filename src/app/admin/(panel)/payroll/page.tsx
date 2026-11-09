@@ -7,7 +7,7 @@ import { decrypt } from "@/lib/crypto";
 import { ActionForm } from "@/components/ActionForm";
 import { MonthPicker } from "@/components/MonthPicker";
 import { Alert, Badge, Card, Empty, Input, LinkButton, PageTitle } from "@/components/ui";
-import { payrollAction, savePayrollExtras } from "../../actions/ops";
+import { payrollAction, savePayrollExtras, savePayrollWage } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
 
 export const dynamic = "force-dynamic";
@@ -105,7 +105,16 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                     <tr key={String(i._id)}>
                       <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
-                      <td className="text-right">{vnd(i.hourlyWage)}</td>
+                      <td className="text-right">
+                        {payroll.status === "DRAFT" ? (
+                          <ActionForm action={savePayrollWage} submitLabel="Lưu" variant="outline" successText="" className="flex items-center justify-end gap-1">
+                            <input type="hidden" name="itemId" value={String(i._id)} />
+                            <Input name="hourlyWage" defaultValue={i.hourlyWage} inputMode="numeric" className="w-24 text-right" title={`Lương giờ áp dụng từ 01/${month.slice(5)}/${month.slice(0, 4)}`} />
+                          </ActionForm>
+                        ) : (
+                          vnd(i.hourlyWage)
+                        )}
+                      </td>
                       <td className="text-right">{vnd(i.basePay)}</td>
                       <td>
                         {payroll.status === "DRAFT" ? (

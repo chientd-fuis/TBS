@@ -14,7 +14,7 @@ export type Result = { ok?: boolean; error?: string; message?: string };
 const path = (storeId: string) => `/admin/schedule/${storeId}`;
 /** revalidate cả trang admin lẫn trang Quản lý của nhân viên */
 const revalidate = (storeId: string) => {
-  revalidate(storeId);
+  revalidatePath(path(storeId));
   revalidatePath(`/manage/schedule/${storeId}`);
 };
 const fail = (e: unknown): Result => ({ error: (e as Error).message || "Lỗi hệ thống" });

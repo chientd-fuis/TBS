@@ -9,6 +9,7 @@ import {
   AttendanceAdjustment,
   BonusPenalty,
   Payroll,
+  PayrollItem,
   PayrollFeedback,
   APPROVED_SHIFT,
   ShiftAssignment,
@@ -533,6 +534,41 @@ export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<
     revalidatePath("/admin/attendance", "layout");
     revalidatePath("/admin/work-schedule");
     if (lockedMonths.size) return { error: `Đã xoá ${done} lượt. Bỏ qua lượt thuộc tháng đã chốt lương: ${[...lockedMonths].join(", ")}` };
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+
+/**
+ * Sửa lương giờ ngay trong bảng lương (bảng nháp): lương mới áp dụng từ ngày 1 của tháng bảng lương trở đi
+ * (mức lương đổi giữa tháng đó bị thay), rồi tính lại bảng lương.
+ */
+export async function savePayrollWage(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertPerm("payroll");
+    const actor = adminActor(admin);
+    const item = await PayrollItem.findById(str(fd.get("itemId"))).lean();
+    if (!item) return { error: "Không tìm thấy dòng lương" };
+    const p = await Payroll.findById(item.payrollId).lean();
+    if (p?.status !== "DRAFT") return { error: "Bảng lương đã công bố – mở khoá để sửa" };
+    const wage = Math.round(num(fd.get("hourlyWage")));
+    if (wage <= 0) return { error: "Lương giờ phải > 0" };
+    const { WageHistory } = await import("@/lib/models");
+    const { monthRange, localDate } = await import("@/lib/time");
+    const { first, last } = monthRange(p.month);
+    const before = await WageHistory.find({ userId: item.userId, effectiveFrom: { $gte: first, $lte: last } }).lean();
+    // mức lương đổi trong tháng này → thay bằng 1 mức từ ngày 1
+    await WageHistory.deleteMany({ userId: item.userId, effectiveFrom: { $gte: first, $lte: last } });
+    await WageHistory.create({ userId: item.userId, hourlyWage: wage, effectiveFrom: first, createdBy: actor.name });
+    // lương hiện tại của nhân viên = mức có hiệu lực tới hôm nay
+    const latest = await WageHistory.findOne({ userId: item.userId, effectiveFrom: { $lte: localDate(new Date()) } }).sort({ effectiveFrom: -1, createdAt: -1 }).lean();
+    if (latest) await User.updateOne({ _id: item.userId }, { $set: { hourlyWage: latest.hourlyWage } });
+    await audit(actor, "user.wage", { type: "User", id: String(item.userId) }, { wages: before.map((w) => ({ hourlyWage: w.hourlyWage, effectiveFrom: w.effectiveFrom })) }, { hourlyWage: wage, effectiveFrom: first, month: p.month });
+    await generatePayroll(String(p.storeId), p.month);
+    revalidatePath("/admin/payroll");
+    revalidatePath(`/admin/employees/${item.userId}`);
     return { ok: true };
   } catch (e) {
     return errMsg(e);
