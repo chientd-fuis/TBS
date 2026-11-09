@@ -16,9 +16,31 @@ function arc(cx: number, cy: number, r: number, r0: number, a0: number, a1: numb
   return `M${x0} ${y0}A${r} ${r} 0 ${large} 1 ${x1} ${y1}L${x2} ${y2}A${r0} ${r0} 0 ${large} 0 ${x3} ${y3}Z`;
 }
 
-export default function CostPie({ slices, total, revenue }: { slices: Slice[]; total: number; revenue: number }) {
+export default function CostPie({
+  slices,
+  total,
+  revenue,
+  pctOf,
+  center,
+  ariaLabel = "Biểu đồ tròn cơ cấu chi phí",
+  empty = "Chưa có chi phí.",
+  footer,
+}: {
+  slices: Slice[];
+  /** tổng để chia lát (cả vòng tròn) */
+  total: number;
+  revenue: number;
+  /** mẫu số khi tính % ở chú thích / tooltip (mặc định = total) */
+  pctOf?: number;
+  /** chữ giữa vòng (mặc định: Tổng chi phí) */
+  center?: { label: string; value: number; sub?: string };
+  ariaLabel?: string;
+  empty?: string;
+  footer?: React.ReactNode;
+}) {
   const shown = slices.filter((s) => s.value > 0);
-  if (!shown.length || total <= 0) return <p className="py-6 text-center text-sm text-ink/50">Chưa có chi phí.</p>;
+  if (!shown.length || total <= 0) return <p className="py-6 text-center text-sm text-ink/50">{empty}</p>;
+  const base = pctOf && pctOf > 0 ? pctOf : total;
   const cx = 100;
   const cy = 100;
   let a = 0;
@@ -32,16 +54,18 @@ export default function CostPie({ slices, total, revenue }: { slices: Slice[]; t
   });
   return (
     <div className="flex flex-col items-center gap-4">
-      <svg viewBox="0 0 200 200" className="h-48 w-48 shrink-0" role="img" aria-label="Biểu đồ tròn cơ cấu chi phí">
+      <svg viewBox="0 0 200 200" className="h-48 w-48 shrink-0" role="img" aria-label={ariaLabel}>
         {paths.map((s) => (
           <path key={s.key} d={s.d} fill={s.color} stroke="#fff" strokeWidth={2} strokeLinejoin="round" className="transition-opacity hover:opacity-80">
-            <title>{`${s.label}: ${vnd(s.value)} đ (${pct(s.value / total)})`}</title>
+            <title>{`${s.label}: ${vnd(s.value)} đ (${pct(s.value / base)})`}</title>
           </path>
         ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" className="fill-ink/60 text-[10px]">Tổng chi phí</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" className="fill-ink text-[13px] font-bold">{vnd(total)}</text>
-        {revenue > 0 && (
-          <text x={cx} y={cy + 24} textAnchor="middle" className="fill-ink/50 text-[9px]">{pct(total / revenue)} doanh thu</text>
+        <text x={cx} y={cy - 6} textAnchor="middle" className="fill-ink/60 text-[10px]">{center?.label ?? "Tổng chi phí"}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" className="fill-ink text-[13px] font-bold">{vnd(center?.value ?? total)}</text>
+        {center ? (
+          center.sub && <text x={cx} y={cy + 24} textAnchor="middle" className="fill-ink/50 text-[9px]">{center.sub}</text>
+        ) : (
+          revenue > 0 && <text x={cx} y={cy + 24} textAnchor="middle" className="fill-ink/50 text-[9px]">{pct(total / revenue)} doanh thu</text>
         )}
       </svg>
       <ul className="w-full min-w-0 space-y-1.5 text-xs">
@@ -50,10 +74,11 @@ export default function CostPie({ slices, total, revenue }: { slices: Slice[]; t
             <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: s.color }} aria-hidden />
             <span className="min-w-0 flex-1 truncate">{s.label}</span>
             <span className="shrink-0 tabular-nums text-ink/70">{vnd(s.value)}</span>
-            <span className="w-12 shrink-0 text-right font-semibold tabular-nums">{pct(s.value / total)}</span>
+            <span className="w-12 shrink-0 text-right font-semibold tabular-nums">{pct(s.value / base)}</span>
           </li>
         ))}
       </ul>
+      {footer}
     </div>
   );
 }

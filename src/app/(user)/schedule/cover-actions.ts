@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { CoverRequest, Store, UserNotice } from "@/lib/models";
-import { createCoverRequest } from "@/lib/cover";
+import { createCoverRequest, createSwapRequest } from "@/lib/cover";
 import { localDate } from "@/lib/time";
 
 export type CoverResult = { ok?: boolean; error?: string };
@@ -13,6 +13,19 @@ export async function requestCover(shiftAssignmentId: string, toUserId: string, 
     const user = await requireActiveUser();
     const store = await Store.findById(user.storeId).select("timezone").lean();
     await createCoverRequest(user._id, shiftAssignmentId, toUserId, note.trim(), localDate(new Date(), store?.timezone || undefined));
+    revalidatePath("/schedule");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Nhân viên xin đổi 1 ca đã duyệt của mình lấy 1 ca đã duyệt của người khác → gửi admin duyệt. */
+export async function requestSwap(myShiftId: string, theirShiftId: string, note: string): Promise<CoverResult> {
+  try {
+    const user = await requireActiveUser();
+    const store = await Store.findById(user.storeId).select("timezone").lean();
+    await createSwapRequest(user._id, myShiftId, theirShiftId, note.trim(), localDate(new Date(), store?.timezone || undefined));
     revalidatePath("/schedule");
     return { ok: true };
   } catch (e) {

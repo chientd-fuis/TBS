@@ -29,7 +29,7 @@ export type AttRow = {
 };
 
 /** Bảng chấm công theo mẫu: Ngày | Giờ Đến | Giờ Về | Tổng | Format | Giờ tính công | Ca | Cảnh báo | Ảnh | Ghi chú (spec 5) */
-export function AttendanceTable({ rows, tz, actions }: { rows: AttRow[]; tz: string; actions?: (r: AttRow) => ReactNode }) {
+export function AttendanceTable({ rows, tz, actions, hideNote = false }: { rows: AttRow[]; tz: string; actions?: (r: AttRow) => ReactNode; /** ẩn cột Ghi chú (trang nhân viên) */ hideNote?: boolean }) {
   if (!rows.length) return <Empty>Chưa có dữ liệu chấm công</Empty>;
   return (
     <div className="max-h-[70vh] overflow-auto rounded-xl ring-1 ring-[#f1e6c8]">
@@ -45,7 +45,7 @@ export function AttendanceTable({ rows, tz, actions }: { rows: AttRow[]; tz: str
             <th>Ca</th>
             <th>Cảnh báo</th>
             <th>Ảnh</th>
-            <th>Ghi chú</th>
+            {!hideNote && <th>Ghi chú</th>}
             {actions && <th></th>}
           </tr>
         </thead>
@@ -89,6 +89,7 @@ export function AttendanceTable({ rows, tz, actions }: { rows: AttRow[]; tz: str
                     </a>
                   )}
                 </td>
+                {!hideNote && (
                 <td className="min-w-40 text-xs">
                   {r.supportLabel && <><Badge tone="blue">⇄ {r.supportLabel}</Badge>{" "}</>}
                   {r.source === "ADMIN_MANUAL" && (
@@ -98,6 +99,7 @@ export function AttendanceTable({ rows, tz, actions }: { rows: AttRow[]; tz: str
                   )}
                   {r.source === "REQUEST" && <Badge tone="pink">Theo yêu cầu điều chỉnh</Badge>} {r.note}
                 </td>
+                )}
                 {actions && <td className="whitespace-nowrap">{actions(r)}</td>}
               </tr>
             );

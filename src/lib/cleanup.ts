@@ -125,6 +125,7 @@ async function opsFor(key: CleanupKey, c: Ctx): Promise<Op[]> {
       return [
         del("đơn nhờ làm hộ cũ", CoverRequest, { date: { $lt: c.pastDate } }),
         upd("đơn nhờ làm hộ hết hạn", CoverRequest, { status: "PENDING", date: { $lt: c.today, $gte: c.pastDate } }, { $set: { status: "CANCELLED", reply: "Hết hạn (ca đã qua)", decidedBy: "Hệ thống", decidedAt: c.now } }),
+        upd("đơn đổi ca hết hạn", CoverRequest, { status: "PENDING", kind: "SWAP", toDate: { $lt: c.today } }, { $set: { status: "CANCELLED", reply: "Hết hạn (1 trong 2 ca đã qua)", decidedBy: "Hệ thống", decidedAt: c.now } }),
         del("đơn sửa công đã xử lý", AdjustmentRequest, { status: { $ne: "PENDING" }, ...byDate }),
         del("lượt đăng ký ca tuần cũ", ShiftRegRequest, { weekStart: { $lt: c.regDate } }),
         del("ca bị từ chối", ShiftAssignment, { status: "REJECTED", date: { $lt: c.pastDate } }),

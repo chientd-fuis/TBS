@@ -8,7 +8,7 @@ import { normalizeOcr, type Revenue } from "./revenue";
 
 export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean; provider: string };
 
-export const ocrConfigured = () => !!process.env.GEMINI_API_KEY || !!process.env.CLOSING_OCR_URL;
+export const ocrConfigured = () => geminiKeys().length > 0 || !!process.env.CLOSING_OCR_URL;
 
 const GEMINI_PROMPT = `Bạn đọc ẢNH TỜ CHỐT CA của quán trà sữa "Tiệm Bơ Sầu" (Việt Nam) – thường là tờ giấy NHÂN VIÊN GHI TAY, đôi khi là phiếu in máy POS.
 Trên tờ ghi tay thường có: ngày + ca ("Ca tối 7/11"), "TM" (tiền mặt), "TK" (tài khoản / chuyển khoản), các khoản chi trong ca (sữa chua, ship, đá…),
@@ -69,7 +69,26 @@ async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T
   }
 }
 
-export const geminiConfigured = () => !!process.env.GEMINI_API_KEY;
+/**
+ * Danh sách API key Gemini, thử lần lượt khi key trước hết lượt miễn phí:
+ * GEMINI_API_KEY (có thể ghi nhiều key cách nhau dấu phẩy) → GEMINI_API_KEY_2 … GEMINI_API_KEY_9.
+ * Lưu ý: hạn mức miễn phí tính theo PROJECT Google Cloud → mỗi key phải thuộc 1 project khác nhau
+ * (key tạo trong cùng 1 project dùng chung hạn mức, chuyển sang cũng vô ích).
+ */
+export function geminiKeys(env: Record<string, string | undefined> = process.env) {
+  const raw = [env.GEMINI_API_KEY, ...Array.from({ length: 8 }, (_, i) => env[`GEMINI_API_KEY_${i + 2}`])];
+  return raw
+    .flatMap((v) => (v ?? "").split(","))
+    .map((x) => x.trim())
+    .filter((k, i, a) => k && a.indexOf(k) === i);
+}
+
+export const geminiConfigured = () => geminiKeys().length > 0;
+
+/** Cặp (key, model) vừa hết lượt → bỏ qua một lúc cho đỡ tốn thời gian (chỉ trong 1 instance server). */
+const exhausted = new Map<string, number>();
+const skipKey = (key: string, model: string) => (exhausted.get(`${key}|${model}`) ?? 0) > Date.now();
+const markExhausted = (key: string, model: string, ms: number) => exhausted.set(`${key}|${model}`, Date.now() + ms);
 
 /**
  * Gọi Gemini (generateContent). photos = data URL ảnh. schema có → trả JSON đã parse, không có → trả text.
@@ -117,8 +136,8 @@ export function describeGeminiError(status: number, body: unknown, model: string
  * Model chính hết lượt / quá tải → tự chuyển sang model dự phòng.
  */
 export async function geminiGenerate(opts: { prompt: string; photos?: string[]; schema?: object; timeoutMs?: number; temperature?: number }): Promise<unknown> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("Chưa cấu hình GEMINI_API_KEY");
+  const keys = geminiKeys();
+  if (!keys.length) throw new Error("Chưa cấu hình GEMINI_API_KEY");
   const parts: unknown[] = [{ text: opts.prompt }];
   for (const p of opts.photos ?? []) {
     const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(p);
@@ -134,7 +153,12 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
   const deadline = Date.now() + (opts.timeoutMs ?? 50_000);
   const errors: string[] = [];
   let quota = false;
-  for (const model of geminiModels()) {
+  const badKeys = new Set<string>(); // key sai / bị khoá → bỏ hẳn trong lượt này
+  // ưu tiên model tốt nhất: thử model chính với MỌI key trước, hết mới xuống model dự phòng
+  const pairs = geminiModels().flatMap((model) => keys.map((key, ki) => ({ model, key, label: keys.length > 1 ? `${model} (key ${ki + 1})` : model })));
+  const fresh = pairs.filter((p) => !skipKey(p.key, p.model));
+  for (const { model, key, label } of fresh.length ? fresh : pairs) {
+    if (badKeys.has(key)) continue;
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
       if (left < 3_000) break;
@@ -152,20 +176,31 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
             const j = await r.json().catch(() => ({}));
             return r.ok ? { ok: true as const, body: j } : { ok: false as const, status: r.status, body: j };
           },
-          `${model}: đọc quá lâu`,
+          `${label}: đọc quá lâu`,
         );
       } catch (e) {
         errors.push((e as Error).message);
-        break; // quá lâu → thử model khác
+        break; // quá lâu → thử model / key khác
       }
       if (res.ok) {
         if (opts.schema) return parseGeminiResponse(res.body);
         const b = res.body as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
         return (b.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
       }
-      const d = describeGeminiError(res.status, res.body, model);
+      const d = describeGeminiError(res.status, res.body, label);
+      if (res.status === 400 && /API key/i.test(JSON.stringify(res.body))) {
+        // key sai / bị thu hồi → thử key khác (chỉ báo lỗi khi mọi key đều sai)
+        badKeys.add(key);
+        errors.push(keys.length > 1 ? `key ${keys.indexOf(key) + 1} không hợp lệ` : d.text);
+        if (badKeys.size === keys.length) throw new Error(keys.length > 1 ? "Tất cả GEMINI_API_KEY đều không hợp lệ" : d.text);
+        break;
+      }
       if (!d.retryable) throw new Error(d.text);
-      if (res.status === 429) quota = true;
+      if (res.status === 429) {
+        quota = true;
+        // hết lượt trong ngày → bỏ qua cặp key+model này 1 giờ; quá nhiều lượt/phút → 1 phút
+        markExhausted(key, model, /trong ngày/.test(d.text) ? 3600_000 : 60_000);
+      }
       // quá tải tạm thời (503) → chờ chút thử lại đúng model này 1 lần; hết lượt → sang model khác luôn
       if (attempt === 0 && res.status >= 500) {
         await new Promise((r) => setTimeout(r, 1500));
@@ -177,7 +212,9 @@ export async function geminiGenerate(opts: { prompt: string; photos?: string[]; 
   }
   throw new Error(
     `Gemini chưa đọc được: ${errors.join("; ") || "hết thời gian"}.` +
-      (quota ? " Gói miễn phí đã hết lượt – bật billing cho API key (aistudio.google.com → Billing) hoặc thử lại sau." : " Thử lại sau ít phút hoặc nhập tay."),
+      (quota
+        ? ` Gói miễn phí của ${keys.length > 1 ? `cả ${keys.length} key` : "key"} đã hết lượt – thêm key ở project Google khác (GEMINI_API_KEY_2…), bật billing (aistudio.google.com → Billing) hoặc thử lại sau.`
+        : " Thử lại sau ít phút hoặc nhập tay."),
   );
 }
 
@@ -264,7 +301,7 @@ export async function readClosingPhotos(
   ctx: { store: { code?: string; name?: string }; workDate: string; shift?: { name?: string; start?: string; end?: string } | null; employee?: string },
 ): Promise<OcrResult> {
   if (!ocrConfigured()) throw new Error("Chưa cấu hình đọc ảnh (GEMINI_API_KEY)");
-  const out = process.env.GEMINI_API_KEY ? await readWithGemini(photos, ctx.workDate) : await readWithBot(photos, ctx, ctx.workDate);
+  const out = geminiKeys().length ? await readWithGemini(photos, ctx.workDate) : await readWithBot(photos, ctx, ctx.workDate);
   if (!Object.keys(out.values).length && !out.date) throw new Error("Không đọc được số liệu nào từ ảnh – chụp rõ hơn hoặc nhập tay");
   return out;
 }

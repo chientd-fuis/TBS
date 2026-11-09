@@ -59,7 +59,8 @@ export function faceDistance(a: number[], b: number[]) {
 }
 
 export type PayrollInput = {
-  hoursByWage: { hours: number; wage: number }[];
+  /** mult: hệ số lương (ngày lễ ×2, ×3…; mặc định 1) */
+  hoursByWage: { hours: number; wage: number; mult?: number }[];
   allowance: number;
   totalBonus: number;
   totalPenalty: number;
@@ -68,9 +69,13 @@ export type PayrollInput = {
 /** Thực nhận = Lương cơ bản + Phụ cấp + Thưởng − Phạt − Tạm ứng (VND, số nguyên). */
 export function computePay(i: PayrollInput) {
   const totalHours = Math.round(i.hoursByWage.reduce((s, x) => s + x.hours, 0) * 100) / 100;
-  const basePay = Math.round(i.hoursByWage.reduce((s, x) => s + x.hours * x.wage, 0));
+  const basePay = Math.round(i.hoursByWage.reduce((s, x) => s + x.hours * x.wage * (x.mult ?? 1), 0));
   const netPay = basePay + i.allowance + i.totalBonus - i.totalPenalty - i.advance;
-  return { totalHours, basePay, netPay };
+  // ngày lễ: số giờ + tiền cộng thêm (đã nằm trong basePay)
+  const hol = i.hoursByWage.filter((x) => (x.mult ?? 1) > 1);
+  const holidayHours = Math.round(hol.reduce((s, x) => s + x.hours, 0) * 100) / 100;
+  const holidayExtra = Math.round(hol.reduce((s, x) => s + x.hours * x.wage * ((x.mult ?? 1) - 1), 0));
+  return { totalHours, basePay, netPay, holidayHours, holidayExtra };
 }
 
 /* ---------- Làm liền nhiều ca (VD ca 1 + ca 2: vào đầu ca 1, ra cuối ca 2) ---------- */

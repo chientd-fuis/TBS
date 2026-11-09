@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { ShiftClosing, Store, User } from "@/lib/models";
+import { DayRevenue, ShiftClosing, Store, User } from "@/lib/models";
 import { isYmd, localDate, localTime, viDate } from "@/lib/time";
 import { telegramConfigured } from "@/lib/telegram";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
-import { deleteClosing, editClosingRevenue, resendClosing } from "../../actions/closing";
+import { deleteClosing, editClosingRevenue, resendClosing, syncClosingSheet } from "../../actions/closing";
 import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { addDays } from "@/lib/time";
@@ -16,6 +16,7 @@ import AddClosing from "./AddClosing";
 export const dynamic = "force-dynamic";
 
 const vnd = (n?: number | null) => (n == null ? "" : n.toLocaleString("vi-VN"));
+const SHEET = { SENT: ["Đã ghi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Chưa ghi", "gray"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
 /** Danh sách chốt ca (ảnh) + trạng thái gửi Telegram */
@@ -33,6 +34,12 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   const list = await ShiftClosing.find(q).sort({ createdAt: -1 }).limit(100).lean();
   const users = new Map((await User.find({ _id: { $in: list.map((c) => c.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const storeMap = new Map(stores.map((s) => [String(s._id), s]));
+  // trạng thái ghi Google Sheet theo ngày (sheet ghi 1 dòng / ngày, số luỹ kế)
+  const dayDocs = list.length
+    ? await DayRevenue.find({ $or: list.map((c) => ({ storeId: c.storeId, date: c.workDate })) }).select("storeId date lastShift sheet").lean()
+    : [];
+  const dayMap = new Map(dayDocs.map((d) => [`${d.storeId}|${d.date}`, d]));
+  const canSheet = sheetsConfigured();
   // ===== nhập bù: ngày chưa chốt ca Tối (45 ngày tới hôm qua, tính từ ngày cơ sở bắt đầu chốt ca trên app) =====
   const today = localDate(new Date());
   const since = addDays(today, -45);
@@ -103,7 +110,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
         ) : (
           <div className="overflow-x-auto">
             <table className="tbs">
-              <thead><tr><th>Thời gian</th><th>Nhân viên</th><th>Cơ sở</th><th>Ca</th><th>Ảnh</th><th>Doanh thu</th><th>Ghi chú</th><th>Telegram</th><th></th></tr></thead>
+              <thead><tr><th>Thời gian</th><th>Nhân viên</th><th>Cơ sở</th><th>Ca</th><th>Ảnh</th><th>Doanh thu</th><th>Ghi chú</th><th>Telegram</th><th>Google Sheet</th><th></th></tr></thead>
               <tbody>
                 {list.map((c) => {
                   const store = storeMap.get(String(c.storeId));
@@ -179,6 +186,39 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                         <Badge tone={st[1]}>{st[0]}</Badge>
                         {c.telegram?.error && <div className="mt-1 max-w-48 text-danger">{c.telegram.error}</div>}
                         {c.webhook?.status && <div className="mt-1 text-ink/60">Webhook: {c.webhook.status}</div>}
+                      </td>
+                      <td className="text-xs">
+                        {(() => {
+                          const day = dayMap.get(`${c.storeId}|${c.workDate}`);
+                          const ss = day?.sheet?.status as keyof typeof SHEET | undefined;
+                          const hasRev = c.revenue?.tm != null;
+                          const laterShift = day?.lastShift && c.shiftName && day.lastShift !== c.shiftName ? day.lastShift : "";
+                          return (
+                            <div className="flex min-w-36 flex-col gap-1">
+                              {ss && SHEET[ss] && <span><Badge tone={SHEET[ss][1]}>{SHEET[ss][0]}</Badge></span>}
+                              {day?.sheet?.syncedAt && ss === "SENT" && <span className="text-ink/60">lúc {localTime(new Date(day.sheet.syncedAt), store?.timezone || "Asia/Ho_Chi_Minh").slice(0, 5)} {viDate(localDate(new Date(day.sheet.syncedAt))).slice(0, 5)}</span>}
+                              {day?.sheet?.error && ss !== "SENT" && <span className="max-w-48 text-danger">{day.sheet.error}</span>}
+                              {!store?.revenueSheetId ? (
+                                <span className="text-ink/50">Cơ sở chưa gắn sheet</span>
+                              ) : !canSheet ? null : !hasRev ? (
+                                <span className="text-ink/50">Chưa có số liệu</span>
+                              ) : (
+                                <>
+                                  <ActionForm
+                                    action={syncClosingSheet}
+                                    submitLabel={ss === "SENT" ? "Ghi lại sheet" : "Ghi sheet"}
+                                    variant="outline"
+                                    successText="Đã ghi Google Sheet"
+                                    confirm={`Ghi doanh thu ngày ${viDate(c.workDate)} (${store?.name}) lên Google Sheet?${laterShift ? `\nNgày này đã có chốt Ca ${laterShift} sau ca này → sẽ ghi số luỹ kế của Ca ${laterShift}.` : ""}${ss === "SENT" ? "\nDòng của ngày này trên sheet sẽ bị ghi đè." : ""}`}
+                                  >
+                                    <input type="hidden" name="id" value={String(c._id)} />
+                                  </ActionForm>
+                                  {laterShift && <span className="text-ink/60">Sẽ ghi số luỹ kế Ca {laterShift}</span>}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td>
                         <div className="flex flex-col gap-1">

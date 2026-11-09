@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireOwner } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { Card, PageTitle } from "@/components/ui";
 import { GROUP_LABEL, type ActivityGroup } from "@/lib/activity";
 import { ACTIVITY_DAYS } from "@/lib/models";
@@ -14,7 +14,7 @@ type SP = { day?: string; admin?: string; group?: string };
 
 /** Chủ: admin đang đăng nhập + lịch sử hoạt động 7 ngày của các admin (không gồm Chủ). */
 export default async function ActivityPage({ searchParams }: { searchParams: Promise<SP> }) {
-  await requireOwner();
+  const admin = await requirePerm("activity");
   const sp = await searchParams;
   const all = activityDays();
   const today = localDate(new Date());
@@ -41,9 +41,11 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageTitle sub={`Thao tác của các admin (không gồm Chủ) – tự xoá sau ${ACTIVITY_DAYS} ngày`}>Hoạt động admin</PageTitle>
-      <Card title="Admin đang đăng nhập">
-        <SessionList sessions={sessions} now={Date.now()} />
-      </Card>
+      {admin.kind === "OWNER" && (
+        <Card title="Admin đang đăng nhập">
+          <SessionList sessions={sessions} now={Date.now()} />
+        </Card>
+      )}
       <Card title={`Lịch sử hoạt động (${rows.length})`}>
         <div className="mb-3 space-y-2">
           <div className="flex gap-1.5 overflow-x-auto pb-1">

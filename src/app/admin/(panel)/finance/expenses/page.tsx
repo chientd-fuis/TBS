@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { Expense, Store } from "@/lib/models";
 import { CATEGORY_LABEL, defaultCountInCost, EXPENSE_CATEGORIES, isCountedExpense } from "@/lib/finance";
@@ -19,7 +19,7 @@ const vnd = (n: number) => n.toLocaleString("vi-VN");
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string; cat?: string; edit?: string }> }) {
-  await requireAdmin();
+  await requirePerm("finance.bills");
   await connectDB();
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());

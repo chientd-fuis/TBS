@@ -1,5 +1,7 @@
 import { requireActiveUser } from "@/lib/guards";
 import { Store } from "@/lib/models";
+import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import BottomNav from "@/components/user/BottomNav";
 import RegRequestAlert from "@/components/user/RegRequestAlert";
@@ -16,6 +18,11 @@ export default async function UserLayout({ children }: { children: React.ReactNo
           <p className="truncate text-sm font-bold">{user.name}</p>
           <p className="truncate text-xs">{store?.name}</p>
         </div>
+        {!!user.managerPerms?.length && (
+          <Link href="/manage" className="flex items-center gap-1 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30">
+            <ShieldCheck size={15} /> Quản lý
+          </Link>
+        )}
       </header>
       <main className="space-y-4 p-4">
         <UserNotices userId={user._id} />

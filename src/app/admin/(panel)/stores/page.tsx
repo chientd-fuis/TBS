@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { Store, User } from "@/lib/models";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import StoreForm from "./StoreForm";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /** Quản lý cơ sở (spec 1.2, 3.4) */
 export default async function StoresPage() {
-  await requireAdmin();
+  await requirePerm("stores");
   const stores = await Store.find().sort({ name: 1 }).lean();
   const counts = await User.aggregate<{ _id: string; n: number }>([{ $match: { status: "ACTIVE" } }, { $group: { _id: "$storeId", n: { $sum: 1 } } }]);
   const cnt = new Map(counts.map((c) => [String(c._id), c.n]));
@@ -64,6 +64,11 @@ export default async function StoresPage() {
                 revenueFirstRow: s.revenueFirstRow || 3,
                 revenueSheetLayout: sheetLayoutOf(s),
                 active: s.active !== false,
+                checkFace: s.checkFace !== false,
+                checkGps: s.checkGps !== false,
+                checkWifi: s.checkWifi === true,
+                wifiName: s.wifiName || "",
+                wifiIps: s.wifiIps ?? [],
               }}
             />
           </Card>

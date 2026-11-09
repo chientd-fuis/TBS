@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { Store, User } from "@/lib/models";
 import { localMonth } from "@/lib/time";
 import { EXPORT_TYPES } from "@/lib/export";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Xuất Excel – 7 loại báo cáo (spec 3.8) */
 export default async function ExportPage() {
-  await requireAdmin();
+  await requirePerm("export");
   const stores = await Store.find().sort({ name: 1 }).lean();
   const users = await User.find({ status: { $in: ["ACTIVE", "INACTIVE"] } }).sort({ name: 1 }).lean();
   const storeName = new Map(stores.map((s) => [String(s._id), s.name]));

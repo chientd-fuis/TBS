@@ -45,8 +45,20 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                   <dd className="text-right text-xs text-ink/70">{item.supportNote}</dd>
                 </>
               )}
+              {!!item.holidayHours && (
+                <>
+                  <dt className="pl-3 text-xs text-danger">trong đó làm ngày lễ</dt>
+                  <dd className="text-right text-xs text-danger">{item.holidayNote}</dd>
+                </>
+              )}
               <dt>Lương giờ</dt><dd className="text-right">{vnd(item.hourlyWage)}</dd>
               <dt>Lương cơ bản</dt><dd className="text-right">{vnd(item.basePay)}</dd>
+              {!!item.holidayExtra && (
+                <>
+                  <dt className="pl-3 text-xs text-danger">gồm phụ trội ngày lễ</dt>
+                  <dd className="text-right text-xs text-danger">+{vnd(item.holidayExtra)}</dd>
+                </>
+              )}
               <dt>Phụ cấp</dt><dd className="text-right">{vnd(item.allowance)}</dd>
               <dt>Thưởng</dt><dd className="text-right text-bonus">+{vnd(item.totalBonus)}</dd>
               <dt>Phạt</dt><dd className="text-right text-danger">−{vnd(item.totalPenalty)}</dd>

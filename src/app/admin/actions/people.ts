@@ -131,3 +131,51 @@ export async function deviceAction(_: FormState, fd: FormData): Promise<FormStat
     return errMsg(e);
   }
 }
+
+/* ===== Chuyển tài khoản: dữ liệu Gmail cũ → Gmail mới, rồi xoá tài khoản cũ ===== */
+export async function previewAccountTransfer(fromId: string, toId: string) {
+  try {
+    await assertAdmin();
+    const { previewMerge } = await import("@/lib/account-merge");
+    return { ok: true as const, preview: await previewMerge(fromId, toId) };
+  } catch (e) {
+    return { ok: false as const, error: (e as Error).message };
+  }
+}
+
+export async function transferAccount(fromId: string, toId: string) {
+  try {
+    const admin = await assertAdmin();
+    const { mergeUserAccount } = await import("@/lib/account-merge");
+    const r = await mergeUserAccount(fromId, toId);
+    await audit(adminActor(admin), "user.transfer", { type: "User", id: toId }, { userId: fromId, email: r.fromEmail }, { userId: toId, email: r.toEmail, moved: r.moved });
+    revalidatePath("/admin", "layout");
+    return { ok: true as const, toId };
+  } catch (e) {
+    return { ok: false as const, error: (e as Error).message };
+  }
+}
+
+/* ===== Cấp quyền quản lý cho nhân viên (xếp ca / thưởng-phạt / duyệt đổi ca-làm hộ) ===== */
+export async function setStaffPerms(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const { isStaffPerm } = await import("@/lib/permissions");
+    const user = await User.findById(str(fd.get("userId")));
+    if (!user) return { error: "Không tìm thấy nhân viên" };
+    const perms = fd.getAll("managerPerms").map(String).filter(isStaffPerm);
+    const storeIds = fd
+      .getAll("managerStoreIds")
+      .map(String)
+      .filter((id) => id !== String(user.storeId));
+    const valid = (await Store.find({ _id: { $in: storeIds } }).select("_id").lean()).map((s) => s._id);
+    const before = { managerPerms: [...(user.managerPerms ?? [])], managerStoreIds: (user.managerStoreIds ?? []).map(String) };
+    user.set({ managerPerms: perms, managerStoreIds: valid });
+    await user.save();
+    await audit(adminActor(admin), "user.staffPerms", { type: "User", id: String(user._id) }, before, { managerPerms: perms, managerStoreIds: valid.map(String) });
+    revalidatePath(`/admin/employees/${user._id}`);
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}

@@ -31,6 +31,8 @@ export type BoardChip = {
   early?: number;
   extra?: boolean; // làm thêm ca (không có lịch)
   missingOut?: boolean; // quên check-out
+  /** đang trong ca (lượt chấm công chưa check-out) – kể cả làm xuyên sang ca sau */
+  live?: boolean;
   /** CSx – đi hỗ trợ cơ sở khác (away) hoặc từ cơ sở khác sang (from) */
   tag?: { label: string; kind: "away" | "from"; storeId: string };
 };
@@ -92,6 +94,7 @@ export function buildMonthBoard(input: {
       late: lateHere || undefined,
       early: earlyHere || undefined,
       missingOut: mine.some((a) => a.status === "MISSING_CHECKOUT") || undefined,
+      live: mine.some((a) => a.status === "OPEN") || undefined,
       tag: a0 ? tagFor(a0) : homeOf[s.userId] && homeOf[s.userId] !== storeId ? { label: storeTag[homeOf[s.userId]] ?? "CS?", kind: "from", storeId: homeOf[s.userId] } : undefined,
     });
   }
@@ -124,8 +127,34 @@ export function buildMonthBoard(input: {
       early: a.earlyMinutes || undefined,
       extra: a.storeId === storeId && (a.outOfShift ?? true) ? true : undefined,
       missingOut: a.status === "MISSING_CHECKOUT" || undefined,
+      live: a.status === "OPEN" || undefined,
       tag: tagFor(a),
     });
+  }
+
+  // 3) chấm công xuyên ca: lượt đang mở (chưa check-out) còn kéo sang ca khác → hiện tên (nhấp nháy) ở mọi ca nó chạm tới
+  for (const a of input.attendances) {
+    if (a.status !== "OPEN" || !days.includes(a.workDate)) continue;
+    const aw = attWin(a);
+    for (const t of templates) {
+      if (overlap(aw, win(a.workDate, t.startTime, t.endTime, tz)) <= 0) continue;
+      const list = cells[`${a.workDate}|${t.id}`] ?? [];
+      const has = list.find((c) => c.userId === a.userId && c.state !== "pending");
+      if (has) {
+        if (has.state === "worked") has.live = true;
+        continue;
+      }
+      push(a.workDate, t.id, {
+        key: `x:${a.id}:${t.id}`,
+        userId: a.userId,
+        name: names[a.userId] ?? "?",
+        linkStoreId: a.homeStoreId,
+        state: "worked",
+        extra: a.storeId === storeId ? true : undefined,
+        live: true,
+        tag: tagFor(a),
+      });
+    }
   }
   for (const k of Object.keys(cells)) cells[k].sort((x, y) => Number(x.state === "missed") - Number(y.state === "missed") || x.name.localeCompare(y.name));
   const rowsPerTpl = Object.fromEntries(

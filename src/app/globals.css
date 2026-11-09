@@ -87,3 +87,40 @@ input::-webkit-calendar-picker-indicator {
   from { opacity: 0; transform: translateY(-12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ===== Đang trong ca: tên xanh lá đậm nhấp nháy chậm + chấm "live" ===== */
+@keyframes tbs-live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.tbs-live {
+  color: #166534;
+  font-weight: 700;
+  animation: tbs-live-blink 2.4s ease-in-out infinite;
+}
+@keyframes tbs-live-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  80%, 100% { transform: scale(2.6); opacity: 0; }
+}
+.tbs-live-dot {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #16a34a;
+  box-shadow: 0 0 0 2px #dcfce7;
+  vertical-align: middle;
+}
+.tbs-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: #22c55e;
+  animation: tbs-live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tbs-live, .tbs-live-dot::after { animation: none; }
+}

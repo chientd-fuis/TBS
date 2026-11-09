@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { Store } from "@/lib/models";
-import { assertAdmin } from "@/lib/guards";
+import { assertAdmin, assertOwner, assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { deliverClosing } from "@/lib/closing";
@@ -25,7 +25,7 @@ export async function resendClosing(_: FormState, fd: FormData): Promise<FormSta
 /** Gửi tin nhắn thử vào nhóm Telegram của cơ sở (kiểm tra bot token / chat ID). */
 export async function testTelegram(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    await assertAdmin();
+    await assertPerm("stores");
     const store = await Store.findById(str(fd.get("storeId"))).lean();
     const attendance = str(fd.get("kind")) === "attendance";
     const chatId = attendance
@@ -41,7 +41,7 @@ export async function testTelegram(_: FormState, fd: FormData): Promise<FormStat
 /** Ghi lại doanh thu 1 ngày lên Google Sheet (admin bấm tay). */
 export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertOwner();
     const storeId = str(fd.get("storeId"));
     const date = str(fd.get("date"));
     const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
@@ -93,7 +93,7 @@ export async function editClosingRevenue(_: FormState, fd: FormData): Promise<Fo
 /** Kiểm tra quyền ghi Google Sheet + tab tháng hiện tại của cơ sở. */
 export async function testRevenueSheet(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    await assertAdmin();
+    await assertPerm("stores");
     const store = await Store.findById(str(fd.get("storeId"))).lean();
     if (!store) return { error: "Không tìm thấy cơ sở" };
     const { checkSheet } = await import("@/lib/sheets");
@@ -126,6 +126,33 @@ export async function deleteClosing(_: FormState, fd: FormData): Promise<FormSta
     revalidatePath("/admin/closings");
     revalidatePath("/admin/finance", "layout");
     return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/**
+ * Admin bấm tay ghi Google Sheet từ 1 lượt chốt ca BẤT KỲ (Sáng / Chiều / Tối / ngoài ca).
+ * Sheet ghi 1 dòng / ngày theo số LUỸ KẾ → ghi số của lượt chốt mới nhất trong ngày (đến thời điểm hiện tại).
+ */
+export async function syncClosingSheet(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    const id = str(fd.get("id"));
+    const { ShiftClosing } = await import("@/lib/models");
+    const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
+    const c = await ShiftClosing.findById(id).select("storeId workDate shiftName revenue").lean();
+    if (!c) return { error: "Không tìm thấy lượt chốt ca" };
+    if (c.revenue?.tm == null) return { error: "Lượt chốt này chưa có số liệu doanh thu – bấm \"Sửa số liệu\" để nhập trước" };
+    const { day } = await recomputeDay(c.storeId, c.workDate);
+    const st = await syncDaySheet(c.storeId, c.workDate);
+    await audit(adminActor(admin), "closing.sheetSync", { type: "ShiftClosing", id }, null, { date: c.workDate, shift: c.shiftName, lastShift: day.lastShift, status: st });
+    revalidatePath("/admin/closings");
+    revalidatePath("/admin/finance", "layout");
+    if (st === "SENT") return { ok: true };
+    const { DayRevenue } = await import("@/lib/models");
+    const err = (await DayRevenue.findById(day._id).select("sheet").lean())?.sheet?.error;
+    return { error: `Chưa ghi được${err ? `: ${err}` : ""}` };
   } catch (e) {
     return errMsg(e);
   }

@@ -3,7 +3,9 @@ import { Device, Store } from "@/lib/models";
 import { decrypt } from "@/lib/crypto";
 import { vnd } from "@/lib/format";
 import { viDateTime } from "@/lib/time";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, Field, Input } from "@/components/ui";
+import { ActionForm } from "@/components/ActionForm";
+import { updateMyProfile } from "../actions";
 import { SignOutButton } from "@/components/user/AuthButtons";
 
 export default async function AccountPage() {
@@ -15,14 +17,19 @@ export default async function AccountPage() {
     <>
       <Card title="Thông tin cá nhân">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-ink/60">Họ tên</dt><dd>{user.name}</dd>
           <dt className="text-ink/60">Email</dt><dd className="break-all">{user.email}</dd>
-          <dt className="text-ink/60">SĐT</dt><dd>{user.phone}</dd>
           <dt className="text-ink/60">Cơ sở</dt><dd>{store?.name}</dd>
-          <dt className="text-ink/60">Ngân hàng</dt><dd>{user.bankName} {acc && `· ****${acc.slice(-4)}`}</dd>
           <dt className="text-ink/60">Lương giờ</dt><dd>{vnd(user.hourlyWage)}</dd>
         </dl>
-        <p className="mt-3 text-xs text-ink/60">Cần sửa thông tin? Liên hệ admin cơ sở.</p>
+        <ActionForm action={updateMyProfile} submitLabel="Lưu thông tin" successText="Đã lưu thông tin" className="mt-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Họ tên"><Input name="name" defaultValue={user.name} required minLength={2} maxLength={80} autoComplete="name" /></Field>
+            <Field label="Số điện thoại"><Input name="phone" type="tel" inputMode="tel" defaultValue={user.phone} required autoComplete="tel" /></Field>
+            <Field label="Ngân hàng"><Input name="bankName" defaultValue={user.bankName} maxLength={60} placeholder="VD Vietcombank" /></Field>
+            <Field label="Số tài khoản"><Input name="bankAccount" inputMode="numeric" defaultValue={acc} maxLength={30} autoComplete="off" /></Field>
+          </div>
+        </ActionForm>
+        <p className="mt-2 text-xs text-ink/60">Email, cơ sở và lương giờ do admin quản lý.</p>
       </Card>
       <Card title="Thiết bị">
         <ul className="space-y-2 text-sm">

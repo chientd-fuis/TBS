@@ -48,6 +48,9 @@ test("lãi lỗ chuỗi: lãi gộp cơ sở − chi phí chung; theo cơ sở l
   assert.equal(r.byCategory.LUONG, undefined);
   assert.equal(r.allocByStore.a + r.allocByStore.b, 600_000);
   assert.equal(r.allocByStore.b, Math.round((600_000 * 1_000_000) / 4_050_000));
+  // biểu đồ tỷ lệ chi phí / doanh thu: nhóm chi phí cả chuỗi, tổng = tổng chi phí
+  assert.deepEqual(r.costGroups, { LUONG: 500_000, MAT_BANG: 200_000, NGUYEN_LIEU: 400_000, KET: 50_000, DIEN_NUOC: 0, KHAC: 200_000 + 250_000 });
+  assert.equal(Object.values(r.costGroups).reduce((x, y) => x + y, 0), r.total.cost);
 });
 
 test("đọc bill + bất thường doanh thu", () => {

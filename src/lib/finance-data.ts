@@ -4,6 +4,7 @@ import { Attendance, BonusPenalty, Expense, FixedCost, PayrollItem, ShiftClosing
 import { dayRevenueFromClosings, type DayRevenueRow } from "./revenue";
 import { computePnl, daysInMonth, type PnlInput, type PnlResult } from "./finance";
 import { addDays } from "./time";
+import { loadHolidays } from "./holiday";
 
 /** Các ngày từ from tới to (gồm cả 2 đầu). */
 export function dateRange(from: string, to: string) {
@@ -33,11 +34,13 @@ export async function loadLabor(from: string, to: string) {
     if (!hist.has(k)) hist.set(k, []);
     hist.get(k)!.push(h);
   }
+  const holidays = await loadHolidays(from, to);
   const out: PnlInput["labor"] = [];
   for (const a of atts) {
     const uid = String(a.userId);
     const w = wageAt(hist.get(uid) ?? [], a.workDate, users.get(uid) ?? 0);
-    out.push({ storeId: String(a.storeId), date: a.workDate, amount: (a.roundedHours || 0) * w });
+    const mult = holidays.get(a.workDate)?.multiplier ?? 1; // ngày lễ ×2…
+    out.push({ storeId: String(a.storeId), date: a.workDate, amount: (a.roundedHours || 0) * w * mult });
   }
   for (const b of await BonusPenalty.find({ date: { $gte: from, $lte: to } }).select("storeId date kind amountVnd").lean())
     out.push({ storeId: String(b.storeId), date: b.date, amount: b.kind === "BONUS" ? b.amountVnd : -b.amountVnd });

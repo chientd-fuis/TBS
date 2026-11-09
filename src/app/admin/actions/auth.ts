@@ -1,85 +1,61 @@
 "use server";
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
-import { AdminLoginLog, AdminLoginSession, Settings } from "@/lib/models";
+import { AdminAccount, AdminLoginLog } from "@/lib/models";
 import { recordActivity } from "@/lib/activity-server";
 import { getSettings } from "@/lib/settings";
 import { clientInfo } from "@/lib/device";
-import { adminActor, clearAdminCookie, createAdminCookie } from "@/lib/admin-session";
-import { assertAdmin } from "@/lib/guards";
-import { audit } from "@/lib/audit";
+import { getSessionEmail, isOwnerEmail } from "@/lib/auth";
+import { adminActor, adminDeviceId, clearAdminCookie, createAdminCookie, getAdmin } from "@/lib/admin-session";
 import type { FormState } from "./types";
 
-const MAX_FAILS = 5;
-const LOCK_MIN = 15;
+/* Admin đăng nhập bằng Gmail (Chủ thêm / duyệt ở mục Quản lý admin). Không còn mật khẩu chung. */
 
-/** Đăng nhập site admin bằng mật khẩu chung (spec 2.1). */
-export async function adminLogin(_: FormState, fd: FormData): Promise<FormState> {
+/** Gmail đã được duyệt → tạo phiên admin rồi vào trang quản lý. */
+export async function adminEnter(_: FormState): Promise<FormState> {
+  const email = await getSessionEmail();
+  if (!email) return { error: "Chưa đăng nhập Google" };
+  if (isOwnerEmail(email)) redirect("/admin");
   await connectDB();
-  const password = String(fd.get("password") || "");
-  const displayName = String(fd.get("displayName") || "").trim().slice(0, 60);
   const { ip, userAgent } = await clientInfo();
-  const since = new Date(Date.now() - LOCK_MIN * 60000);
-  const fails = await AdminLoginLog.countDocuments({ kind: "PASSWORD", success: false, ip, createdAt: { $gte: since } });
-  if (fails >= MAX_FAILS) return { error: `Sai mật khẩu quá ${MAX_FAILS} lần. Thử lại sau ${LOCK_MIN} phút.` };
-  if (displayName.length < 2) return { error: "Nhập tên hiển thị của bạn (để ghi lịch sử thao tác)" };
-
+  const acc = await AdminAccount.findOne({ email });
+  if (!acc || acc.status !== "ACTIVE") {
+    await AdminLoginLog.create({ kind: "GOOGLE", displayName: email, success: false, ip, userAgent }).catch(() => null);
+    return { error: !acc ? "Gmail này chưa được Chủ thêm làm admin" : acc.status === "BLOCKED" ? "Tài khoản admin này đã bị Chủ khoá" : "Đang chờ Chủ duyệt" };
+  }
+  const deviceId = await adminDeviceId();
+  const now = new Date();
+  // ghi lại thiết bị (chỉ để Chủ xem)
+  const dev = (acc.devices as { deviceId: string; ip?: string; userAgent?: string; lastSeenAt?: Date }[]).find((d) => d.deviceId === deviceId);
+  if (dev) Object.assign(dev, { ip, userAgent, lastSeenAt: now });
+  else acc.devices.push({ deviceId, ip, userAgent, status: "APPROVED", firstSeenAt: now, lastSeenAt: now, approvedAt: now });
+  acc.lastLoginAt = now;
+  acc.lastIp = ip;
+  acc.lastUserAgent = userAgent;
+  await acc.save();
   const s = await getSettings();
-  if (!s.adminPasswordHash) return { error: "Chưa đặt mật khẩu admin. Chủ cần đăng nhập bằng Google để đặt mật khẩu." };
-  const ok = await bcrypt.compare(password, s.adminPasswordHash);
-  await AdminLoginLog.create({ kind: "PASSWORD", displayName, success: ok, ip, userAgent });
-  if (!ok) return { error: `Mật khẩu không đúng (còn ${MAX_FAILS - fails - 1} lần thử)` };
-  const sid = await createAdminCookie(displayName, s.adminSessionVersion, s.adminSessionDays || 7, { ip, userAgent });
-  await recordActivity({ kind: "ADMIN", name: displayName, sid }, "admin.login", undefined, null, { ip });
+  const sid = await createAdminCookie(acc.name, s.adminSessionDays || 7, { ip, userAgent, accountId: String(acc._id), deviceId, email });
+  await AdminLoginLog.create({ kind: "GOOGLE", displayName: email, success: true, ip, userAgent }).catch(() => null);
+  await recordActivity({ kind: "ADMIN", name: acc.name, sid }, "admin.login", undefined, null, { ip });
   redirect("/admin");
 }
 
-export async function adminLogout() {
-  const { getAdmin } = await import("@/lib/admin-session");
-  const a = await getAdmin().catch(() => null);
-  if (a?.kind === "PASSWORD") await recordActivity(adminActor(a), "admin.logout");
-  await clearAdminCookie();
-  redirect("/admin/login");
-}
-
-function validatePassword(p: string) {
-  if (p.length < 8) return "Mật khẩu tối thiểu 8 ký tự";
-  if (!/[a-zA-Z]/.test(p) || !/\d/.test(p)) return "Mật khẩu phải có cả chữ và số";
-  return null;
-}
-
-/**
- * Đổi mật khẩu: admin nhập mật khẩu hiện tại; Chủ có thể đặt lại không cần mật khẩu cũ.
- * Sau khi đổi: tăng adminSessionVersion → tất cả phiên admin dùng mật khẩu cũ bị đăng xuất.
- */
-export async function changeAdminPassword(_: FormState, fd: FormData): Promise<FormState> {
-  const admin = await assertAdmin();
-  const current = String(fd.get("current") || "");
-  const next = String(fd.get("next") || "");
-  const confirm = String(fd.get("confirm") || "");
-  const s = await getSettings();
-  if (admin.kind !== "OWNER" || (s.adminPasswordHash && current)) {
-    if (!s.adminPasswordHash || !(await bcrypt.compare(current, s.adminPasswordHash)))
-      return { error: "Mật khẩu hiện tại không đúng" };
-  }
-  const err = validatePassword(next);
-  if (err) return { error: err };
-  if (next !== confirm) return { error: "Nhập lại mật khẩu mới không khớp" };
-  const { ip } = await clientInfo();
-  await Settings.updateOne(
-    { key: "main" },
-    { $set: { adminPasswordHash: await bcrypt.hash(next, 10), adminPasswordChangedAt: new Date() }, $inc: { adminSessionVersion: 1 } },
-  );
-  await audit(adminActor(admin), "admin.password.change", { type: "Settings" }, null, { ip });
-  // mọi phiên cũ đã vô hiệu (tăng adminSessionVersion) → đánh dấu đã đăng xuất trong danh sách phiên
-  await AdminLoginSession.updateMany({ revokedAt: null }, { $set: { revokedAt: new Date(), revokedBy: "Đổi mật khẩu" } });
-  // phiên hiện tại (nếu là admin mật khẩu) cũng cần đăng nhập lại
-  if (admin.kind === "PASSWORD") {
-    await clearAdminCookie();
-    redirect("/admin/login?changed=1");
-  }
-  revalidatePath("/admin/settings");
+/** Gmail chưa có trong danh sách admin → gửi yêu cầu cho Chủ duyệt. */
+export async function adminRequest(_: FormState, fd: FormData): Promise<FormState> {
+  const email = await getSessionEmail();
+  if (!email) return { error: "Chưa đăng nhập Google" };
+  if (isOwnerEmail(email)) redirect("/admin");
+  const name = String(fd.get("name") || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (name.length < 2) return { error: "Nhập tên hiển thị (VD: Lan – Văn Phú)" };
+  await connectDB();
+  if (await AdminAccount.exists({ email })) return { error: "Gmail này đã gửi yêu cầu – chờ Chủ duyệt" };
+  await AdminAccount.create({ email, name, status: "PENDING" });
   return { ok: true };
+}
+
+export async function adminLogout() {
+  const a = await getAdmin().catch(() => null);
+  if (a?.kind === "ADMIN") await recordActivity(adminActor(a), "admin.logout");
+  await clearAdminCookie();
+  redirect("/admin/login?out=1");
 }

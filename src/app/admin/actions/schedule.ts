@@ -1,8 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store, User } from "@/lib/models";
-import { assertAdmin } from "@/lib/guards";
-import { adminActor } from "@/lib/admin-session";
+import { adminOrStaff } from "@/lib/staff-guard";
 import { audit } from "@/lib/audit";
 import { addDays, isYmd, localDate, weekStartOf } from "@/lib/time";
 import { planAutoSchedule, type AutoOptions, type PlanChange } from "@/lib/schedule";
@@ -13,20 +12,24 @@ import { findShiftClash } from "@/lib/support";
 
 export type Result = { ok?: boolean; error?: string; message?: string };
 const path = (storeId: string) => `/admin/schedule/${storeId}`;
+/** revalidate cả trang admin lẫn trang Quản lý của nhân viên */
+const revalidate = (storeId: string) => {
+  revalidate(storeId);
+  revalidatePath(`/manage/schedule/${storeId}`);
+};
 const fail = (e: unknown): Result => ({ error: (e as Error).message || "Lỗi hệ thống" });
 
 /** Duyệt / từ chối đăng ký ca (từng ca, từng người, hoặc tất cả – client gửi danh sách id). */
 export async function decideShifts(storeId: string, ids: string[], decision: "APPROVED" | "REJECTED"): Promise<Result> {
   try {
-    const admin = await assertAdmin();
-    const actor = adminActor(admin);
+    const { actor } = await adminOrStaff("schedule", storeId);
     if (!ids.length) return { error: "Không có đăng ký nào" };
     const r = await ShiftAssignment.updateMany(
       { _id: { $in: ids }, storeId, status: "PENDING" },
       { $set: { status: decision, decidedBy: actor.name, decidedAt: new Date() } },
     );
     await audit(actor, decision === "APPROVED" ? "schedule.approve" : "schedule.reject", { type: "Store", id: storeId }, null, { ids, n: r.modifiedCount });
-    revalidatePath(path(storeId));
+    revalidate(storeId);
     return { ok: true, message: `${decision === "APPROVED" ? "Đã duyệt" : "Đã từ chối"} ${r.modifiedCount} ca` };
   } catch (e) {
     return fail(e);
@@ -36,8 +39,7 @@ export async function decideShifts(storeId: string, ids: string[], decision: "AP
 /** Xếp tay: thêm nhân viên vào 1 ô (ca × ngày). Nếu nhân viên đã đăng ký ô đó → duyệt luôn. */
 export async function addToSlot(storeId: string, tplId: string, date: string, userId: string): Promise<Result> {
   try {
-    const admin = await assertAdmin();
-    const actor = adminActor(admin);
+    const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(date)) return { error: "Ngày không hợp lệ" };
     const tpl = await ShiftTemplate.findOne({ _id: tplId, storeId }).lean();
     if (!tpl) return { error: "Ca không thuộc cơ sở này" };
@@ -59,7 +61,7 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
       date,
       ...(String(user.storeId) !== storeId ? { support: true, fromStoreId: String(user.storeId) } : {}),
     });
-    revalidatePath(path(storeId));
+    revalidate(storeId);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -68,11 +70,11 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
 
 export async function removeFromSlot(storeId: string, id: string): Promise<Result> {
   try {
-    const admin = await assertAdmin();
+    const { actor } = await adminOrStaff("schedule", storeId);
     const a = await ShiftAssignment.findOneAndDelete({ _id: id, storeId }).lean();
     if (!a) return { error: "Không tìm thấy" };
-    await audit(adminActor(admin), "schedule.remove", { type: "ShiftAssignment", id }, a, null);
-    revalidatePath(path(storeId));
+    await audit(actor, "schedule.remove", { type: "ShiftAssignment", id }, a, null);
+    revalidate(storeId);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -82,12 +84,12 @@ export async function removeFromSlot(storeId: string, id: string): Promise<Resul
 /** Định mức người theo ca: tối thiểu (thiếu người) & định mức (ít người). */
 export async function saveStaffing(storeId: string, tplId: string, minStaff: number, targetStaff: number): Promise<Result> {
   try {
-    const admin = await assertAdmin();
+    const { actor } = await adminOrStaff("schedule", storeId);
     const min = Math.max(0, Math.floor(minStaff || 0));
     const target = Math.max(min, Math.floor(targetStaff || 0));
     await ShiftTemplate.updateOne({ _id: tplId, storeId }, { $set: { minStaff: min, targetStaff: target } });
-    await audit(adminActor(admin), "schedule.staffing", { type: "ShiftTemplate", id: tplId }, null, { min, target });
-    revalidatePath(path(storeId));
+    await audit(actor, "schedule.staffing", { type: "ShiftTemplate", id: tplId }, null, { min, target });
+    revalidate(storeId);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -102,8 +104,7 @@ export type PlanView = {
 /** Xếp ca tự động: apply=false → xem trước; apply=true → lưu. */
 export async function autoSchedule(storeId: string, weekStart: string, opts: AutoOptions, apply: boolean): Promise<Result & { plan?: PlanView }> {
   try {
-    const admin = await assertAdmin();
-    const actor = adminActor(admin);
+    const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
     const week = await loadWeek(storeId, weekStart);
     const history = await loadHistory(storeId, weekStart);
@@ -137,7 +138,7 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
       }
     }
     await audit(actor, "schedule.auto", { type: "Store", id: storeId }, null, { weekStart, opts, approved, added });
-    revalidatePath(path(storeId));
+    revalidate(storeId);
     const short = view.shortages.filter((s) => s.level === "short").length;
     return {
       ok: true,
@@ -152,8 +153,7 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
 /** Yêu cầu nhân viên đăng ký ca cho 1 tuần (tuần sau trở đi) – nhân viên thấy cảnh báo + nút Đăng ký ca. */
 export async function requestRegistration(storeId: string, weekStart: string, userIds: string[]): Promise<Result> {
   try {
-    const admin = await assertAdmin();
-    const actor = adminActor(admin);
+    const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
     const store = await Store.findById(storeId).select("timezone").lean();
     if (!store) return { error: "Không tìm thấy cơ sở" };
@@ -169,7 +169,7 @@ export async function requestRegistration(storeId: string, weekStart: string, us
         { upsert: true },
       );
     await audit(actor, "schedule.requestRegistration", { type: "Store", id: storeId }, null, { weekStart, userIds: users.map((u) => String(u._id)) });
-    revalidatePath(path(storeId));
+    revalidate(storeId);
     return { ok: true, message: `Đã gửi yêu cầu đăng ký ca cho ${users.length} nhân viên` };
   } catch (e) {
     return fail(e);

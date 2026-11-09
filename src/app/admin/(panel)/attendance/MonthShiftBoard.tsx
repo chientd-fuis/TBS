@@ -19,6 +19,7 @@ export default function MonthShiftBoard({
   hrefFor,
   compactLegend,
   linkable = true,
+  holidays = {},
 }: {
   month: string;
   days: string[];
@@ -33,6 +34,8 @@ export default function MonthShiftBoard({
   compactLegend?: boolean;
   /** false = tên không bấm được (trang nhân viên) */
   linkable?: boolean;
+  /** ngày lễ: ngày → tên + hệ số lương */
+  holidays?: Record<string, { name: string; multiplier: number }>;
 }) {
   const border = "1px solid #9fb3cf";
   return (
@@ -43,8 +46,10 @@ export default function MonthShiftBoard({
         <span className="inline-flex items-center gap-1"><LogOut size={13} className="text-danger" /> quên check-out</span>
         <span className="inline-flex items-center gap-1"><b className="text-[10px] text-[#1d4ed8]">CS2</b> đi hỗ trợ / từ cơ sở khác sang</span>
         <span className="inline-flex items-center gap-1"><span className="text-danger line-through">Tên</span> {compactLegend ? "bỏ ca" : "bỏ ca (có lịch, không chấm công)"}</span>
+        <span className="inline-flex items-center gap-1"><span className="tbs-live">Tên</span> đang trong ca (nhấp nháy ở mọi ca nếu làm xuyên ca)</span>
         <span><b>Tên đậm</b> = ca sắp tới · <span className="text-ink/55">tên mờ</span> = ca đã qua</span>
         {compactLegend && <span>Tên <i className="text-warn">(Chờ duyệt)</i></span>}
+        <span className="inline-flex items-center gap-1"><span className="rounded bg-[#fecaca] px-1 text-[10px] font-bold text-danger">🎉 Lễ ×2</span> ngày lễ – đi làm được nhân lương</span>
       </div>
       <div className="overflow-x-auto rounded-xl ring-1 ring-[#c9d6e8]" data-month-board>
         <ScrollToToday />
@@ -52,12 +57,25 @@ export default function MonthShiftBoard({
           <thead>
             <tr>
               <th className="sticky left-0 z-20" style={{ width: 92, minWidth: 92, background: "#a9c4ea", border, padding: "6px 4px" }}>Ca</th>
-              {days.map((d) => (
-                <th key={d} data-today={d === today ? "1" : undefined} style={{ width: 118, minWidth: 118, background: d === today ? "#fccc18" : "#a9c4ea", border, padding: "4px 2px" }}>
-                  <div style={{ fontWeight: 700 }}>{WD_SHORT[weekdayVi(d)] ?? weekdayVi(d)}</div>
-                  <div style={{ fontSize: 11, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
-                </th>
-              ))}
+              {days.map((d) => {
+                const h = holidays[d];
+                return (
+                  <th
+                    key={d}
+                    data-today={d === today ? "1" : undefined}
+                    title={h ? `Ngày lễ: ${h.name} – đi làm được ×${h.multiplier} lương` : undefined}
+                    style={{ width: 118, minWidth: 118, background: d === today ? "#fccc18" : h ? "#fecaca" : "#a9c4ea", border, padding: "4px 2px" }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{WD_SHORT[weekdayVi(d)] ?? weekdayVi(d)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
+                    {h && (
+                      <div className="truncate text-danger" style={{ fontSize: 10, fontWeight: 700 }}>
+                        🎉 {h.name} ×{h.multiplier}
+                      </div>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -97,6 +115,7 @@ function Chip({ c, month, storeNames, href, linkable }: { c: BoardChip; month: s
     c.early ? `Về sớm ${c.early} phút` : "",
     c.extra ? "Làm thêm ca (không có lịch)" : "",
     c.missingOut ? "Quên check-out" : "",
+    c.live ? "Đang trong ca (chưa check-out)" : "",
     c.tag ? (c.tag.kind === "away" ? `Đi hỗ trợ ${storeNames[c.tag.storeId] ?? ""}` : `Từ ${storeNames[c.tag.storeId] ?? ""} sang hỗ trợ`) : "",
   ]
     .filter(Boolean)
@@ -111,9 +130,10 @@ function Chip({ c, month, storeNames, href, linkable }: { c: BoardChip; month: s
       {c.tag && <b className="shrink-0 text-[9px] leading-none text-[#1d4ed8]">{c.tag.label}</b>}
     </>
   );
-  // không nền: bỏ ca = chữ đỏ gạch ngang · sắp tới = đậm · đã qua = mờ nhẹ · chờ duyệt = bình thường + "(Chờ duyệt)"
-  const stateCls =
-    c.state === "missed"
+  // không nền: đang trong ca = xanh lá đậm nhấp nháy · bỏ ca = chữ đỏ gạch ngang · sắp tới = đậm · đã qua = mờ nhẹ · chờ duyệt = bình thường + "(Chờ duyệt)"
+  const stateCls = c.live
+    ? "tbs-live"
+    : c.state === "missed"
       ? "text-danger line-through"
       : c.state === "upcoming"
         ? "font-bold"

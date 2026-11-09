@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { Expense, FixedCost, Settings, Store } from "@/lib/models";
-import { assertAdmin } from "@/lib/guards";
+import { assertAdmin, assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
@@ -20,7 +20,7 @@ async function assertOwner() {
 
 export async function deleteExpense(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("finance.bills");
     await connectDB();
     const id = str(fd.get("id"));
     const e = await Expense.findById(id).lean();
@@ -45,7 +45,7 @@ export async function deleteExpense(_: FormState, fd: FormData): Promise<FormSta
 /** Thêm / sửa tiền thuê nhà của 1 cơ sở (chi phí cố định duy nhất) – tính mỗi tháng, chia đều theo ngày. */
 export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("finance.rent");
     await connectDB();
     const id = str(fd.get("id"));
     const category = "MAT_BANG";
@@ -98,7 +98,7 @@ export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormSta
 
 export async function deleteFixedCost(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("finance.rent");
     await connectDB();
     const id = str(fd.get("id"));
     const prev = await FixedCost.findById(id).lean();
@@ -114,7 +114,7 @@ export async function deleteFixedCost(_: FormState, fd: FormData): Promise<FormS
 /** Cài đặt tài chính (chủ): nhóm Telegram, bật/tắt báo cáo, % phí sàn từng cơ sở. */
 export async function saveFinanceSettings(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertOwner();
+    const admin = await assertPerm("finance.settings");
     await connectDB();
     const set = {
       financeChatId: str(fd.get("financeChatId")),
@@ -141,7 +141,7 @@ export async function saveFinanceSettings(_: FormState, fd: FormData): Promise<F
 
 export async function testFinanceTelegram(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    await assertOwner();
+    await assertPerm("finance.settings");
     const chat = str(fd.get("chatId")) || (await financeChatId());
     await sendTelegramText(chat, "✅ Tiệm Bơ Sầu – kết nối nhóm Quản lý doanh thu thành công.");
     return { ok: true };
@@ -161,6 +161,46 @@ export async function sendReportNow(_: FormState, fd: FormData): Promise<FormSta
       kind === "weekly" ? await sendWeeklyReport(weekStartOf(date), true) : kind === "monthly" ? await sendMonthlyReport(date.slice(0, 7), true) : await sendDailyReport(date, true);
     if (st === "DISABLED") return { error: "Chưa cấu hình bot Telegram hoặc chat ID nhóm Quản lý doanh thu" };
     if (st === "FAILED") return { error: "Gửi lỗi – kiểm tra bot đã ở trong nhóm chưa" };
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/* ===== Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (chỉ Chủ – doanh thu không đổi) ===== */
+export async function saveCashTransfer(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertOwner();
+    await connectDB();
+    const { CashTransfer } = await import("@/lib/models");
+    const storeId = str(fd.get("storeId"));
+    const date = str(fd.get("date"));
+    const kind = str(fd.get("kind"));
+    const amt = evalMoneyExpr(str(fd.get("amount")));
+    if (!(await Store.exists({ _id: storeId }))) return { error: "Chọn cơ sở" };
+    if (!isYmd(date)) return { error: "Chọn ngày" };
+    if (kind !== "DEPOSIT" && kind !== "WITHDRAW") return { error: "Chọn loại: nộp tiền mặt vào TK hoặc rút TK ra tiền mặt" };
+    if (!amt.ok || amt.value <= 0) return { error: "Số tiền không hợp lệ" };
+    const doc = { storeId, date, month: date.slice(0, 7), kind, amount: Math.round(amt.value), note: str(fd.get("note")).slice(0, 200), createdBy: adminActor(admin).name };
+    const c = await CashTransfer.create(doc);
+    await audit(adminActor(admin), "cash.transfer.create", { type: "CashTransfer", id: String(c._id) }, null, doc);
+    revalidatePath("/admin/finance", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+export async function deleteCashTransfer(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertOwner();
+    await connectDB();
+    const { CashTransfer } = await import("@/lib/models");
+    const c = await CashTransfer.findById(str(fd.get("id"))).lean();
+    if (!c) return { error: "Không tìm thấy phiếu" };
+    await CashTransfer.deleteOne({ _id: c._id });
+    await audit(adminActor(admin), "cash.transfer.delete", { type: "CashTransfer", id: String(c._id) }, c, null);
+    revalidatePath("/admin/finance", "layout");
     return { ok: true };
   } catch (e) {
     return errMsg(e);

@@ -3,10 +3,27 @@ import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { getSessionEmail, isOwnerEmail } from "./auth";
-import { getSettings } from "./settings";
 import type { Actor } from "./audit";
 
+/*
+ * Đăng nhập trang quản lý:
+ *  - Chủ: Gmail OWNER_EMAIL.
+ *  - Admin: Gmail được Chủ thêm / duyệt (AdminAccount). Sau khi đăng nhập Google, bấm "Vào trang quản lý" → tạo PHIÊN admin
+ *    (cookie tbs_admin, lưu DB) để Chủ xem / đăng xuất từng phiên. Phiên chỉ hợp lệ khi đúng Gmail đang đăng nhập + tài khoản đang hoạt động.
+ */
 const COOKIE = "tbs_admin";
+/** cookie thiết bị – chỉ để Chủ xem admin đăng nhập từ những máy nào */
+export const ADMIN_DEVICE_COOKIE = "tbs_admin_dev";
+
+export async function adminDeviceId() {
+  const jar = await cookies();
+  let id = jar.get(ADMIN_DEVICE_COOKIE)?.value;
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+    id = randomUUID();
+    jar.set(ADMIN_DEVICE_COOKIE, id, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 400 * 86_400 });
+  }
+  return id;
+}
 
 function secret() {
   const s = process.env.ADMIN_JWT_SECRET || process.env.NEXTAUTH_SECRET;
@@ -14,16 +31,37 @@ function secret() {
   return new TextEncoder().encode(s);
 }
 
-export type AdminSession = { kind: "OWNER" | "PASSWORD"; name: string; email?: string; sid?: string };
+export type AdminSession = {
+  kind: "OWNER" | "ADMIN";
+  name: string;
+  email?: string;
+  sid?: string;
+  /** tài khoản admin (không có với Chủ) */
+  accountId?: string;
+  /** quyền được Chủ cấp (Chủ: rỗng – luôn có mọi quyền, xem lib/permissions.ts can()) */
+  perms: string[];
+};
 
-/** Tạo phiên (lưu DB để Chủ xem / đăng xuất từng phiên) + cookie. */
-export async function createAdminCookie(name: string, sessionVersion: number, days: number, meta: { ip?: string; userAgent?: string } = {}) {
+/** Tạo phiên admin (lưu DB để Chủ xem / đăng xuất từng phiên) + cookie. */
+export async function createAdminCookie(
+  name: string,
+  days: number,
+  meta: { ip?: string; userAgent?: string; accountId: string; deviceId?: string; email: string },
+) {
   const { connectDB } = await import("./db");
   const { AdminLoginSession } = await import("./models");
   await connectDB();
   const sid = randomUUID();
-  await AdminLoginSession.create({ sid, name, ip: meta.ip, userAgent: meta.userAgent, expiresAt: new Date(Date.now() + days * 86_400_000) });
-  const token = await new SignJWT({ kind: "PASSWORD", name, sv: sessionVersion, sid })
+  await AdminLoginSession.create({
+    sid,
+    name,
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+    accountId: meta.accountId,
+    deviceId: meta.deviceId,
+    expiresAt: new Date(Date.now() + days * 86_400_000),
+  });
+  const token = await new SignJWT({ kind: "ADMIN", name, sid, aid: meta.accountId, email: meta.email })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${days}d`)
@@ -38,16 +76,18 @@ export async function createAdminCookie(name: string, sessionVersion: number, da
   return sid;
 }
 
-/** Phiên admin trong DB (cache theo request). null = không có / đã bị đăng xuất. */
+/** Phiên admin trong DB (cache theo request). null = không có / đã bị đăng xuất / tài khoản bị khoá. */
 const loadSession = cache(async (sid: string) => {
   const { connectDB } = await import("./db");
-  const { AdminLoginSession } = await import("./models");
+  const { AdminAccount, AdminLoginSession } = await import("./models");
   await connectDB();
-  const s = await AdminLoginSession.findOne({ sid }).select("revokedAt lastSeenAt expiresAt").lean();
-  if (!s || s.revokedAt || s.expiresAt < new Date()) return null;
+  const s = await AdminLoginSession.findOne({ sid }).select("revokedAt lastSeenAt expiresAt accountId").lean();
+  if (!s || s.revokedAt || s.expiresAt < new Date() || !s.accountId) return null;
+  const acc = await AdminAccount.findById(s.accountId).select("email name status perms").lean();
+  if (!acc || acc.status !== "ACTIVE") return null;
   // cập nhật "hoạt động lần cuối" tối đa 2 phút / lần
   if (!s.lastSeenAt || Date.now() - s.lastSeenAt.getTime() > 120_000) await AdminLoginSession.updateOne({ sid }, { $set: { lastSeenAt: new Date() } }).catch(() => null);
-  return s;
+  return { ...s, account: acc };
 });
 
 /** Xoá cookie + đánh dấu phiên hiện tại đã đăng xuất. */
@@ -68,21 +108,20 @@ export async function clearAdminCookie(by = "Tự đăng xuất") {
   jar.delete(COOKIE);
 }
 
-/** Phiên admin hiện tại: Chủ (Google) hoặc admin dùng mật khẩu chung. */
+/** Phiên quản lý hiện tại: Chủ hoặc admin (Gmail được duyệt + phiên còn hiệu lực). */
 export async function getAdmin(): Promise<AdminSession | null> {
   const email = await getSessionEmail();
-  if (isOwnerEmail(email)) return { kind: "OWNER", name: "Chủ", email: email! };
+  if (!email) return null;
+  if (isOwnerEmail(email)) return { kind: "OWNER", name: "Chủ", email, perms: [] };
 
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
-    const settings = await getSettings();
-    // Đổi mật khẩu → tăng adminSessionVersion → mọi phiên cũ hết hiệu lực
-    if (payload.sv !== settings.adminSessionVersion) return null;
-    // mỗi lần đăng nhập là 1 phiên trong DB – Chủ đăng xuất phiên → token vô hiệu ngay
-    if (!payload.sid || !(await loadSession(String(payload.sid)))) return null;
-    return { kind: "PASSWORD", name: String(payload.name || "Admin"), sid: String(payload.sid) };
+    const s = payload.sid ? await loadSession(String(payload.sid)) : null;
+    // phiên phải thuộc đúng Gmail đang đăng nhập (đổi tài khoản Google → phải vào lại)
+    if (!s || s.account.email !== email) return null;
+    return { kind: "ADMIN", name: s.account.name, email, sid: String(payload.sid), accountId: String(s.account._id), perms: [...(s.account.perms ?? [])] };
   } catch {
     return null;
   }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { Attendance, ShiftTemplate, Store, User } from "@/lib/models";
 import { geminiConfigured } from "@/lib/ocr";
 import { localDate, localMonth, localTime, viDate } from "@/lib/time";
@@ -15,7 +16,7 @@ import QuickEdit from "./QuickEdit";
 import MonthShiftBoard from "./MonthShiftBoard";
 import { loadMonthBoard } from "./month-board-data";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
-import TimeInput from "@/components/TimeInput";
+import SingleTimeFields from "./SingleTimeFields";
 import BulkAttendance from "./BulkAttendance";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export const maxDuration = 60;
 
 /** Bảng chấm công (spec 5) + chấm hộ (3.5) */
 export default async function AttendanceAdmin({ searchParams }: { searchParams: Promise<{ store?: string; user?: string; month?: string; status?: string }> }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
   const store = stores.find((s) => String(s._id) === sp.store) ?? stores[0];
@@ -89,7 +90,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
         <Card
           title={selected ? `${selected.name} – tháng ${month.slice(5)}/${month.slice(0, 4)}` : `Danh sách lọc (${rows.length})`}
           actions={
-            selected && (
+            selected && can(admin, "export") && (
               <LinkButton variant="outline" href={`/api/admin/export?type=chamcong&store=${store?._id}&user=${selected._id}&from=${month}&to=${month}`}>
                 Xuất Excel
               </LinkButton>
@@ -166,7 +167,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
             single={
                 <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">
                   <p className="text-xs text-ink/70">Dùng khi nhân viên không chấm được (hỏng điện thoại, hết pin, lỗi camera/GPS…). Không cần nhân viên xác nhận. Bản ghi có nhãn &quot;Chấm hộ&quot;.</p>
-                  <div className="grid gap-3 sm:grid-cols-5">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <Field label="Nhân viên">
                       <Select name="userId" defaultValue={sp.user || ""} required>
                         <option value="">— Chọn —</option>
@@ -174,8 +175,6 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
                       </Select>
                     </Field>
                     <Field label="Ngày"><Input type="date" name="date" defaultValue={localDate(new Date(), tz)} required /></Field>
-                    <Field label="Giờ vào"><TimeInput seconds name="inTime" required /></Field>
-                    <Field label="Giờ ra" hint="Bỏ trống nếu chỉ check-in"><TimeInput seconds name="outTime" /></Field>
                     <Field label="Làm tại" hint="Đi hỗ trợ thì chọn cơ sở đó">
                       <Select name="workStoreId" defaultValue="">
                         <option value="">Tự nhận (theo ca / cơ sở gốc)</option>
@@ -183,6 +182,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
                       </Select>
                     </Field>
                   </div>
+                  <SingleTimeFields templates={templates.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }))} />
                   <Field label="Lý do (bắt buộc)"><Textarea name="reason" rows={2} required /></Field>
                 </ActionForm>
             }

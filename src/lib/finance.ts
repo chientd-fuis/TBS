@@ -184,7 +184,22 @@ export type PnlResult = {
   byCategory: Record<string, number>;
   /** tuỳ chọn xem theo cơ sở: phần chi phí chung chia theo tỷ lệ doanh thu kỳ */
   allocByStore: Record<string, number>;
+  /** TOÀN BỘ chi phí cả chuỗi theo nhóm (cả chi phí riêng cơ sở) – tổng = total.cost */
+  costGroups: Record<CostGroup, number>;
 };
+
+/** Nhóm chi phí cho biểu đồ tỷ lệ so với doanh thu. KHAC gồm cả phí sàn Shopee/Grab. */
+export const COST_GROUPS = ["LUONG", "MAT_BANG", "NGUYEN_LIEU", "KET", "DIEN_NUOC", "KHAC"] as const;
+export type CostGroup = (typeof COST_GROUPS)[number];
+export const COST_GROUP_LABEL: Record<CostGroup, string> = {
+  LUONG: "Lương NV",
+  MAT_BANG: "Mặt bằng",
+  NGUYEN_LIEU: "Nguyên liệu",
+  KET: "Chi phí két",
+  DIEN_NUOC: "Điện nước",
+  KHAC: "Chi phí khác",
+};
+const expenseGroup = (c?: string | null): CostGroup => (c === "MAT_BANG" ? "MAT_BANG" : categoryGroup(c));
 
 /** Tính lãi lỗ chuỗi + lãi gộp từng cơ sở. */
 export function computePnl(inp: PnlInput): PnlResult {
@@ -196,6 +211,7 @@ export function computePnl(inp: PnlInput): PnlResult {
   for (const d of dates) for (const s of storeIds) cell(d, s);
   const byCategory: Record<string, number> = {};
   const addCat = (c: string | undefined, n: number) => (byCategory[c || "KHAC"] = (byCategory[c || "KHAC"] ?? 0) + n);
+  const costGroups = Object.fromEntries(COST_GROUPS.map((g) => [g, 0])) as Record<CostGroup, number>;
   const common: Record<string, number> = {};
   const addCommon = (d: string, n: number) => (common[d] = (common[d] ?? 0) + n);
 
@@ -218,6 +234,7 @@ export function computePnl(inp: PnlInput): PnlResult {
   for (const e of inp.expenses) {
     // tiền két đã tính trong "Thu chi" chốt ca; khoản bỏ tick "tính vào chi phí" (VD lương) → không cộng
     if (!inDate.has(e.date) || !isCountedExpense(e)) continue;
+    costGroups[expenseGroup(e.category)] += e.amount;
     if (e.scope === "STORE" && e.storeId && inStore.has(String(e.storeId))) addLine(cell(e.date, String(e.storeId)), { direct: e.amount });
     else {
       addCommon(e.date, e.amount);
@@ -230,6 +247,7 @@ export function computePnl(inp: PnlInput): PnlResult {
       const m = d.slice(0, 7);
       if (m < f.startMonth || (f.endMonth && m > f.endMonth)) continue;
       const perDay = Math.round(f.amountPerMonth / daysInMonth(m));
+      costGroups.MAT_BANG += perDay;
       if (f.scope === "STORE" && f.storeId && inStore.has(String(f.storeId))) addLine(cell(d, String(f.storeId)), { fixed: perDay });
       else {
         addCommon(d, perDay);
@@ -259,7 +277,10 @@ export function computePnl(inp: PnlInput): PnlResult {
   // tuỳ chọn: chia chi phí chung cho cơ sở theo tỷ lệ doanh thu của kỳ
   const rev = Object.fromEntries(storeIds.map((s) => [s, byStore[s].revenue]));
   const allocByStore = allocate(total.shared, shareMap(storeIds, "REVENUE", rev));
-  return { cells, byStore, byDate, total, byCategory, allocByStore };
+  costGroups.LUONG += total.labor;
+  costGroups.KET += total.cashbox;
+  costGroups.KHAC += total.platformFee;
+  return { cells, byStore, byDate, total, byCategory, allocByStore, costGroups };
 }
 
 /* ---------- Đọc bill chi phí (Gemini) ---------- */

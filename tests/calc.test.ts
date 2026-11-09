@@ -86,3 +86,27 @@ test("làm liền nhiều ca: gộp khối, không cảnh báo về sớm sai", 
   assert.equal(earlyMinutesInBlock(d(15, 30), b2.segments, 5), 30); // ra giữa ca 1
   assert.equal(earlyMinutesInBlock(d(19, 57), b2.segments, 5), 0); // trong ngưỡng
 });
+
+test("ngày lễ: giờ làm × hệ số (mặc định ×1), tách riêng phần phụ trội", async () => {
+  const r = computePay({
+    hoursByWage: [
+      { hours: 100, wage: 25000 },
+      { hours: 8, wage: 25000, mult: 2 }, // Quốc khánh ×2
+      { hours: 4, wage: 30000, mult: 3 }, // Tết ×3
+    ],
+    allowance: 0,
+    totalBonus: 0,
+    totalPenalty: 0,
+    advance: 0,
+  });
+  assert.equal(r.totalHours, 112); // giờ công thật, không nhân
+  assert.equal(r.basePay, 100 * 25000 + 8 * 25000 * 2 + 4 * 30000 * 3);
+  assert.equal(r.holidayHours, 12);
+  assert.equal(r.holidayExtra, 8 * 25000 + 4 * 30000 * 2);
+  const { holidayNote } = await import("../src/lib/holiday");
+  const hol = new Map([["2026-09-02", { name: "Quốc khánh", multiplier: 2 }]]);
+  assert.equal(
+    holidayNote([{ workDate: "2026-09-02", roundedHours: 4 }, { workDate: "2026-09-02", roundedHours: 4.5 }, { workDate: "2026-09-03", roundedHours: 8 }], hol),
+    "Quốc khánh 02/09 8.5h ×2",
+  );
+});

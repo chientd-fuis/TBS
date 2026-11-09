@@ -5,7 +5,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
 import { APPROVED_SHIFT, Attendance, Device, ShiftAssignment, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
-import { checkDeviceForAttendance } from "@/lib/device";
+import { checkDeviceForAttendance, clientInfo } from "@/lib/device";
+import { ipAllowed, methodsOf } from "@/lib/checkin-methods";
 import { distanceMeters } from "@/lib/calc";
 import { assertNotLocked, computeFields, findShiftFor, isStaleOpen, openAttendance, payStoreOf } from "@/lib/attendance";
 import { audit } from "@/lib/audit";
@@ -14,10 +15,11 @@ import { addDays, localDate, localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 
 const Body = z.object({
-  lat: z.number(),
-  lng: z.number(),
-  accuracy: z.number(),
-  photo: z.string(),
+  // vị trí / ảnh chỉ gửi khi cơ sở bật cách chấm tương ứng
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  accuracy: z.number().optional(),
+  photo: z.string().optional(),
   fingerprint: z.string().max(128).optional(),
 });
 
@@ -29,13 +31,14 @@ export async function GET() {
   const store = await Store.findById(user.storeId).lean();
   return NextResponse.json({
     open: open ? { checkInAt: open.checkInAt, shiftLabel: open.shiftLabel } : null,
-    store: store ? { name: store.name, lat: store.lat, lng: store.lng, radiusM: store.radiusM, timezone: store.timezone } : null,
+    // không trả bán kính cho phép / toạ độ (nhân viên không cần biết)
+    store: store ? { name: store.name, timezone: store.timezone, methods: methodsOf(store) } : null,
   });
 }
 
 /**
  * POST: chấm công (tự xác định check-in / check-out) – spec 4.2.
- * Thứ tự kiểm tra: thiết bị → vị trí → khuôn mặt → ghi nhận (giờ server).
+ * Thứ tự kiểm tra: thiết bị → vị trí / WiFi (theo cài đặt cơ sở) → khuôn mặt → ghi nhận (giờ server).
  */
 export async function POST(req: Request) {
   try {
@@ -69,28 +72,46 @@ export async function POST(req: Request) {
       open = null;
     }
 
-    // 2. Vị trí – xác định cơ sở chấm công
+    // 2. Xác định cơ sở chấm công theo cách xác thực của từng cơ sở (vị trí / WiFi) – xem lib/checkin-methods.ts
     const home = await Store.findById(user.storeId).lean();
     if (!home) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
-    if (b.accuracy > settings.maxGpsAccuracyM)
-      throw new HttpError(400, `GPS chưa chính xác (sai số ${Math.round(b.accuracy)}m). Ra chỗ thoáng và thử lại.`, {
-        code: "GPS_ACCURACY",
-      });
+    const ip = (await clientInfo()).ip;
+    const hasGps = b.lat != null && b.lng != null && b.accuracy != null;
     const distTo = (st: { lat?: number | null; lng?: number | null }) =>
-      st.lat == null || st.lng == null ? Infinity : distanceMeters(b.lat, b.lng, st.lat, st.lng);
-    const inRange = (st: { lat?: number | null; lng?: number | null; radiusM?: number | null }) => distTo(st) <= (st.radiusM || 100);
+      !hasGps || st.lat == null || st.lng == null ? Infinity : distanceMeters(b.lat!, b.lng!, st.lat, st.lng);
+    const action = open ? "check-out" : "check-in";
+    type Fail = { status: number; msg: string; code: string };
+    /** null = cơ sở này cho chấm. Không nói bán kính / khoảng cách cho nhân viên. */
+    const check = (st: typeof home): Fail | null => {
+      const m = methodsOf(st);
+      if (m.gps) {
+        if (st.lat == null || st.lng == null) return { status: 400, msg: `${st.name} chưa được cấu hình vị trí – liên hệ admin`, code: "STORE" };
+        if (!hasGps) return { status: 400, msg: "Cần bật vị trí (GPS) để chấm công", code: "NEED_GPS" };
+        if (b.accuracy! > settings.maxGpsAccuracyM)
+          return { status: 400, msg: `GPS chưa chính xác (sai số ${Math.round(b.accuracy!)}m). Ra chỗ thoáng và thử lại.`, code: "GPS_ACCURACY" };
+        if (distTo(st) > (st.radiusM || 100)) return { status: 400, msg: `Hãy đến quán để ${action}.`, code: "OUT_OF_RANGE" };
+      }
+      if (m.wifi) {
+        if (!st.wifiIps?.length) return { status: 400, msg: `${st.name} chưa cài đặt WiFi chấm công – liên hệ admin`, code: "STORE" };
+        if (!ipAllowed(ip, st.wifiIps))
+          return {
+            status: 400,
+            msg: `Hãy kết nối WiFi của quán${st.wifiName ? ` (${st.wifiName})` : ""} để ${action}. Tắt 4G / VPN / Chuyển tiếp bảo mật iCloud nếu đang bật.`,
+            code: "WIFI",
+          };
+      }
+      return null;
+    };
+    /** cơ sở có xác thực "đang có mặt tại quán" (vị trí hoặc WiFi) */
+    const verified = (st: typeof home) => methodsOf(st).gps || methodsOf(st).wifi;
+    const fail = (f: Fail) => new HttpError(f.status, f.msg, { code: f.code });
 
     let store: typeof home;
     if (open) {
       // check-out phải ở đúng cơ sở đã check-in
       store = (await Store.findById(open.storeId).lean()) ?? home;
-      if (store.lat == null || store.lng == null)
-        throw new HttpError(400, `${store.name} chưa được cấu hình toạ độ – liên hệ admin`, { code: "STORE" });
-      if (!inRange(store))
-        throw new HttpError(400, `Bạn check-in ở ${store.name} – hãy check-out tại đó (đang cách ${distTo(store)}m, cho phép ${store.radiusM}m).`, {
-          code: "OUT_OF_RANGE",
-          distance: distTo(store),
-        });
+      const f = check(store);
+      if (f) throw fail(f.code === "OUT_OF_RANGE" ? { ...f, msg: `Hãy đến ${store.name} để check-out.` } : f);
     } else {
       // cơ sở gốc + cơ sở có CA HỖ TRỢ đã duyệt đúng khung giờ hiện tại
       const tzHome = home.timezone || "Asia/Ho_Chi_Minh";
@@ -105,31 +126,32 @@ export async function POST(req: Request) {
       const allowed: (typeof home)[] = [home];
       for (const st of supportStores)
         if (await findShiftFor(user._id, now, st.timezone || tzHome, st._id)) allowed.push(st);
-      const hit = allowed.filter(inRange).sort((x, y) => distTo(x) - distTo(y))[0];
+      const results = allowed.map((st) => ({ st, f: check(st) }));
+      const isHome = (st: typeof home) => String(st._id) === String(home._id);
+      // ưu tiên: cơ sở xác thực được có mặt → cơ sở hỗ trợ (đang có ca) → gần nhất
+      const hit = results
+        .filter((r) => !r.f)
+        .sort((x, y) => Number(verified(y.st)) - Number(verified(x.st)) || Number(isHome(x.st)) - Number(isHome(y.st)) || distTo(x.st) - distTo(y.st))[0];
       if (!hit) {
-        if (home.lat == null || home.lng == null)
-          throw new HttpError(400, "Cơ sở chưa được cấu hình toạ độ – liên hệ admin", { code: "STORE" });
         // đang đứng ở cơ sở khác nhưng không có ca hỗ trợ ở đó
-        const near = (await Store.find({ active: true, _id: { $nin: allowed.map((x) => x._id) } }).lean()).find(inRange);
+        const near = (await Store.find({ active: true, _id: { $nin: allowed.map((x) => x._id) } }).lean()).find((st) => verified(st) && !check(st));
         if (near)
           throw new HttpError(400, `Bạn đang ở ${near.name} nhưng chưa được xếp ca hỗ trợ tại đây (hoặc chưa tới giờ ca). Liên hệ admin để được xếp ca.`, {
             code: "NOT_ASSIGNED",
           });
-        const extra = allowed.slice(1).map((x) => ` / cách ${x.name} ${distTo(x)}m`).join("");
-        throw new HttpError(400, `Bạn đang cách ${home.name} ${distTo(home)}m (cho phép ${home.radiusM}m)${extra}.`, {
-          code: "OUT_OF_RANGE",
-          distance: distTo(home),
-        });
+        throw fail(results[0].f!);
       }
-      store = hit;
+      store = hit.st;
     }
-    const distance = distTo(store);
+    const dist = distTo(store);
+    const distance = Number.isFinite(dist) ? dist : undefined;
     const isSupport = String(store._id) !== String(home._id);
 
     // 3. Khuôn mặt: trình duyệt chỉ cho chụp khi phát hiện có khuôn mặt trong khung (không so khớp ảnh mẫu)
+    if (methodsOf(store).face && !b.photo) throw new HttpError(400, "Cần chụp ảnh khuôn mặt để chấm công", { code: "NEED_FACE" });
 
     const tz = store.timezone || "Asia/Ho_Chi_Minh";
-    const photoBuf = dataUrlToBuffer(b.photo);
+    const photoBuf = b.photo ? dataUrlToBuffer(b.photo) : null;
     const stamp = `${localDate(now, tz).replace(/-/g, "")}_${localTime(now, tz).replace(/:/g, "")}`;
 
     if (open) {
@@ -140,14 +162,16 @@ export async function POST(req: Request) {
           code: "TOO_SOON",
         });
       await assertNotLocked(payStoreOf(open), open.month);
-      const photo = await savePhoto(photoBuf, {
-        storeId: String(store._id),
-        userId: String(user._id),
-        userFolderName: user.name || user.email,
-        month: open.month,
-        fileName: `${stamp}_out.jpg`,
-        target: `attendance:${open._id}:out`,
-      });
+      const photo = photoBuf
+        ? await savePhoto(photoBuf, {
+            storeId: String(store._id),
+            userId: String(user._id),
+            userFolderName: user.name || user.email,
+            month: open.month,
+            fileName: `${stamp}_out.jpg`,
+            target: `attendance:${open._id}:out`,
+          })
+        : {};
       const fields = await computeFields({
         storeId: open.storeId,
         shiftAssignmentId: open.shiftAssignmentId,
@@ -163,6 +187,7 @@ export async function POST(req: Request) {
             checkOutLat: b.lat,
             checkOutLng: b.lng,
             checkOutDistanceM: distance,
+            checkOutIp: ip || undefined,
             checkOutPhotoId: photo.driveId,
             checkOutPendingPhotoId: photo.pendingId,
             checkOutDeviceId: dev.deviceId,
@@ -214,14 +239,16 @@ export async function POST(req: Request) {
     await assertNotLocked(home._id, localMonth(now, tz)); // bảng lương ở cơ sở gốc
     const shift = await findShiftFor(user._id, now, tz, store._id);
     const id = new Types.ObjectId();
-    const photo = await savePhoto(photoBuf, {
-      storeId: String(store._id),
-      userId: String(user._id),
-      userFolderName: user.name || user.email,
-      month: localMonth(now, tz),
-      fileName: `${stamp}_in.jpg`,
-      target: `attendance:${id}:in`,
-    });
+    const photo = photoBuf
+      ? await savePhoto(photoBuf, {
+          storeId: String(store._id),
+          userId: String(user._id),
+          userFolderName: user.name || user.email,
+          month: localMonth(now, tz),
+          fileName: `${stamp}_in.jpg`,
+          target: `attendance:${id}:in`,
+        })
+      : {};
     const fields = await computeFields({ storeId: store._id, shiftAssignmentId: shift?.a._id, checkInAt: now });
     try {
       await Attendance.create({
@@ -237,6 +264,7 @@ export async function POST(req: Request) {
         checkInLat: b.lat,
         checkInLng: b.lng,
         checkInDistanceM: distance,
+        checkInIp: ip || undefined,
         checkInPhotoId: photo.driveId,
         checkInPendingPhotoId: photo.pendingId,
         checkInDeviceId: dev.deviceId,

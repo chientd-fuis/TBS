@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { Payroll, PayrollItem, Store, User } from "@/lib/models";
 import { localMonth, prevMonth, viDateTime, viMonth } from "@/lib/time";
 import { hoursVi, vnd } from "@/lib/format";
@@ -16,7 +16,7 @@ const ST = { DRAFT: ["Nháp", "yellow"], PUBLISHED: ["Đã công bố", "green"]
 
 /** Bảng lương tháng – tự công bố ngày 5, admin được công bố sớm (spec 3.7) */
 export default async function PayrollAdmin({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
-  await requireAdmin();
+  await requirePerm("payroll");
   const sp = await searchParams;
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const store = stores.find((s) => String(s._id) === sp.store) ?? stores[0];
@@ -103,7 +103,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                   const u = users.get(String(i.userId));
                   return (
                     <tr key={String(i._id)}>
-                      <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}</td>
+                      <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
                       <td className="text-right">{vnd(i.hourlyWage)}</td>
                       <td className="text-right">{vnd(i.basePay)}</td>

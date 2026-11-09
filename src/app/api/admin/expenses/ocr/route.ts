@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdmin } from "@/lib/admin-session";
+import { can } from "@/lib/permissions";
 import { geminiConfigured, readStatementPhoto } from "@/lib/ocr";
 import { detectSalary, EXPENSE_CATEGORIES } from "@/lib/finance";
 import { connectDB } from "@/lib/db";
@@ -19,7 +20,9 @@ const Body = z.object({ photo: z.string().startsWith("data:image/") });
  */
 export async function POST(req: Request) {
   try {
-    if (!(await getAdmin())) throw new HttpError(401, "Phiên admin đã hết hạn");
+    const admin = await getAdmin();
+    if (!admin) throw new HttpError(401, "Phiên admin đã hết hạn");
+    if (!can(admin, "finance.bills")) throw new HttpError(403, "Bạn chưa được cấp quyền Bill / chuyển khoản");
     if (!geminiConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY – nhập tay", { code: "OCR_OFF" });
     const p = Body.safeParse(await req.json());
     if (!p.success) throw new HttpError(400, "Thiếu ảnh");

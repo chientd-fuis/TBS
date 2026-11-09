@@ -3,6 +3,7 @@ import { requireActiveUser } from "@/lib/guards";
 import { APPROVED_SHIFT, CoverRequest, ShiftAssignment, Store, User } from "@/lib/models";
 import CoverForm, { type CoverCandidate } from "@/components/user/CoverForm";
 import CancelCoverButton from "@/components/user/CancelCoverButton";
+import SwapForm, { type SwapPeer } from "@/components/user/SwapForm";
 import { addDays, daysOfMonth, isYmd, localDate, localMonth, monthRange, nextMonth, prevMonth, viMonth, weekDays, weekdayVi, weekStartOf } from "@/lib/time";
 import { Alert, Card, LinkButton } from "@/components/ui";
 import { cn } from "@/lib/format";
@@ -77,9 +78,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const upcoming = await ShiftAssignment.find({ userId: user._id, date: { $gte: today, $lte: addDays(today, 13) }, ...APPROVED_SHIFT })
     .sort({ date: 1, startTime: 1 })
     .lean();
+  // yêu cầu tôi gửi + yêu cầu đổi ca người khác gửi tới tôi
   const covers = await CoverRequest.find({
-    fromUserId: user._id,
-    $or: [{ status: "PENDING" }, { decidedAt: { $gte: new Date(Date.now() - 7 * 86400_000) } }],
+    $and: [
+      { $or: [{ fromUserId: user._id }, { toUserId: user._id, kind: "SWAP" }] },
+      { $or: [{ status: "PENDING" }, { decidedAt: { $gte: new Date(Date.now() - 7 * 86400_000) } }] },
+    ],
   })
     .sort({ createdAt: -1 })
     .lean();
@@ -92,7 +96,26 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     store: allStores.get(String(p.storeId)) ?? "",
     same: String(p.storeId) === String(user.storeId),
   }));
-  const pendingCover = new Map(covers.filter((c) => c.status === "PENDING").map((c) => [String(c.shiftAssignmentId), c]));
+  // Đổi ca: ca đã duyệt (14 ngày tới) của người khác – chỉ đổi được khi cả 2 đều có ca đã duyệt
+  const peerShifts = await ShiftAssignment.find({ userId: { $in: people.map((p) => p._id) }, date: { $gte: today, $lte: addDays(today, 13) }, ...APPROVED_SHIFT })
+    .select("userId storeId date shiftName startTime endTime")
+    .sort({ date: 1, startTime: 1 })
+    .lean();
+  const peers: SwapPeer[] = candidates.map((c) => ({
+    ...c,
+    shifts: peerShifts
+      .filter((s) => String(s.userId) === c.id)
+      .map((s) => ({
+        id: String(s._id),
+        label: `${weekdayVi(s.date)} ${s.date.slice(8)}/${s.date.slice(5, 7)} · ${s.shiftName ?? ""} ${s.startTime}–${s.endTime}${String(s.storeId) !== String(user.storeId) ? ` · ${allStores.get(String(s.storeId)) ?? ""}` : ""}`,
+      })),
+  }));
+  const pendingCover = new Map(
+    covers
+      .filter((c) => c.status === "PENDING")
+      .flatMap((c) => [[String(c.shiftAssignmentId), c] as const, ...(c.toShiftAssignmentId ? [[String(c.toShiftAssignmentId), c] as const] : [])]),
+  );
+  const dmy = (d?: string | null) => (d ? `${d.slice(8)}/${d.slice(5, 7)}` : "");
   const COVER_ST = { PENDING: ["Chờ admin duyệt", "text-warn"], APPROVED: ["Đã duyệt", "text-secondary-dark"], REJECTED: ["Bị từ chối", "text-danger"], CANCELLED: ["Đã huỷ", "text-ink/50"] } as const;
 
   return (
@@ -144,7 +167,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </>
       )}
 
-      <Card title="Nhờ làm hộ ca">
+      <Card title="Nhờ làm hộ / Đổi ca">
         {!upcoming.length ? (
           <p className="text-sm text-ink/60">Bạn chưa có ca đã duyệt trong 2 tuần tới.</p>
         ) : (
@@ -159,9 +182,18 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     {String(m.storeId) !== String(user.storeId) && <span className="text-xs text-ink/60"> · {allStores.get(String(m.storeId))}</span>}
                   </span>
                   {p ? (
-                    <span className="text-xs text-warn">Đang nhờ {names.get(String(p.toUserId)) ?? "?"} – chờ duyệt</span>
+                    <span className="text-xs text-warn">
+                      {p.kind === "SWAP"
+                        ? String(p.fromUserId) === String(user._id)
+                          ? `Đang xin đổi với ${names.get(String(p.toUserId)) ?? "?"} – chờ duyệt`
+                          : `${names.get(String(p.fromUserId)) ?? "?"} xin đổi ca này – chờ duyệt`
+                        : `Đang nhờ ${names.get(String(p.toUserId)) ?? "?"} – chờ duyệt`}
+                    </span>
                   ) : (
-                    <CoverForm shiftId={String(m._id)} label={label} candidates={candidates} />
+                    <span className="flex flex-wrap gap-1.5">
+                      <CoverForm shiftId={String(m._id)} label={label} candidates={candidates} />
+                      <SwapForm shiftId={String(m._id)} label={label} peers={peers} />
+                    </span>
                   )}
                 </li>
               );
@@ -170,25 +202,38 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         )}
         {covers.length > 0 && (
           <div className="mt-3 border-t border-[#f1e6c8] pt-2">
-            <p className="mb-1 text-xs font-semibold text-accent">Yêu cầu của bạn</p>
+            <p className="mb-1 text-xs font-semibold text-accent">Yêu cầu nhờ làm hộ / đổi ca</p>
             <ul className="space-y-1 text-xs">
               {covers.map((c) => {
                 const st = COVER_ST[c.status as keyof typeof COVER_ST];
+                const mineReq = String(c.fromUserId) === String(user._id);
+                const a = `${c.shiftName} ${c.startTime}–${c.endTime} ${dmy(c.date)}`;
+                const b = `${c.toShiftName} ${c.toStartTime}–${c.toEndTime} ${dmy(c.toDate)}`;
                 return (
                   <li key={String(c._id)} className="flex flex-wrap items-center gap-x-2">
                     <span className="flex-1">
-                      Nhờ <b>{names.get(String(c.toUserId)) ?? "?"}</b> · {c.shiftName} {c.startTime}–{c.endTime} {c.date.slice(8)}/{c.date.slice(5, 7)}
+                      {c.kind === "SWAP" ? (
+                        mineReq ? (
+                          <>⇄ Đổi ca <b>{a}</b> của bạn lấy <b>{b}</b> của <b>{names.get(String(c.toUserId)) ?? "?"}</b></>
+                        ) : (
+                          <><b>{names.get(String(c.fromUserId)) ?? "?"}</b> xin đổi ca <b>{a}</b> của họ lấy <b>{b}</b> của bạn</>
+                        )
+                      ) : (
+                        <>Nhờ <b>{names.get(String(c.toUserId)) ?? "?"}</b> · {a}</>
+                      )}
                       {c.reply && <span className="text-ink/60"> – {c.reply}</span>}
                     </span>
                     <span className={st[1]}>{st[0]}</span>
-                    {c.status === "PENDING" && <CancelCoverButton id={String(c._id)} />}
+                    {c.status === "PENDING" && mineReq && <CancelCoverButton id={String(c._id)} />}
                   </li>
                 );
               })}
             </ul>
           </div>
         )}
-        <p className="mt-2 text-[11px] text-ink/50">Admin duyệt xong, ca sẽ chuyển sang người làm hộ và người đó nhận được thông báo.</p>
+        <p className="mt-2 text-[11px] text-ink/50">
+          Admin duyệt xong lịch làm việc tự cập nhật và cả 2 người nhận được thông báo. Đổi ca: chỉ đổi được khi cả 2 người đều có ca đã được duyệt.
+        </p>
       </Card>
     </>
   );

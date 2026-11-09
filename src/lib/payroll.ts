@@ -2,8 +2,9 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, WageHistory } from "./models";
 import { computePay } from "./calc";
+import { holidayNote, loadHolidays } from "./holiday";
 import { payStoreFilter } from "./attendance";
-import { localDate, localMonth, nextMonth, prevMonth } from "./time";
+import { localDate, localMonth, monthRange, nextMonth, prevMonth } from "./time";
 
 /* Bảng lương tháng – spec 3.7 */
 
@@ -31,6 +32,8 @@ export async function generatePayroll(storeId: string, month: string) {
   const staff = await User.find({ storeId, status: "ACTIVE" }).select("_id").lean();
   staff.forEach((u) => userIds.add(String(u._id)));
 
+  const { first, last } = monthRange(month);
+  const holidays = await loadHolidays(first, last);
   const existing = await PayrollItem.find({ payrollId: payroll._id }).lean();
   const keep = new Map(existing.map((i) => [String(i.userId), i]));
 
@@ -49,13 +52,17 @@ export async function generatePayroll(storeId: string, month: string) {
     const history = await WageHistory.find({ userId: uid }).sort({ effectiveFrom: 1 }).lean();
     const myAtts = atts.filter((a) => String(a.userId) === uid);
     const myBps = bps.filter((b) => String(b.userId) === uid);
-    const hoursByWage = myAtts.map((a) => ({ hours: a.roundedHours || 0, wage: wageAt(history, a.workDate, user.hourlyWage || 0) }));
+    const hoursByWage = myAtts.map((a) => ({
+      hours: a.roundedHours || 0,
+      wage: wageAt(history, a.workDate, user.hourlyWage || 0),
+      mult: holidays.get(a.workDate)?.multiplier ?? 1, // ngày lễ ×2 / ×3 / ×4
+    }));
     const totalBonus = myBps.filter((b) => b.kind === "BONUS").reduce((s, b) => s + b.amountVnd, 0);
     const totalPenalty = myBps.filter((b) => b.kind === "PENALTY").reduce((s, b) => s + b.amountVnd, 0);
     const prev = keep.get(uid);
     const allowance = prev?.allowance ?? 0;
     const advance = prev?.advance ?? 0;
-    const { totalHours, basePay, netPay } = computePay({ hoursByWage, allowance, totalBonus, totalPenalty, advance });
+    const { totalHours, basePay, netPay, holidayHours, holidayExtra } = computePay({ hoursByWage, allowance, totalBonus, totalPenalty, advance });
     await PayrollItem.updateOne(
       { payrollId: payroll._id, userId: uid },
       {
@@ -74,6 +81,9 @@ export async function generatePayroll(storeId: string, month: string) {
           lateCount: myAtts.filter((a) => (a.lateMinutes || 0) > 0).length,
           earlyCount: myAtts.filter((a) => (a.earlyMinutes || 0) > 0).length,
           ...support(myAtts),
+          holidayHours,
+          holidayExtra,
+          holidayNote: holidayNote(myAtts, holidays),
         },
       },
       { upsert: true },
@@ -145,12 +155,14 @@ export { nextMonth };
 
 /**
  * Lương TẠM TÍNH của 1 cơ sở trong tháng (tới thời điểm hiện tại) – dùng cho Tổng quan.
- * = Σ giờ tính công (lượt đã check-out) × lương giờ hiệu lực + thưởng − phạt.
+ * = Σ giờ tính công (lượt đã check-out) × lương giờ hiệu lực × hệ số ngày lễ + thưởng − phạt.
  * Chưa gồm phụ cấp / tạm ứng (chỉ có khi lập bảng lương).
  */
 export async function estimateStorePay(storeId: Types.ObjectId | string, month: string) {
   await connectDB();
   const atts = await Attendance.find({ storeId, month, status: "COMPLETED" }).select("userId workDate roundedHours").lean();
+  const { first, last } = monthRange(month);
+  const holidays = await loadHolidays(first, last);
   const bps = await BonusPenalty.find({ storeId, month }).select("kind amountVnd").lean();
   const uids = [...new Set(atts.map((a) => String(a.userId)))];
   const users = await User.find({ _id: { $in: uids } }).select("hourlyWage").lean();
@@ -162,7 +174,7 @@ export async function estimateStorePay(storeId: Types.ObjectId | string, month: 
     const h = histories.filter((x) => String(x.userId) === String(a.userId));
     const w = wageAt(h, a.workDate, u?.hourlyWage || 0);
     hours += a.roundedHours || 0;
-    basePay += (a.roundedHours || 0) * w;
+    basePay += (a.roundedHours || 0) * w * (holidays.get(a.workDate)?.multiplier ?? 1);
   }
   const bonus = bps.filter((b) => b.kind === "BONUS").reduce((s, b) => s + b.amountVnd, 0);
   const penalty = bps.filter((b) => b.kind === "PENALTY").reduce((s, b) => s + b.amountVnd, 0);

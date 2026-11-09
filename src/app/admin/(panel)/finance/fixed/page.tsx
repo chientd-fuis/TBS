@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { FixedCost, Store } from "@/lib/models";
 import { daysInMonth } from "@/lib/finance";
@@ -13,7 +13,7 @@ const vnd = (n: number) => n.toLocaleString("vi-VN");
 
 /** Tiền thuê nhà từng cơ sở – chi phí cố định duy nhất, chia đều theo ngày khi tính lãi lỗ. */
 export default async function RentPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
-  await requireAdmin();
+  await requirePerm("finance.rent");
   await connectDB();
   const sp = await searchParams;
   const month = localMonth(new Date());

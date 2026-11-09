@@ -12,7 +12,7 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Làm tròn giờ công (bước 0,5h, làm tròn xuống, có tuỳ chọn dung sai), cảnh báo đi muộn / về sớm theo ca | 4.3, 4.4 |
 | | Xem chấm công tháng, lịch ca, bảng lương (sau khi công bố), gửi yêu cầu điều chỉnh, khiếu nại lương | 4.5, 4.6 |
 | | Đăng ký ca theo tuần (chỉ tuần tương lai), xem lịch của mình dạng bảng ca × ngày theo tuần / tháng | 4.7 |
-| Admin | Đăng nhập: Chủ bằng Google, admin khác bằng **mật khẩu chung** + tên hiển thị; đổi mật khẩu (đăng xuất mọi phiên cũ); Chủ đặt lại mật khẩu | 2.1 |
+| Admin | Đăng nhập bằng **Gmail**: Chủ (OWNER_EMAIL) + admin được Chủ thêm / duyệt ở **Quản lý admin**; phân quyền từng chức năng (mặc định admin không có quyền tài chính, lương, xuất Excel, cơ sở, duyệt chấm công bù…) | 2.1 |
 | | Dashboard hôm nay, duyệt đăng ký (+ thiết bị đầu tiên), nhân viên (lương giờ có ngày hiệu lực), thiết bị + cảnh báo nghi chấm hộ | 3.1, 3.3 |
 | | Cơ sở (3 cơ sở tạo sẵn), ca mẫu (hỗ trợ qua đêm), xếp ca hàng loạt, copy tuần trước | 1.2, 3.2, 3.4 |
 | | **Xếp ca tự động**: lịch tuần theo mẫu, duyệt đăng ký (từng ca / từng người / tất cả), xếp tay, định mức người/ca, xếp tự động có xem trước (ít ca nhất, hay làm ca, hay làm cùng), tổng hợp số ca & cảnh báo thiếu người | 3.2.1 |
@@ -65,7 +65,7 @@ Camera & GPS cần **HTTPS** (localhost được miễn). Test trên điện tho
 
 ### 5. Lần đầu sử dụng
 1. Chủ vào `/admin/login` → **Đăng nhập bằng Google** (email = `OWNER_EMAIL`).
-2. **Cài đặt** → đặt mật khẩu admin chung → **Kết nối Google Drive**.
+2. **Quản lý admin** → thêm Gmail admin + phân quyền · **Cài đặt** → **Kết nối Google Drive**.
 3. **Cơ sở** → nhập toạ độ + bán kính cho TBS Geleximco, TBS Văn Phú, TBS Đô Nghĩa (đứng tại quán bấm "Dùng vị trí hiện tại", hoặc dán toạ độ từ Google Maps).
 4. **Ca làm việc** → tạo ca mẫu, xếp ca.
 5. Nhân viên mở app trên điện thoại → đăng nhập Google → đăng ký → admin **Duyệt đăng ký**.
@@ -84,7 +84,7 @@ Camera & GPS cần **HTTPS** (localhost được miễn). Test trên điện tho
 Nhân viên bấm **Chụp ảnh chốt ca** → ảnh gửi Gemini → điền sẵn Doanh thu / Tiền mặt / Tài khoản / Thu chi / Grab / Shopee → cảnh báo nếu ảnh **thiếu Tiền mặt, Tài khoản hoặc ngày** (hay ngày trên ảnh khác ngày chốt). Nhân viên kiểm tra, sửa rồi bấm **Chốt ca & gửi nhóm**.
 
 1. Vào https://aistudio.google.com/apikey → **Create API key**.
-2. Thêm env `GEMINI_API_KEY` (Vercel + `.env.local`). Tuỳ chọn `GEMINI_MODEL` (mặc định `gemini-2.5-flash`; rẻ hơn: `gemini-2.5-flash-lite`).
+2. Thêm env `GEMINI_API_KEY` (Vercel + `.env.local`). Key hết lượt miễn phí → tự chuyển sang `GEMINI_API_KEY_2` … `GEMINI_API_KEY_9` (hoặc ghi nhiều key cách nhau dấu phẩy) – mỗi key phải ở 1 project Google khác nhau. Tuỳ chọn `GEMINI_MODEL` (mặc định `gemini-2.5-flash`; rẻ hơn: `gemini-2.5-flash-lite`).
 3. Gói miễn phí giới hạn lượt/ngày và Google được dùng dữ liệu để cải thiện sản phẩm – nên bật billing (gói trả phí, vài trăm đồng/ảnh) để không bị dùng dữ liệu và không hết lượt.
 
 Model chính hết lượt / quá tải → app tự thử model dự phòng (`GEMINI_FALLBACK_MODELS`, mặc định `gemini-2.5-flash-lite,gemini-3-flash-preview`), lỗi báo rõ "hết lượt trong ngày" hay "quá tải". Kiểm tra key và hạn mức từng model: `npm run check-gemini`.
@@ -131,7 +131,7 @@ src/
   app/
     (user)/            # site nhân viên: chấm công, lịch sử, lịch ca, bảng lương, tài khoản
     onboarding/ pending/ login/
-    admin/login/       # đăng nhập admin (mật khẩu chung / Google của Chủ)
+    admin/login/       # đăng nhập trang quản lý bằng Gmail (Chủ / admin được duyệt)
     admin/(panel)/     # site admin
     admin/actions/     # server actions (auth, people, ops, settings)
     api/               # attendance, device, onboarding, photo, export, google, cron, auth

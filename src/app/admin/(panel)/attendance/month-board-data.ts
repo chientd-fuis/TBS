@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { APPROVED_SHIFT, Attendance, ShiftAssignment, ShiftTemplate, User } from "@/lib/models";
 import { buildMonthBoard } from "@/lib/attendance-board";
 import { daysOfMonth, monthRange } from "@/lib/time";
+import { loadHolidays } from "@/lib/holiday";
 
 /** Nạp dữ liệu + dựng bảng chấm công theo ca cả tháng của 1 cơ sở. */
 export async function loadMonthBoard(
@@ -68,5 +69,6 @@ export async function loadMonthBoard(
     now: new Date(),
     minRows: onlyUserId ? 1 : 2,
   });
-  return { days, templates, cells, rowsPerTpl, storeNames };
+  const holidays = Object.fromEntries(await loadHolidays(first, last));
+  return { days, templates, cells, rowsPerTpl, storeNames, holidays };
 }

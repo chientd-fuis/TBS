@@ -1,17 +1,33 @@
 "use client";
 import { SHEET_LAYOUTS } from "@/lib/revenue";
 import { useActionState, useState } from "react";
-import { Crosshair, MapPinned } from "lucide-react";
+import { Crosshair, MapPinned, Wifi } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
-import { saveStore } from "../../actions/ops";
+import { currentPublicIp, saveStore } from "../../actions/ops";
 
-type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean };
+type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
 
 export default function StoreForm({ store }: { store: S | null }) {
   const [state, action, pending] = useActionState(saveStore, null);
   const [lat, setLat] = useState(store?.lat?.toString() ?? "");
   const [lng, setLng] = useState(store?.lng?.toString() ?? "");
   const [locErr, setLocErr] = useState("");
+  const [gps, setGps] = useState(store?.checkGps ?? true);
+  const [wifi, setWifi] = useState(store?.checkWifi ?? false);
+  const [ips, setIps] = useState((store?.wifiIps ?? []).join("\n"));
+  const [ipMsg, setIpMsg] = useState("");
+  const addMyIp = async () => {
+    setIpMsg("Đang lấy IP…");
+    try {
+      const r = await currentPublicIp();
+      if (!r.ip) return setIpMsg("Không lấy được IP");
+      const list = ips.split(/[\s,;]+/).filter(Boolean);
+      if (!list.includes(r.ip)) setIps([...list, r.ip].join("\n"));
+      setIpMsg(`IP mạng đang dùng: ${r.ip}${r.ip.includes(":") ? " (IPv6 – cả dải /64)" : ""}. Chỉ đúng khi máy này đang kết nối WiFi quán (tắt 4G). Nhớ bấm Lưu.`);
+    } catch {
+      setIpMsg("Không lấy được IP");
+    }
+  };
   const useHere = () =>
     navigator.geolocation.getCurrentPosition(
       (p) => {
@@ -52,6 +68,42 @@ export default function StoreForm({ store }: { store: S | null }) {
           </Select>
         </Field>
       </div>
+      <fieldset className="space-y-2 rounded-xl bg-cream p-3">
+        <legend className="px-1 text-sm font-semibold text-accent">Cách chấm công (bật nhiều cách → nhân viên phải qua tất cả)</legend>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" name="checkFace" defaultChecked={store?.checkFace ?? true} className="accent-[#3c9c54]" /> Chụp ảnh khuôn mặt
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" name="checkGps" checked={gps} onChange={(e) => setGps(e.target.checked)} className="accent-[#3c9c54]" /> Vị trí (GPS trong bán kính)
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" name="checkWifi" checked={wifi} onChange={(e) => setWifi(e.target.checked)} className="accent-[#3c9c54]" /> WiFi của quán
+          </label>
+        </div>
+        {!gps && !wifi && <p className="text-xs text-warn">Đang tắt cả vị trí và WiFi – nhân viên chấm công được ở bất kỳ đâu.</p>}
+        {wifi && (
+          <div className="space-y-2 border-t border-[#f1e6c8] pt-2">
+            <p className="text-xs text-ink/70">
+              Trình duyệt điện thoại không cho web đọc tên WiFi, nên app kiểm tra bằng <b>IP Internet của quán</b>: máy nhân viên phải đang dùng WiFi quán (không dùng
+              4G / VPN / Chuyển tiếp bảo mật iCloud). Cách lấy IP: mở trang này <b>trên điện thoại đang kết nối WiFi quán</b> (tắt 4G) → bấm &quot;Lấy IP mạng đang dùng&quot;
+              → Lưu. Nhà mạng có thể đổi IP khi modem khởi động lại – khi nhân viên báo lỗi WiFi thì lấy lại IP (hoặc đăng ký IP tĩnh với nhà mạng).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-[14rem_1fr]">
+              <Field label="Tên WiFi (hiện cho nhân viên)"><Input name="wifiName" defaultValue={store?.wifiName ?? ""} placeholder="VD TBS_Geleximco" /></Field>
+              <Field label="IP WiFi quán" hint="Mỗi dòng 1 IP (IPv4, hoặc IPv6 – tự lấy cả dải /64). Quán có 2 mạng thì nhập cả 2.">
+                <textarea name="wifiIps" rows={2} value={ips} onChange={(e) => setIps(e.target.value)} className="w-full rounded-xl border border-[#f1e6c8] bg-white px-3 py-2 font-mono text-sm" placeholder="113.190.xx.xx" />
+              </Field>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => void addMyIp()}><Wifi size={16} /> Lấy IP mạng đang dùng</Button>
+              {ipMsg && <span className="text-xs text-ink/70">{ipMsg}</span>}
+            </div>
+          </div>
+        )}
+        {!wifi && <input type="hidden" name="wifiIps" value={ips} />}
+        {!wifi && <input type="hidden" name="wifiName" value={store?.wifiName ?? ""} />}
+      </fieldset>
       <Field label="Telegram chat ID nhóm chốt ca" hint="VD: -1001234567890. Để trống = dùng nhóm mặc định (TELEGRAM_CHAT_ID). Bấm 'Lưu' rồi 'Gửi thử' để kiểm tra.">
         <Input name="telegramChatId" defaultValue={store?.telegramChatId ?? ""} placeholder="-100…" />
       </Field>

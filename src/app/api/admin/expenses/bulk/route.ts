@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdmin, adminActor } from "@/lib/admin-session";
+import { can } from "@/lib/permissions";
 import { connectDB } from "@/lib/db";
 import { Expense, Store } from "@/lib/models";
 import { audit } from "@/lib/audit";
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
   try {
     const admin = await getAdmin();
     if (!admin) throw new HttpError(401, "Phiên admin đã hết hạn");
+    if (!can(admin, "finance.bills")) throw new HttpError(403, "Bạn chưa được cấp quyền Bill / chuyển khoản");
     const p = Body.safeParse(await req.json());
     if (!p.success) throw new HttpError(400, p.error.issues[0]?.message ?? "Dữ liệu không hợp lệ");
     const { rows, photos, allocation } = p.data;

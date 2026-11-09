@@ -7,7 +7,7 @@ export default async function FinanceLayout({ children }: { children: React.Reac
   return (
     <>
       <PageTitle sub="Lãi toàn chuỗi = Σ lãi gộp các cơ sở (doanh thu, chi trong ca, lương, thuê nhà) − chi phí chung admin nhập">Tài chính</PageTitle>
-      <FinanceTabs isOwner={admin.kind === "OWNER"} />
+      <FinanceTabs isOwner={admin.kind === "OWNER"} perms={admin.perms} />
       {children}
     </>
   );

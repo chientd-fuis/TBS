@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, LogIn, LogOut, MapPin, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Loader2, LogIn, LogOut, MapPin, TriangleAlert, Wifi } from "lucide-react";
 import { Alert, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/format";
 import FaceCamera, { type FaceCapture } from "./FaceCamera";
 import { DeviceNotice } from "./DeviceNotice";
 import { fingerprint, useDevice } from "./useDevice";
+import type { CheckMethods } from "@/lib/checkin-methods";
 
 type Result = {
   action: "CHECK_IN" | "CHECK_OUT";
@@ -27,7 +28,20 @@ function getPosition(): Promise<GeolocationPosition> {
   );
 }
 
-export default function CheckInWidget({ openSince, storeName, supportNote }: { openSince: string | null; storeName: string; supportNote?: string }) {
+export default function CheckInWidget({
+  openSince,
+  storeName,
+  supportNote,
+  methods = { face: true, gps: true, wifi: false },
+  wifiNames = [],
+}: {
+  openSince: string | null;
+  storeName: string;
+  supportNote?: string;
+  /** cách xác thực cơ sở bật: chụp mặt / vị trí / WiFi */
+  methods?: CheckMethods;
+  wifiNames?: string[];
+}) {
   const router = useRouter();
   const device = useDevice();
   const [step, setStep] = useState<"idle" | "locating" | "camera" | "sending">("idle");
@@ -46,11 +60,15 @@ export default function CheckInWidget({ openSince, storeName, supportNote }: { o
 
   const start = async () => {
     setError("");
-    setStep("locating");
+    let p: GeolocationPosition | null = null;
     try {
-      const p = await getPosition();
+      if (methods.gps) {
+        setStep("locating");
+        p = await getPosition();
+      }
       setPos(p);
-      setStep("camera");
+      if (methods.face) setStep("camera");
+      else void submit(null, p); // không cần chụp mặt → gửi luôn
     } catch (e) {
       const ge = e as GeolocationPositionError;
       setError(
@@ -63,25 +81,23 @@ export default function CheckInWidget({ openSince, storeName, supportNote }: { o
   };
 
   const submit = useCallback(
-    async (c: FaceCapture) => {
-      if (!pos) return;
+    async (c: FaceCapture | null, at: GeolocationPosition | null = pos) => {
+      if (methods.gps && !at) return;
       setStep("sending");
       setError("");
       const r = await fetch("/api/attendance", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          photo: c.photo,
+          ...(at ? { lat: at.coords.latitude, lng: at.coords.longitude, accuracy: at.coords.accuracy } : {}),
+          ...(c ? { photo: c.photo } : {}),
           fingerprint: await fingerprint().catch(() => undefined),
         }),
-      });
-      const j = await r.json();
-      if (!r.ok) {
+      }).catch(() => null);
+      const j = r ? await r.json().catch(() => ({})) : { error: "Mất kết nối mạng – thử lại" };
+      if (!r || !r.ok) {
         setError(j.error || "Chấm công thất bại");
-        setStep(j.code === "FACE_MISMATCH" ? "camera" : "idle");
+        setStep(j.code === "FACE_MISMATCH" && methods.face ? "camera" : "idle");
         return;
       }
       const res = j as Result;
@@ -99,7 +115,7 @@ export default function CheckInWidget({ openSince, storeName, supportNote }: { o
       setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();
     },
-    [pos, router, toast],
+    [pos, router, toast, methods.gps, methods.face],
   );
 
   const deviceOk = device.state === "APPROVED";
@@ -133,11 +149,13 @@ export default function CheckInWidget({ openSince, storeName, supportNote }: { o
         </div>
       )}
 
-      {step === "camera" || step === "sending" ? (
+      {methods.face && (step === "camera" || step === "sending") ? (
         <Card>
-          <p className="mb-2 flex items-center gap-1 text-xs text-ink/70">
-            <MapPin size={14} /> Đã lấy vị trí (sai số ±{Math.round(pos?.coords.accuracy || 0)}m)
-          </p>
+          {pos && (
+            <p className="mb-2 flex items-center gap-1 text-xs text-ink/70">
+              <MapPin size={14} /> Đã lấy vị trí (sai số ±{Math.round(pos.coords.accuracy || 0)}m)
+            </p>
+          )}
           <FaceCamera
             onCapture={submit}
             autoCapture={false}
@@ -159,12 +177,17 @@ export default function CheckInWidget({ openSince, storeName, supportNote }: { o
             <Button
               variant={isCheckOut ? "secondary" : "primary"}
               className="h-20 w-full rounded-2xl text-xl"
-              disabled={!deviceOk || step === "locating"}
+              disabled={!deviceOk || step === "locating" || step === "sending"}
               onClick={start}
             >
-              {step === "locating" ? <Loader2 className="animate-spin" /> : isCheckOut ? <LogOut /> : <LogIn />}
-              {step === "locating" ? "Đang lấy vị trí…" : isCheckOut ? "CHECK-OUT" : "CHECK-IN"}
+              {step === "locating" || step === "sending" ? <Loader2 className="animate-spin" /> : isCheckOut ? <LogOut /> : <LogIn />}
+              {step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi nhận…" : isCheckOut ? "CHECK-OUT" : "CHECK-IN"}
             </Button>
+            {methods.wifi && (
+              <p className="flex items-center justify-center gap-1 text-xs text-ink/70">
+                <Wifi size={14} /> Kết nối WiFi của quán{wifiNames.length ? ` (${wifiNames.join(" / ")})` : ""} trước khi chấm công
+              </p>
+            )}
             {device.state === "loading" && <p className="text-xs text-ink/60">Đang kiểm tra thiết bị…</p>}
           </div>
         </Card>

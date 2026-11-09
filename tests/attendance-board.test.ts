@@ -43,3 +43,30 @@ test("bảng chấm công theo ca: đã làm / bỏ ca / muộn-sớm / làm th�
   const S4 = cells["2026-11-04|S"][0];
   assert.deepEqual([S4.name, S4.tag?.label, S4.tag?.kind, S4.linkStoreId], ["Chi", "CS2", "from", "B"]);
 });
+
+test("bảng chấm công theo ca: đang trong ca nhấp nháy – xuyên ca / đã ra ca sáng rồi vào lại ca chiều", () => {
+  const now = at(4, 15);
+  const { cells } = buildMonthBoard({
+    ...base,
+    now,
+    assignments: [
+      { id: "a1", userId: "u1", tplId: "S", date: "2026-11-04", startTime: "08:00", endTime: "13:00" },
+      { id: "a2", userId: "u2", tplId: "S", date: "2026-11-04", startTime: "08:00", endTime: "13:00" },
+      { id: "a3", userId: "u2", tplId: "C", date: "2026-11-04", startTime: "13:00", endTime: "18:00" },
+    ],
+    attendances: [
+      // u1 vào ca sáng, giờ là ca chiều vẫn chưa check-out (không có lịch ca chiều) → xuyên ca
+      att({ id: "t1", userId: "u1", workDate: "2026-11-04", checkInAt: at(4, 8), status: "OPEN" }),
+      // u2 ra ca sáng rồi vào lại ca chiều
+      att({ id: "t2", userId: "u2", workDate: "2026-11-04", checkInAt: at(4, 8), checkOutAt: at(4, 12, 55) }),
+      att({ id: "t3", userId: "u2", workDate: "2026-11-04", checkInAt: at(4, 13), status: "OPEN" }),
+    ],
+  });
+  const pick = (k: string, u: string) => cells[k].find((c) => c.userId === u);
+  assert.equal(pick("2026-11-04|S", "u1")?.live, true);
+  assert.equal(pick("2026-11-04|C", "u1")?.live, true);
+  assert.equal(cells["2026-11-04|C"].filter((c) => c.userId === "u1").length, 1);
+  assert.equal(pick("2026-11-04|S", "u2")?.live, undefined);
+  assert.equal(pick("2026-11-04|S", "u2")?.state, "worked");
+  assert.equal(pick("2026-11-04|C", "u2")?.live, true);
+});

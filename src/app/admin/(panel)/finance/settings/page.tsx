@@ -1,4 +1,4 @@
-import { requireOwner } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { ReportLog, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
@@ -15,7 +15,7 @@ export const preferredRegion = "sin1";
 export const maxDuration = 60;
 
 export default async function FinanceSettingsPage() {
-  await requireOwner();
+  await requirePerm("finance.settings");
   await connectDB();
   const s = await getSettings();
   const stores = await Store.find().sort({ createdAt: 1 }).lean();

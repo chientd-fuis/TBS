@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { AdjustmentRequest, CoverRequest, PayrollFeedback, Store, User } from "@/lib/models";
 import { resolveCover } from "../../actions/cover";
 import { weekdayVi } from "@/lib/time";
@@ -12,7 +13,8 @@ export const dynamic = "force-dynamic";
 
 /** Yêu cầu điều chỉnh chấm công + phản hồi bảng lương của nhân viên */
 export default async function RequestsPage() {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const canAdj = can(admin, "adjustments"); // duyệt chấm công bù: Chủ hoặc admin được cấp quyền
   const [covers, coversDone, reqs, done, fbs] = await Promise.all([
     CoverRequest.find({ status: "PENDING" }).sort({ date: 1 }).lean(),
     CoverRequest.find({ status: { $ne: "PENDING" } }).sort({ decidedAt: -1 }).limit(10).lean(),
@@ -26,23 +28,41 @@ export default async function RequestsPage() {
   return (
     <>
       <PageTitle>Yêu cầu từ nhân viên</PageTitle>
-      <Card title={`Nhờ làm hộ ca chờ duyệt (${covers.length})`} className="mb-4">
+      <Card title={`Nhờ làm hộ / đổi ca chờ duyệt (${covers.length})`} className="mb-4">
         {covers.length === 0 ? (
           <Empty>Không có yêu cầu</Empty>
         ) : (
           <div className="space-y-3">
             {covers.map((c) => (
-              <div key={String(c._id)} className="rounded-xl bg-cream p-3 text-sm">
-                <p>
-                  <b>{users.get(String(c.fromUserId))}</b> nhờ <b>{users.get(String(c.toUserId))}</b> làm hộ
-                </p>
-                <p>
-                  {weekdayVi(c.date)} {viDate(c.date)} · Ca {c.shiftName} {c.startTime}–{c.endTime} · {stores.get(String(c.storeId))}
-                </p>
+              <div key={String(c._id)} className={`rounded-xl p-3 text-sm ${c.kind === "SWAP" ? "bg-[#eff6ff]" : "bg-cream"}`}>
+                {c.kind === "SWAP" ? (
+                  <>
+                    <p>
+                      <Badge tone="blue">⇄ Đổi ca</Badge> <b>{users.get(String(c.fromUserId))}</b> ↔ <b>{users.get(String(c.toUserId))}</b>
+                    </p>
+                    <p>
+                      <b>{users.get(String(c.fromUserId))}</b> đưa: {weekdayVi(c.date)} {viDate(c.date)} · Ca {c.shiftName} {c.startTime}–{c.endTime} · {stores.get(String(c.storeId))}
+                    </p>
+                    <p>
+                      <b>{users.get(String(c.toUserId))}</b> đưa: {c.toDate && `${weekdayVi(c.toDate)} ${viDate(c.toDate)}`} · Ca {c.toShiftName} {c.toStartTime}–{c.toEndTime} ·{" "}
+                      {stores.get(String(c.toStoreId ?? c.storeId))}
+                    </p>
+                    <p className="text-xs text-ink/60">Duyệt xong: 2 người hoán đổi ca cho nhau, lịch làm việc cập nhật ngay.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      <b>{users.get(String(c.fromUserId))}</b> nhờ <b>{users.get(String(c.toUserId))}</b> làm hộ
+                    </p>
+                    <p>
+                      {weekdayVi(c.date)} {viDate(c.date)} · Ca {c.shiftName} {c.startTime}–{c.endTime} · {stores.get(String(c.storeId))}
+                    </p>
+                  </>
+                )}
                 {c.note && <p className="text-ink/70">Lời nhắn: {c.note}</p>}
                 <p className="text-xs text-ink/50">Gửi {viDateTime(c.createdAt)}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <ActionForm action={resolveCover} submitLabel="Duyệt – chuyển ca" variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
+                  <ActionForm action={resolveCover} submitLabel={c.kind === "SWAP" ? "Duyệt – đổi ca" : "Duyệt – chuyển ca"} variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
                     <input type="hidden" name="id" value={String(c._id)} />
                     <input type="hidden" name="op" value="approve" />
                     <Input name="reply" placeholder="Ghi chú (tuỳ chọn)" className="w-44" />
@@ -63,7 +83,15 @@ export default async function RequestsPage() {
             <ul className="mt-2 space-y-1">
               {coversDone.map((c) => (
                 <li key={String(c._id)}>
-                  {users.get(String(c.fromUserId))} → {users.get(String(c.toUserId))} · {viDate(c.date)} ca {c.shiftName} ·{" "}
+                  {c.kind === "SWAP" ? (
+                    <>
+                      ⇄ {users.get(String(c.fromUserId))} ({viDate(c.date)} ca {c.shiftName}) ↔ {users.get(String(c.toUserId))} ({c.toDate ? viDate(c.toDate) : ""} ca {c.toShiftName}) ·{" "}
+                    </>
+                  ) : (
+                    <>
+                      {users.get(String(c.fromUserId))} → {users.get(String(c.toUserId))} · {viDate(c.date)} ca {c.shiftName} ·{" "}
+                    </>
+                  )}
                   <Badge tone={c.status === "APPROVED" ? "green" : c.status === "REJECTED" ? "red" : "gray"}>
                     {c.status === "APPROVED" ? "Đã duyệt" : c.status === "REJECTED" ? "Từ chối" : "Đã huỷ"}
                   </Badge>
@@ -74,7 +102,10 @@ export default async function RequestsPage() {
           </details>
         )}
       </Card>
-      <Card title={`Điều chỉnh chấm công chờ duyệt (${reqs.length})`}>
+      <Card title={`Yêu cầu chấm công bù chờ duyệt (${reqs.length})`}>
+        {!canAdj && reqs.length > 0 && (
+          <p className="mb-2 text-xs text-warn">Chỉ Chủ hoặc admin được Chủ cấp quyền &quot;Duyệt yêu cầu chấm công bù&quot; mới duyệt được – bạn chỉ xem.</p>
+        )}
         {reqs.length === 0 ? (
           <Empty>Không có yêu cầu</Empty>
         ) : (
@@ -86,6 +117,7 @@ export default async function RequestsPage() {
                 </p>
                 <p>Ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b></p>
                 <p className="text-ink/70">Lý do: {r.reason}</p>
+                {canAdj && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <ActionForm action={resolveAdjustment} submitLabel="Duyệt & ghi nhận" variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
                     <input type="hidden" name="id" value={String(r._id)} />
@@ -100,6 +132,7 @@ export default async function RequestsPage() {
                     <Input name="reply" placeholder="Lý do từ chối" className="w-40" />
                   </ActionForm>
                 </div>
+                )}
               </div>
             ))}
           </div>

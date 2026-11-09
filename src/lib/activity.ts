@@ -72,6 +72,23 @@ const A: Record<string, [ActivityGroup, string]> = {
   "admin.password.change": ["system", "Đổi mật khẩu admin"],
   "admin.login": ["login", "Đăng nhập"],
   "admin.logout": ["login", "Đăng xuất"],
+  "admin.account.approve": ["system", "Duyệt tài khoản admin"],
+  "admin.account.update": ["system", "Sửa quyền admin"],
+  "admin.account.logout": ["system", "Đăng xuất admin"],
+  "admin.account.block": ["system", "Khoá admin"],
+  "admin.account.unblock": ["system", "Mở khoá admin"],
+  "admin.account.delete": ["system", "Xoá tài khoản admin"],
+  "admin.device.approve": ["system", "Duyệt thiết bị admin"],
+  "admin.device.remove": ["system", "Xoá thiết bị admin"],
+  "user.staffPerms": ["people", "Cấp quyền quản lý cho nhân viên"],
+  "user.transfer": ["people", "Chuyển tài khoản Gmail nhân viên"],
+  "cash.transfer.create": ["revenue", "Ghi sổ quỹ TM / TK"],
+  "cash.transfer.delete": ["revenue", "Xoá phiếu sổ quỹ"],
+  "holiday.create": ["payroll", "Thêm ngày lễ"],
+  "holiday.update": ["payroll", "Sửa ngày lễ"],
+  "holiday.delete": ["payroll", "Xoá ngày lễ"],
+  "holiday.addSolar": ["payroll", "Thêm nhanh ngày lễ"],
+  "closing.sheetSync": ["revenue", "Ghi Google Sheet (bấm tay)"],
 };
 
 export function actionMeta(action: string): { group: ActivityGroup; label: string } {

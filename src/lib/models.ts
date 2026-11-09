@@ -49,6 +49,12 @@ const StoreSchema = new Schema(
     lat: Number,
     lng: Number,
     radiusM: { type: Number, default: 100 },
+    // cách xác thực khi chấm công (bật nhiều → phải qua tất cả) – xem lib/checkin-methods.ts
+    checkFace: { type: Boolean, default: true }, // chụp ảnh khuôn mặt
+    checkGps: { type: Boolean, default: true }, // vị trí trong bán kính
+    checkWifi: { type: Boolean, default: false }, // phải dùng WiFi quán (so IP Internet của quán)
+    wifiName: { type: String, default: "" }, // tên WiFi hiển thị cho nhân viên
+    wifiIps: { type: [String], default: [] }, // IP public của WiFi quán (IPv4 / dải IPv6 /64)
     timezone: { type: String, default: "Asia/Ho_Chi_Minh" },
     driveFolderId: { type: String, default: "" },
     telegramChatId: { type: String, default: "" }, // nhóm Telegram nhận ảnh chốt ca (trống → dùng TELEGRAM_CHAT_ID)
@@ -87,6 +93,9 @@ const UserSchema = new Schema(
     joinedAt: Date,
     registeredAt: Date,
     consentFaceAt: Date,
+    // quyền quản lý admin cấp cho nhân viên (lib/permissions.ts): schedule | bonus | cover
+    managerPerms: { type: [String], default: [] },
+    managerStoreIds: { type: [Schema.Types.ObjectId], default: [] }, // cơ sở được quản lý thêm (ngoài cơ sở gốc)
   },
   { timestamps: true },
 );
@@ -220,6 +229,8 @@ const AttendanceSchema = new Schema(
     checkOutLng: Number,
     checkInDistanceM: Number,
     checkOutDistanceM: Number,
+    checkInIp: String,
+    checkOutIp: String,
     checkInPhotoId: String, // Drive fileId
     checkOutPhotoId: String,
     checkInPendingPhotoId: { type: Schema.Types.ObjectId, ref: "PendingPhoto" },
@@ -387,7 +398,7 @@ const PendingPhotoSchema = new Schema({
 export const PendingPhoto = getModel("PendingPhoto", PendingPhotoSchema);
 
 /* ---------- Lương ---------- */
-/* ---------- Nhờ làm hộ ca: NV1 nhờ NV2 làm thay 1 ca đã duyệt → admin duyệt → ca chuyển cho NV2 ---------- */
+/* ---------- Nhờ làm hộ ca (NV1 nhờ NV2 làm thay 1 ca đã duyệt) / Đổi ca (NV1 ↔ NV2) → admin duyệt → cập nhật lịch ---------- */
 const CoverRequestSchema = new Schema(
   {
     fromUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -398,6 +409,15 @@ const CoverRequestSchema = new Schema(
     shiftName: String,
     startTime: String,
     endTime: String,
+    /** COVER = nhờ làm hộ (ca của NV1 chuyển cho NV2) · SWAP = đổi ca (NV1 ↔ NV2, cả 2 đều có ca đã duyệt) */
+    kind: { type: String, enum: ["COVER", "SWAP"], default: "COVER" },
+    // đổi ca: ca của NV2 mà NV1 nhận về
+    toShiftAssignmentId: { type: Schema.Types.ObjectId, ref: "ShiftAssignment" },
+    toStoreId: { type: Schema.Types.ObjectId, ref: "Store" },
+    toDate: String,
+    toShiftName: String,
+    toStartTime: String,
+    toEndTime: String,
     note: String,
     status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"], default: "PENDING", index: true },
     decidedBy: String,
@@ -504,6 +524,7 @@ const BonusPenaltySchema = new Schema(
     amountVnd: { type: Number, required: true },
     content: { type: String, required: true },
     createdBy: String,
+    createdByUserId: { type: Schema.Types.ObjectId, ref: "User" }, // nhân viên được cấp quyền tạo → chỉ người đó sửa / xoá được
   },
   { timestamps: true },
 );
@@ -546,11 +567,26 @@ const PayrollItemSchema = new Schema(
     earlyCount: { type: Number, default: 0 },
     supportHours: { type: Number, default: 0 }, // trong tổng giờ: số giờ đi hỗ trợ cơ sở khác
     supportNote: String, // VD "TBS Văn Phú 8h"
+    holidayHours: { type: Number, default: 0 }, // trong tổng giờ: số giờ làm ngày lễ
+    holidayExtra: { type: Number, default: 0 }, // tiền cộng thêm do làm ngày lễ (đã gồm trong lương cơ bản)
+    holidayNote: String, // VD "Quốc khánh 02/09 8h ×2"
   },
   { timestamps: true },
 );
 PayrollItemSchema.index({ payrollId: 1, userId: 1 }, { unique: true });
 export const PayrollItem = getModel("PayrollItem", PayrollItemSchema);
+
+/** Ngày nghỉ lễ: nhân viên đi làm ngày này được nhân lương giờ (mặc định ×2, tuỳ chọn ×3, ×4). Áp dụng mọi cơ sở. */
+const HolidaySchema = new Schema(
+  {
+    date: { type: String, required: true, unique: true }, // YYYY-MM-DD
+    name: { type: String, required: true },
+    multiplier: { type: Number, default: 2, min: 1, max: 10 },
+    createdBy: String,
+  },
+  { timestamps: true },
+);
+export const Holiday = getModel("Holiday", HolidaySchema);
 
 const PayrollFeedbackSchema = new Schema(
   {
@@ -569,14 +605,74 @@ export const PayrollFeedback = getModel("PayrollFeedback", PayrollFeedbackSchema
 
 /* ---------- Admin login log & Audit ---------- */
 const AdminLoginLogSchema = new Schema({
-  kind: { type: String, enum: ["OWNER", "PASSWORD"] },
-  displayName: String,
+  kind: { type: String, enum: ["OWNER", "PASSWORD", "GOOGLE"] },
+  displayName: String, // GOOGLE: email admin
   success: Boolean,
   ip: String,
   userAgent: String,
   createdAt: { type: Date, default: Date.now, expires: 180 * 86_400 }, // TTL: tự xoá sau 180 ngày
 });
 export const AdminLoginLog = getModel("AdminLoginLog", AdminLoginLogSchema);
+
+/* ---------- Tài khoản admin: đăng nhập bằng Gmail được Chủ thêm / duyệt, phân quyền ---------- */
+const AdminDeviceSchema = new Schema(
+  {
+    deviceId: { type: String, required: true }, // cookie thiết bị admin (tbs_admin_dev) – chỉ để Chủ xem
+    userAgent: String,
+    ip: String,
+    status: { type: String, enum: ["PENDING", "APPROVED"], default: "PENDING" },
+    firstSeenAt: { type: Date, default: Date.now },
+    lastSeenAt: { type: Date, default: Date.now },
+    approvedAt: Date,
+  },
+  { _id: false },
+);
+const AdminAccountSchema = new Schema(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true }, // Gmail đăng nhập
+    name: { type: String, required: true }, // tên hiển thị trong lịch sử thao tác
+    status: { type: String, enum: ["PENDING", "ACTIVE", "BLOCKED"], default: "PENDING" },
+    perms: { type: [String], default: [] }, // lib/permissions.ts ADMIN_PERMS
+    devices: { type: [AdminDeviceSchema], default: [] },
+    note: String,
+    approvedBy: String,
+    approvedAt: Date,
+    lastLoginAt: Date,
+    lastIp: String,
+    lastUserAgent: String,
+  },
+  { timestamps: true },
+);
+export type AdminAccountDoc = InferSchemaType<typeof AdminAccountSchema> & { _id: Types.ObjectId };
+export const AdminAccount = getModel("AdminAccount", AdminAccountSchema);
+
+/* ---------- Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (không đổi doanh thu) ---------- */
+const CashTransferSchema = new Schema(
+  {
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true }, // YYYY-MM-DD
+    month: { type: String, required: true, index: true },
+    // DEPOSIT = nộp tiền mặt vào tài khoản (TM ↓, TK ↑) · WITHDRAW = rút tài khoản ra tiền mặt (TK ↓, TM ↑)
+    kind: { type: String, enum: ["DEPOSIT", "WITHDRAW"], required: true },
+    amount: { type: Number, required: true, min: 1 },
+    note: String,
+    createdBy: String,
+  },
+  { timestamps: true },
+);
+export const CashTransfer = getModel("CashTransfer", CashTransferSchema);
+
+/* ---------- Nhật ký thao tác của nhân viên được cấp quyền quản lý (hiện ở Tổng quan từng cơ sở) ---------- */
+const StaffActivitySchema = new Schema({
+  storeId: { type: Schema.Types.ObjectId, ref: "Store", index: true },
+  userId: { type: Schema.Types.ObjectId, ref: "User" },
+  userName: String,
+  action: String,
+  summary: String,
+  createdAt: { type: Date, default: Date.now, expires: 30 * 86_400 }, // TTL 30 ngày
+});
+StaffActivitySchema.index({ storeId: 1, createdAt: -1 });
+export const StaffActivity = getModel("StaffActivity", StaffActivitySchema);
 
 const AuditLogSchema = new Schema({
   actorKind: { type: String, enum: ["OWNER", "ADMIN", "USER", "SYSTEM"] },
@@ -603,6 +699,8 @@ const AdminLoginSessionSchema = new Schema({
   expiresAt: { type: Date, required: true }, // hết hạn phiên → tự xoá (TTL bên dưới)
   revokedAt: Date,
   revokedBy: String,
+  accountId: { type: Schema.Types.ObjectId, ref: "AdminAccount", index: true },
+  deviceId: String,
 });
 AdminLoginSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const AdminLoginSession = getModel("AdminLoginSession", AdminLoginSessionSchema);

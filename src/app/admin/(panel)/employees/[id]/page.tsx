@@ -6,29 +6,39 @@ import { decrypt } from "@/lib/crypto";
 import { vnd } from "@/lib/format";
 import { localDate, viDate, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
-import { Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
+import { Alert, Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { DeviceActions } from "../../devices/DeviceActions";
-import { setWage, updateEmployee } from "../../../actions/people";
+import { setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
+import { STAFF_PERMS } from "@/lib/permissions";
+import TransferAccount from "./TransferAccount";
 
 export const dynamic = "force-dynamic";
 
-export default async function EmployeeDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function EmployeeDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ transferred?: string }> }) {
   await requireAdmin();
   const { id } = await params;
+  const { transferred } = await searchParams;
   const u = await User.findById(id).lean().catch(() => null);
   if (!u) notFound();
-  const [stores, devices, wages, logs] = await Promise.all([
+  const [stores, devices, wages, logs, others] = await Promise.all([
     Store.find().sort({ name: 1 }).lean(),
     Device.find({ userId: u._id }).sort({ lastSeenAt: -1 }).lean(),
     WageHistory.find({ userId: u._id }).sort({ effectiveFrom: -1 }).lean(),
     LoginLog.find({ userId: u._id }).sort({ createdAt: -1 }).limit(20).lean(),
+    // ứng viên Gmail mới: tài khoản mới đăng nhập / chờ duyệt lên đầu
+    User.find({ _id: { $ne: u._id } }).select("email name googleName status createdAt").sort({ createdAt: -1 }).limit(300).lean(),
   ]);
+  const rank = (st: string) => (st === "NEW" ? 0 : st === "PENDING" ? 1 : st === "REJECTED" ? 2 : 3);
+  const candidates = others
+    .sort((a, b) => rank(a.status) - rank(b.status))
+    .map((o) => ({ id: String(o._id), email: o.email, name: o.name || o.googleName || "", status: o.status }));
   const acc = decrypt(u.bankAccountEnc);
   return (
     <>
       <PageTitle sub={u.email}>
         <Link href="/admin/employees" className="text-sm font-normal underline">Nhân viên</Link> / {u.name}
       </PageTitle>
+      {transferred && <Alert tone="green">Đã chuyển toàn bộ dữ liệu từ tài khoản Gmail cũ sang {u.email} và xoá tài khoản cũ.</Alert>}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Thông tin cơ bản">
           <div className="mb-3 flex items-center gap-3">
@@ -97,6 +107,49 @@ export default async function EmployeeDetail({ params }: { params: Promise<{ id:
               <li key={String(l._id)}>{viDateTime(l.createdAt)} · IP {l.ip} · {l.deviceId?.slice(0, 8)}…</li>
             ))}
           </ul>
+        </Card>
+        <Card title="Quyền quản lý (nhân viên)">
+          <ActionForm action={setStaffPerms} submitLabel="Lưu quyền" successText="Đã lưu" className="space-y-3 text-sm">
+            <input type="hidden" name="userId" value={String(u._id)} />
+            <p className="text-xs text-ink/70">
+              Nhân viên được cấp quyền sẽ thấy nút <b>Quản lý</b> trong app. Mọi thao tác của họ được ghi lại ở <b>Tổng quan</b> của cơ sở đó.
+            </p>
+            <div className="space-y-1.5">
+              {STAFF_PERMS.map((p) => (
+                <label key={p.key} className="flex items-start gap-2">
+                  <input type="checkbox" name="managerPerms" value={p.key} defaultChecked={u.managerPerms?.includes(p.key)} className="mt-0.5 accent-[#3c9c54]" />
+                  <span>
+                    <b>{p.label}</b> <span className="text-xs text-ink/60">– {p.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold text-accent">Cơ sở được quản lý</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {stores.map((s) => {
+                  const home = String(s._id) === String(u.storeId);
+                  return (
+                    <label key={String(s._id)} className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        name="managerStoreIds"
+                        value={String(s._id)}
+                        defaultChecked={home || (u.managerStoreIds ?? []).map(String).includes(String(s._id))}
+                        disabled={home}
+                        className="accent-[#3c9c54]"
+                      />
+                      {s.name}
+                      {home && <span className="text-xs text-ink/50">(cơ sở gốc)</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </ActionForm>
+        </Card>
+        <Card title="Chuyển sang tài khoản Gmail mới">
+          <TransferAccount fromId={String(u._id)} fromEmail={u.email} fromName={u.name || u.googleName || u.email} candidates={candidates} />
         </Card>
       </div>
     </>

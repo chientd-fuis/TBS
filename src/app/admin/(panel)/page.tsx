@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { can } from "@/lib/permissions";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, AdminLoginLog, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, Store, User } from "@/lib/models";
+import { AdjustmentRequest, AdminAccount, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
@@ -28,7 +29,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
   ]);
   const todo = [
-    { n: pCover, text: "nhờ làm hộ ca", href: "/admin/requests" },
+    { n: pCover, text: "nhờ làm hộ / đổi ca", href: "/admin/requests" },
     { n: pAdj, text: "điều chỉnh chấm công", href: "/admin/requests" },
     { n: pFb, text: "phản hồi bảng lương", href: "/admin/requests" },
     { n: pReg, text: "đăng ký ca", href: "/admin/schedule" },
@@ -38,11 +39,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const todoTotal = todo.reduce((a, x) => a + x.n, 0);
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
-  const failedLogins =
-    admin.kind === "OWNER"
-      ? await AdminLoginLog.countDocuments({ kind: "PASSWORD", success: false, createdAt: { $gte: new Date(now.getTime() - 24 * 3600_000) } })
-      : 0;
+  // yêu cầu làm admin (Gmail) đang chờ Chủ duyệt
+  const pendingAdmins = admin.kind === "OWNER" ? await AdminAccount.countDocuments({ status: "PENDING" }) : 0;
 
+  const showPay = can(admin, "payEstimate");
   const blocks = await Promise.all(
     stores.map(async (s) => {
       const tz = s.timezone || "Asia/Ho_Chi_Minh";
@@ -61,8 +61,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       });
       const missing = await Attendance.countDocuments({ storeId: s._id, status: "MISSING_CHECKOUT" });
       const month = localMonth(now, tz);
-      const pay = await estimateStorePay(s._id, month);
-      return { s, tz, shifts, working, late, absent, name, missing, month, pay, noCoords: s.lat == null || s.lng == null };
+      const pay = showPay ? await estimateStorePay(s._id, month) : null;
+      // nhân viên được cấp quyền quản lý đã thao tác gì ở cơ sở này (7 ngày)
+      const staffActs = await StaffActivity.find({ storeId: s._id, createdAt: { $gte: new Date(now.getTime() - 7 * 86_400_000) } })
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .lean();
+      return { s, tz, shifts, working, late, absent, name, missing, month, pay, staffActs, noCoords: s.lat == null || s.lng == null };
     }),
   );
 
@@ -96,27 +101,23 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </div>
       )}
       {error === "owner-only" && <Alert tone="red">Chức năng này chỉ dành cho Chủ.</Alert>}
+      {error === "forbidden" && <Alert tone="red">Bạn chưa được Chủ cấp quyền cho chức năng này.</Alert>}
       {!settings.googleRefreshTokenEnc && (
         <Alert tone="orange">
           Chưa kết nối Google Drive để lưu ảnh chấm công – ảnh đang được giữ tạm.{" "}
           {admin.kind === "OWNER" ? <Link className="underline" href="/admin/settings">Kết nối ngay</Link> : "Hãy báo Chủ kết nối."}
         </Alert>
       )}
-      {failedLogins >= 5 && (
-        <Alert tone="red">
-          ⚠️ {failedLogins} lần nhập sai mật khẩu admin trong 24 giờ qua. <Link className="underline" href="/admin/settings">Xem lịch sử</Link> – cân nhắc đổi mật khẩu.
+      {pendingAdmins > 0 && (
+        <Alert tone="orange">
+          Có {pendingAdmins} Gmail xin làm admin. <Link className="underline" href="/admin/admins">Duyệt & phân quyền</Link>
         </Alert>
       )}
-      {!settings.adminPasswordHash && admin.kind === "OWNER" && (
-        <Alert tone="yellow">
-          Chưa đặt mật khẩu admin chung. <Link className="underline" href="/admin/settings">Đặt mật khẩu</Link>
-        </Alert>
-      )}
-      {blocks.length > 1 && (
+      {showPay && blocks.length > 1 && (
         <Card>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-accent">💰 Tổng lương tạm tính tất cả cơ sở – tháng này (đến hôm nay)</span>
-            <span className="text-2xl font-bold text-secondary-dark">{vnd(blocks.reduce((t, b) => t + b.pay.total, 0))}</span>
+            <span className="text-2xl font-bold text-secondary-dark">{vnd(blocks.reduce((t, b) => t + (b.pay?.total ?? 0), 0))}</span>
           </div>
           <p className="mt-1 text-xs text-ink/60">
             Tính từ các lượt đã check-out × lương giờ + thưởng − phạt; chưa gồm phụ cấp / tạm ứng. Bảng lương chính thức lập ở mục Bảng lương.
@@ -133,10 +134,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             )}
             <div className="mt-2 grid grid-cols-4 gap-2 text-center text-sm">
               <div className="rounded-xl bg-primary-light p-2"><p className="text-xs">Ca hôm nay</p><p className="text-xl font-bold">{b.shifts.length}</p></div>
-              <div className="rounded-xl bg-[#e3f3e7] p-2"><p className="text-xs">Đang làm</p><p className="text-xl font-bold text-secondary-dark">{b.working.length}</p></div>
+              <div className="rounded-xl bg-[#e3f3e7] p-2"><p className="flex items-center justify-center gap-1.5 text-xs">{b.working.length > 0 && <span className="tbs-live-dot" aria-hidden />}Đang làm</p><p className="text-xl font-bold text-secondary-dark">{b.working.length}</p></div>
               <div className="rounded-xl bg-[#ffe8d9] p-2"><p className="text-xs">Đi muộn</p><p className="text-xl font-bold text-warn">{b.late.length}</p></div>
               <div className="rounded-xl bg-[#fde2e2] p-2"><p className="text-xs">Chưa đến</p><p className="text-xl font-bold text-danger">{b.absent.length}</p></div>
             </div>
+            {b.pay && (
             <div className="mt-2 rounded-xl bg-cream p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-xs font-semibold text-accent">💰 Lương tạm tính tháng {viMonth(b.month)} (đến hôm nay)</span>
@@ -150,16 +152,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <Link className="ml-auto text-accent underline" href={`/admin/attendance?store=${b.s._id}&month=${b.month}`}>Xem chấm công</Link>
               </div>
             </div>
+            )}
             <div className="mt-3 space-y-1 text-sm">
               {b.working.map((a) => (
-                <p key={String(a._id)}>
-                  🟢 {b.name.get(String(a.userId))} – vào {localTime(a.checkInAt, b.tz)}{" "}
+                <p key={String(a._id)} className="flex flex-wrap items-center gap-x-2">
+                  <span className="tbs-live-dot mx-0.5" aria-hidden />
+                  <span><b className="text-[#166534]">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
                   {!!a.lateMinutes && <Badge tone="orange">Muộn {a.lateMinutes}&apos;</Badge>}
                 </p>
               ))}
               {b.absent.map((sh) => (
                 <p key={String(sh._id)}>🔴 {b.name.get(String(sh.userId)) || "?"} – ca {sh.startTime} chưa check-in</p>
               ))}
+              {b.staffActs.length > 0 && (
+                <div className="mt-2 rounded-xl bg-[#eff6ff] p-2.5 text-xs">
+                  <p className="mb-1 font-semibold text-[#1e40af]">🛡️ Nhân viên quản lý đã thao tác (7 ngày)</p>
+                  <ul className="space-y-0.5 text-ink/80">
+                    {b.staffActs.map((x) => (
+                      <li key={String(x._id)}>
+                        <span className="text-ink/50">{localTime(x.createdAt, b.tz).slice(0, 5)} {x.createdAt.toISOString() >= new Date(now.getTime() - 86_400_000).toISOString() ? "" : `${String(localDate(x.createdAt, b.tz)).slice(8)}/${String(localDate(x.createdAt, b.tz)).slice(5, 7)}`}</span>{" "}
+                        <b>{x.userName}</b>: {x.summary}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {b.missing > 0 && (
                 <p className="text-danger">
                   ⚠️ {b.missing} lượt quên check-out cần xử lý – <Link className="underline" href={`/admin/attendance?store=${b.s._id}&status=MISSING_CHECKOUT`}>xem</Link>
@@ -169,7 +186,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </Card>
         ))}
       </div>
-      {admin.kind === "OWNER" && <AdminActivityCard />}
+      {can(admin, "activity") && <AdminActivityCard />}
     </>
   );
 }

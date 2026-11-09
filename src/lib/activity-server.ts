@@ -1,6 +1,6 @@
 import { connectDB } from "./db";
 import { AdminActivity, Attendance, CoverRequest, Device, ShiftAssignment, ShiftClosing, ShiftTemplate, Store, User } from "./models";
-import { describe, refsOf, type Names } from "./activity";
+import { actionMeta, describe, refsOf, type Names } from "./activity";
 import type { Actor } from "./audit";
 
 type Data = Record<string, unknown>;
@@ -49,6 +49,40 @@ async function enrich(target: { type: string; id?: string } | undefined, d: Data
     }
   }
   return d;
+}
+
+/** Câu mô tả + cơ sở liên quan của 1 thao tác (dùng chung cho lịch sử admin & nhật ký nhân viên quản lý). */
+async function summarize(action: string, target?: { type: string; id?: string }, before?: unknown, after?: unknown) {
+  await connectDB();
+  const d = await enrich(target, { ...plain(before), ...plain(after) });
+  const refs = refsOf(d);
+  const [users, stores] = await Promise.all([
+    refs.users.size ? User.find({ _id: { $in: [...refs.users] } }).select("name").lean().catch(() => []) : [],
+    refs.stores.size ? Store.find({ _id: { $in: [...refs.stores] } }).select("name").lean().catch(() => []) : [],
+  ]);
+  const names: Names = {
+    users: new Map(users.map((u) => [String(u._id), u.name || "?"])),
+    stores: new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")])),
+  };
+  const storeId = d.storeId && /^[a-f0-9]{24}$/i.test(String(d.storeId)) ? String(d.storeId) : undefined;
+  return { summary: describe(action, d, names), storeId };
+}
+
+/** Nhân viên được cấp quyền quản lý thao tác → ghi nhật ký cho admin cơ sở đó (hiện ở Tổng quan). Không bao giờ throw. */
+export async function recordStaffActivity(
+  actor: { name: string; userId?: string; storeId?: string },
+  action: string,
+  target?: { type: string; id?: string },
+  before?: unknown,
+  after?: unknown,
+) {
+  try {
+    const { StaffActivity } = await import("./models");
+    const { summary, storeId } = await summarize(action, target, before, after);
+    await StaffActivity.create({ storeId: actor.storeId ?? storeId, userId: actor.userId, userName: actor.name, action, summary: [actionMeta(action).label, summary].filter(Boolean).join(" · ") });
+  } catch (e) {
+    console.error("recordStaffActivity failed", e);
+  }
 }
 
 /** Ghi 1 dòng lịch sử hoạt động cho admin (Chủ không ghi). Không bao giờ throw. */

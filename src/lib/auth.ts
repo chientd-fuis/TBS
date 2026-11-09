@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { getServerSession } from "next-auth";
 import { connectDB } from "./db";
-import { AdminLoginLog, User } from "./models";
+import { AdminAccount, AdminLoginLog, User } from "./models";
 
 export function isOwnerEmail(email?: string | null) {
   const owner = (process.env.OWNER_EMAIL || "").toLowerCase().trim();
@@ -27,13 +27,15 @@ export const authOptions: NextAuthOptions = {
         await AdminLoginLog.create({ kind: "OWNER", displayName: user.email, success: true }).catch(() => {});
         return true;
       }
+      // Gmail của admin (Chủ đã thêm) → không tự tạo hồ sơ nhân viên (nếu vừa là nhân viên thì vẫn cập nhật ảnh / tên)
+      const isAdmin = !!(await AdminAccount.exists({ email: user.email.toLowerCase() }));
       await User.updateOne(
         { email: user.email.toLowerCase() },
         {
           $set: { googleName: user.name, avatar: user.image },
           $setOnInsert: { email: user.email.toLowerCase(), status: "NEW" },
         },
-        { upsert: true },
+        { upsert: !isAdmin },
       );
       return true;
     },

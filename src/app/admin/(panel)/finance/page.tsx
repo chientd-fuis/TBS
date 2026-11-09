@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { loadPnl, loadStores } from "@/lib/finance-data";
 import { addDays, localDate, localMonth, monthRange, prevMonth } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
@@ -10,7 +11,18 @@ export const dynamic = "force-dynamic";
 
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ month?: string; alloc?: string }> }) {
   const admin = await requireAdmin();
-  if (admin.kind !== "OWNER") redirect("/admin/finance/expenses");
+  if (admin.kind !== "OWNER") {
+    // Lãi lỗ chỉ Chủ – admin vào tab tài chính đầu tiên được cấp
+    const first = (
+      [
+        ["finance.shiftExpenses", "/admin/finance/shift-expenses"],
+        ["finance.bills", "/admin/finance/expenses"],
+        ["finance.rent", "/admin/finance/fixed"],
+        ["finance.settings", "/admin/finance/settings"],
+      ] as const
+    ).find(([p]) => can(admin, p));
+    redirect(first ? first[1] : "/admin?error=forbidden");
+  }
   const sp = await searchParams;
   const today = localDate(new Date());
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());

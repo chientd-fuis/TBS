@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import type { StoreLite } from "@/lib/finance-data";
-import { contributionMargin, COST_LABEL, margin, STORE_COST_KEYS, type PnlLine, type PnlResult } from "@/lib/finance";
+import { contributionMargin, COST_GROUP_LABEL, COST_GROUPS, COST_LABEL, margin, STORE_COST_KEYS, type PnlLine, type PnlResult } from "@/lib/finance";
 import { viDate, viMonth, weekdayVi } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
 import { Card, Empty } from "@/components/ui";
@@ -64,6 +64,13 @@ export default function PnlView({
     { key: "platformFee", label: "Phí sàn Shopee/Grab", value: t.platformFee, color: "#e87ba4" },
     { key: "cashbox", label: "Chi phí két", value: t.cashbox, color: "#eda100" },
   ];
+  // biểu đồ tỷ lệ chi phí / doanh thu: mỗi nhóm chi phí + phần lãi còn lại (cả vòng = doanh thu; lỗ thì cả vòng = tổng chi phí)
+  const GROUP_COLOR = { LUONG: "#2a78d6", MAT_BANG: "#eb6834", NGUYEN_LIEU: "#1baf7a", KET: "#eda100", DIEN_NUOC: "#6250d6", KHAC: "#e87ba4" } as const;
+  const ratioSlices: Slice[] = [
+    ...COST_GROUPS.map((g) => ({ key: g, label: COST_GROUP_LABEL[g], value: Math.max(0, pnl.costGroups[g]), color: GROUP_COLOR[g] })),
+    { key: "profit", label: "Lãi còn lại", value: Math.max(0, t.profit), color: "#d6d3cc" },
+  ];
+  const ratioTotal = ratioSlices.reduce((s, x) => s + x.value, 0);
   /** Tổng chi phí = Lương + Chi phí + Mặt bằng + Phí sàn + Chi phí két; Lãi = Doanh thu thật − Tổng chi phí */
   const totalCost = t.cost;
   const prevTotalCost = pt.cost;
@@ -205,9 +212,28 @@ export default function PnlView({
           </table>
         </Card>
 
-        <Card title="Cơ cấu chi phí">
-          <CostPie slices={slices} total={totalCost} revenue={t.revenue} />
-        </Card>
+        <div className="space-y-4">
+          <Card title="Cơ cấu chi phí">
+            <CostPie slices={slices} total={totalCost} revenue={t.revenue} />
+          </Card>
+          <Card title="Tỷ lệ chi phí so với doanh thu">
+            <CostPie
+              slices={ratioSlices}
+              total={ratioTotal}
+              revenue={t.revenue}
+              pctOf={t.revenue}
+              center={{ label: "Doanh thu thật", value: t.revenue, sub: t.revenue > 0 ? `chi phí ${pct(totalCost / t.revenue)}` : undefined }}
+              ariaLabel="Biểu đồ tròn tỷ lệ từng nhóm chi phí so với tổng doanh thu"
+              empty={t.revenue > 0 ? "Chưa có chi phí." : "Chưa có doanh thu trong kỳ."}
+              footer={
+                <p className="w-full text-xs text-ink/60">
+                  % = khoản đó ÷ doanh thu thật. Chi phí khác gồm cả phí sàn Shopee/Grab.
+                  {t.profit < 0 && <span className="font-semibold text-danger"> Đang lỗ: tổng chi phí vượt doanh thu {pct(-t.profit / Math.max(1, t.revenue))}.</span>}
+                </p>
+              }
+            />
+          </Card>
+        </div>
       </div>
 
       <Card

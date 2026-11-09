@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { ShiftClosing, Store } from "@/lib/models";
 import { dayClosing, moneyExprItems } from "@/lib/revenue";
@@ -14,7 +14,7 @@ const vnd = (n: number) => n.toLocaleString("vi-VN");
 
 /** Chi phí trong ca: ô "Thu chi" nhân viên nhập khi chốt ca (tiền lấy từ két: sữa chua, ship, đá…). */
 export default async function ShiftExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string }> }) {
-  await requireAdmin();
+  await requirePerm("finance.shiftExpenses");
   await connectDB();
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());

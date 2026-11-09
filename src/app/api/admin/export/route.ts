@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminActor, getAdmin } from "@/lib/admin-session";
+import { can } from "@/lib/permissions";
 import { connectDB } from "@/lib/db";
 import { buildExport, EXPORT_TYPES, type ExportType } from "@/lib/export";
 import { audit } from "@/lib/audit";
@@ -10,6 +11,7 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   const admin = await getAdmin();
   if (!admin) return new NextResponse("Unauthorized", { status: 401 });
+  if (!can(admin, "export")) return new NextResponse("Bạn chưa được Chủ cấp quyền Xuất Excel", { status: 403 });
   await connectDB();
   const sp = new URL(req.url).searchParams;
   const type = sp.get("type") as ExportType;

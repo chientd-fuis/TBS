@@ -5,7 +5,6 @@ import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { changeAdminPassword } from "../../actions/auth";
 import { disconnectDrive, saveConfig } from "../../actions/settings";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
@@ -35,21 +34,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <>
       <PageTitle>Cài đặt</PageTitle>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title={isOwner ? "Mật khẩu admin chung" : "Đổi mật khẩu"}>
-          <p className="mb-3 text-xs text-ink/70">
-            {s.adminPasswordChangedAt ? `Đổi lần cuối: ${viDateTime(s.adminPasswordChangedAt)}. ` : "Chưa đặt mật khẩu. "}
-            Sau khi đổi, <b>tất cả admin đang đăng nhập bằng mật khẩu cũ sẽ bị đăng xuất</b>.
-          </p>
-          <ActionForm action={changeAdminPassword} submitLabel={s.adminPasswordHash ? "Đổi mật khẩu" : "Đặt mật khẩu"} successText="Đã đổi mật khẩu">
-            {(!isOwner || s.adminPasswordHash) && (
-              <Field label={isOwner ? "Mật khẩu hiện tại (Chủ có thể bỏ trống để đặt lại)" : "Mật khẩu hiện tại"}>
-                <Input type="password" name="current" required={!isOwner} autoComplete="current-password" />
-              </Field>
-            )}
-            <Field label="Mật khẩu mới" hint="Tối thiểu 8 ký tự, có chữ và số"><Input type="password" name="next" required autoComplete="new-password" /></Field>
-            <Field label="Nhập lại mật khẩu mới"><Input type="password" name="confirm" required autoComplete="new-password" /></Field>
-          </ActionForm>
-        </Card>
+        {isOwner && (
+          <Card title="Tài khoản admin">
+            <p className="text-sm text-ink/70">
+              Admin đăng nhập bằng <b>Gmail</b> (không còn mật khẩu chung). Thêm / duyệt / phân quyền admin ở mục{" "}
+              <Link className="text-accent underline" href="/admin/admins">Quản lý admin</Link>.
+            </p>
+          </Card>
+        )}
 
         {isOwner && (
           <Card title="Kết nối Google Drive (lưu ảnh chấm công)">

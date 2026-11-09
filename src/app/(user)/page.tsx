@@ -4,6 +4,7 @@ import { APPROVED_SHIFT, Attendance, ShiftAssignment, Store } from "@/lib/models
 import { localDate, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import CheckInWidget from "@/components/user/CheckInWidget";
+import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,17 @@ export default async function HomePage() {
   );
   const supportOf = (storeId: unknown) => otherNames.get(String(storeId));
   const supportToday = [...new Set(shifts.map((s) => supportOf(s.storeId)).filter(Boolean))] as string[];
+  // cách chấm công cần chuẩn bị: cơ sở đang check-in (để check-out) hoặc cơ sở gốc + cơ sở hỗ trợ hôm nay
+  const candIds = open ? [String(open.storeId)] : [String(user.storeId), ...shifts.map((s) => String(s.storeId))];
+  const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace checkGps checkWifi wifiName").lean();
+  const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
+  const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
 
   return (
     <>
       <CheckInWidget
+        methods={methods}
+        wifiNames={wifiNames}
         openSince={open ? localTime(open.checkInAt, tz) : null}
         storeName={(open && supportOf(open.storeId)) || store?.name || ""}
         supportNote={
