@@ -3,7 +3,8 @@ import { parseSheetGrid, type GridCell, type ParsedSheet } from "./attendance-im
 import { daysOfMonth } from "./time";
 
 /** Đọc file Excel chấm công: mỗi sheet 1 nhân viên. Sheet không đúng mẫu (VD Hướng dẫn) bị bỏ qua. */
-export async function readAttendanceWorkbook(buf: ArrayBuffer): Promise<ParsedSheet[]> {
+/** dayStart: giờ bắt đầu ca đầu tiên của cơ sở – dùng tự điền giờ khi file chỉ có số giờ (mẫu 2, cột F) */
+export async function readAttendanceWorkbook(buf: ArrayBuffer, opts: { dayStart?: string } = {}): Promise<ParsedSheet[]> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
   const out: ParsedSheet[] = [];
@@ -20,7 +21,7 @@ export async function readAttendanceWorkbook(buf: ArrayBuffer): Promise<ParsedSh
       }
       grid.push(row);
     }
-    const p = parseSheetGrid(grid, ws.name);
+    const p = parseSheetGrid(grid, ws.name, opts);
     if (p) out.push(p);
   });
   return out;

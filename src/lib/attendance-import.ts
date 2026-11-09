@@ -2,7 +2,17 @@
 import { foldVi } from "./finance";
 
 /** 1 lượt làm việc đọc được (chưa gắn nhân viên). */
-export type ImportSession = { date: string; inTime: string; outTime: string | null; shift?: string; warn?: string };
+export type ImportSession = {
+  date: string;
+  inTime: string;
+  outTime: string | null;
+  shift?: string;
+  warn?: string;
+  /** giờ tính công ghi trong file (mẫu 2: cột F, không có thì cột D "Tổng") – để so sánh */
+  excelHours?: number;
+  /** không có giờ vào/ra trong file → giờ tự điền theo ca từ excelHours */
+  synth?: boolean;
+};
 export type ParsedSheet = { sheet: string; name: string; sessions: ImportSession[]; warnings: string[] };
 
 /** Ô của bảng: v = giá trị (ô gộp → giá trị ô gốc), m = địa chỉ ô gốc nếu thuộc vùng gộp. */
@@ -86,14 +96,51 @@ function warnOf(s: ImportSession) {
  * Mẫu 2 (Google Sheet tự làm): mỗi dòng 1 lượt – Ngày | Giờ Đến | Giờ Về | Tổng | Format | …; tên sheet = tên nhân viên (VD Le_Thi_Nga).
  * Dòng thiếu giờ đến bị bỏ qua; thiếu giờ về = chưa check-out.
  */
-function parseRowSheet(grid: GridCell[][], headerRow: number, col: { date: number; in: number; out: number }, out: ParsedSheet, refMonth?: string) {
+/** Số giờ trong ô Excel: 15 · 14,5 · "14.5" · "15h" · "14:30" (giờ:phút) → số giờ; trống / 0 → null. */
+export function parseHours(raw: unknown): number | null {
+  const v = unwrap(raw);
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return v > 0 && v <= 24 ? Math.round(v * 100) / 100 : null;
+  const s = text(v).trim();
+  const hm = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (hm) {
+    const h = +hm[1] + +hm[2] / 60;
+    return h > 0 && h <= 24 ? Math.round(h * 100) / 100 : null;
+  }
+  const n = Number(s.replace(/[hg\s]/gi, "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 && n <= 24 ? Math.round(n * 100) / 100 : null;
+}
+
+/** "08:00" + 5,5 giờ → "13:30" (qua nửa đêm thì quay vòng). */
+export function addHoursToTime(start: string, hours: number) {
+  const m = (+start.slice(0, 2) * 60 + +start.slice(3, 5) + Math.round(hours * 60)) % 1440;
+  return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+}
+
+/**
+ * Mẫu 2: hàng có ngày + giờ tính công (cột F, không có thì D) nhưng KHÔNG có giờ vào/ra
+ * → tự điền theo ca, bắt đầu từ ca đầu tiên trong ngày (mặc định 08:00): 5h = 1 ca (08–13), 10h = 2 ca (08–18), lẻ giờ → giờ ra cộng thêm cho khớp.
+ */
+function parseRowSheet(
+  grid: GridCell[][],
+  headerRow: number,
+  col: { date: number; in: number; out: number; total: number; worked: number },
+  out: ParsedSheet,
+  refMonth?: string,
+  dayStart = "08:00",
+) {
   for (let r = headerRow + 1; r < grid.length; r++) {
     const row = grid[r] ?? [];
     const date = parseDate(row[col.date]?.v, refMonth);
+    if (!date) continue;
     const inTime = parseTime(row[col.in]?.v);
-    if (!date || !inTime) continue;
-    const s: ImportSession = { date, inTime, outTime: parseTime(row[col.out]?.v) };
-    const w = warnOf(s);
+    const excelHours = (col.worked >= 0 ? parseHours(row[col.worked]?.v) : null) ?? (col.total >= 0 ? parseHours(row[col.total]?.v) : null);
+    let s: ImportSession;
+    if (inTime) s = { date, inTime, outTime: parseTime(row[col.out]?.v), ...(excelHours != null ? { excelHours } : {}) };
+    else if (excelHours != null)
+      s = { date, inTime: dayStart, outTime: addHoursToTime(dayStart, excelHours), excelHours, synth: true };
+    else continue;
+    const w = s.synth ? `Không có giờ vào/ra – tự điền theo ca từ cột F (${String(excelHours).replace(".", ",")}h)` : warnOf(s);
     if (w) s.warn = w;
     out.sessions.push(s);
   }
@@ -107,7 +154,7 @@ function parseRowSheet(grid: GridCell[][], headerRow: number, col: { date: numbe
  *   hàng tiêu đề: Ngày | Thời gian | Hình thức chấm công | Đi trễ | Về sớm | Tổng thời gian | Ca làm việc | Tiền công
  *   mỗi lượt = 2 dòng (vào, ra) – các cột Ca làm việc / Tổng thời gian gộp 2 dòng; "Chưa kết thúc chấm công" = thiếu giờ ra.
  */
-export function parseSheetGrid(grid: GridCell[][], sheetName: string): ParsedSheet | null {
+export function parseSheetGrid(grid: GridCell[][], sheetName: string, opts: { dayStart?: string } = {}): ParsedSheet | null {
   const out: ParsedSheet = {
     sheet: sheetName,
     // "1_Nga Le" → "Nga Le" · "Le_Thi_Nga" → "Le Thi Nga"
@@ -131,7 +178,13 @@ export function parseSheetGrid(grid: GridCell[][], sheetName: string): ParsedShe
     // mẫu 2: mỗi dòng 1 lượt (Giờ Đến / Giờ Về)
     const iIn = cells.findIndex((c) => ["GIO DEN", "GIO VAO", "CHECK IN", "VAO"].includes(c));
     const iOut = cells.findIndex((c) => ["GIO VE", "GIO RA", "CHECK OUT", "RA"].includes(c));
-    if (iDate >= 0 && iIn >= 0 && iOut >= 0) return parseRowSheet(grid, r, { date: iDate, in: iIn, out: iOut }, out, refMonth);
+    if (iDate >= 0 && iIn >= 0 && iOut >= 0) {
+      // D = "Tổng"; F = cột giờ tính công đã sửa (ngay sau "Format", thường không có tiêu đề)
+      const iTotal = cells.findIndex((c) => c === "TONG" || c.startsWith("TONG"));
+      const iFormat = cells.findIndex((c) => c === "FORMAT");
+      const iWorked = iFormat >= 0 ? iFormat + 1 : iTotal >= 0 ? iTotal + 2 : -1;
+      return parseRowSheet(grid, r, { date: iDate, in: iIn, out: iOut, total: iTotal, worked: iWorked }, out, refMonth, opts.dayStart);
+    }
     const iTime = cells.findIndex((c) => c === "THOI GIAN" || c === "GIO");
     if (iDate >= 0 && iTime >= 0) {
       headerRow = r;

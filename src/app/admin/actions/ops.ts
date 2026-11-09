@@ -211,7 +211,8 @@ export async function manualAttendance(_: FormState, fd: FormData): Promise<Form
 }
 
 /* ===== Chấm công hộ hàng loạt (nhiều ngày / import Excel / AI đọc ảnh) ===== */
-export type BulkRow = { k: string; userId: string; date: string; inTime: string; outTime: string | null };
+/** excelHours: giờ tính công ghi trong file Excel (cột F) – lưu ghi chú để so sánh với giờ hệ thống tính */
+export type BulkRow = { k: string; userId: string; date: string; inTime: string; outTime: string | null; excelHours?: number | null };
 /** dup = nghi trùng giờ với lượt đã có: VẪN ghi (admin tự kiểm tra lại), chỉ đánh dấu cảnh báo */
 export type BulkResult = { k: string; status: "ok" | "created" | "dup" | "error"; msg?: string; dup?: boolean };
 const MAX_BULK = 60;
@@ -263,7 +264,7 @@ export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; d
           results.push(dup ? { k: r.k, status: "dup", dup, msg: "Nghi trùng giờ với lượt đã có – vẫn ghi, kiểm tra lại" } : { k: r.k, status: "ok" });
           continue;
         }
-        await upsertAttendance(admin, { userId: r.userId, date: r.date, inTime: r.inTime.slice(0, 5), outTime: r.outTime ? r.outTime.slice(0, 5) : "", reason, source: "ADMIN_MANUAL", quiet: true, pastMissingOut: true });
+        await upsertAttendance(admin, { userId: r.userId, date: r.date, inTime: r.inTime.slice(0, 5), outTime: r.outTime ? r.outTime.slice(0, 5) : "", reason, source: "ADMIN_MANUAL", quiet: true, pastMissingOut: true, note: typeof r.excelHours === "number" ? `Excel F: ${String(r.excelHours).replace(".", ",")}h` : undefined });
         list.push([a, b]);
         done.push({ userId: r.userId, date: r.date });
         results.push({ k: r.k, status: "created", ...(dup ? { dup, msg: "Nghi trùng giờ – đã ghi, kiểm tra lại" } : {}) });

@@ -19,6 +19,7 @@ import { normalizeTime } from "@/components/TimeInput";
 import {
   expandBulk,
   matchStaff,
+  spanMinutes,
   type ImportSession,
 } from "@/lib/attendance-import";
 import { bulkAttendance, type BulkResult } from "../../actions/ops";
@@ -210,6 +211,7 @@ export default function BulkAttendance({
         date: r.date,
         inTime: r.inTime,
         outTime: r.outTime || null,
+        excelHours: r.excelHours ?? null,
       }))
       .filter((r) => r.userId);
   async function run(rs: Row[], gs: Group[], dryRun: boolean) {
@@ -324,6 +326,8 @@ export default function BulkAttendance({
     try {
       const fd = new FormData();
       fd.append("file", f);
+      // giờ bắt đầu ca đầu tiên – tự điền giờ cho hàng chỉ có số giờ (cột F)
+      fd.append("dayStart", [...templates].sort((a, b) => a.startTime.localeCompare(b.startTime))[0]?.startTime?.slice(0, 5) ?? "08:00");
       const r = await fetch("/api/admin/attendance/import", {
         method: "POST",
         body: fd,
@@ -874,6 +878,7 @@ export default function BulkAttendance({
                   <th>Vào</th>
                   <th>Ra</th>
                   <th>Ca</th>
+                  <th className="text-right" title="Giờ tính công trong file (cột F) · giờ theo giờ vào/ra">F Excel · Tính</th>
                   <th>Ghi chú</th>
                   <th></th>
                 </tr>
@@ -942,6 +947,21 @@ export default function BulkAttendance({
                         />
                       </td>
                       <td className="whitespace-nowrap text-xs">{r.shift}</td>
+                      <td className="whitespace-nowrap text-right text-xs tabular-nums">
+                        {(() => {
+                          const span = r.outTime ? spanMinutes(r.inTime, r.outTime) / 60 : null;
+                          const diff = r.excelHours != null && span != null && Math.abs(span - r.excelHours) >= 0.25;
+                          return (
+                            <>
+                              {r.excelHours != null ? <b>{String(r.excelHours).replace(".", ",")}</b> : <span className="text-ink/30">–</span>}
+                              <span className={diff ? "font-semibold text-warn" : "text-ink/50"}>
+                                {" · "}
+                                {span != null ? (Math.round(span * 100) / 100).toString().replace(".", ",") : "?"}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td className="min-w-[9rem] text-xs">
                         {/* ghi chú: trạng thái + mọi cảnh báo (thiếu giờ ra, ca dài, nghi trùng) – không tự bỏ lượt nào */}
                         {done ? (

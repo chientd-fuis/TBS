@@ -25,6 +25,8 @@ export async function upsertAttendance(
     workStoreId?: string;
     /** chấm hộ hàng loạt: không ghi nhật ký từng lượt (ghi 1 dòng tổng) */
     quiet?: boolean;
+    /** ghi chú nội bộ khi TẠO lượt (VD "Excel F: 15h" khi import) */
+    note?: string;
     /** giờ cộng thêm cho lượt này (VD 0,5) – undefined = giữ nguyên */
     extraHours?: number;
     /** import dữ liệu cũ: thiếu giờ ra ở ngày đã qua → ghi "Quên check-out" (không phải đang trong ca) */
@@ -114,6 +116,7 @@ export async function upsertAttendance(
   const created = await Attendance.create({
     ...set,
     source: opts.source,
+    ...(opts.note ? { note: opts.note } : {}),
     createdByAdminName: actor.name,
     manualReason: opts.reason,
   });

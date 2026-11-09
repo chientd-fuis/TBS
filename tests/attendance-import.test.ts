@@ -132,21 +132,31 @@ test("import Excel mẫu 2: mỗi dòng 1 lượt (Ngày | Giờ Đến | Giờ 
   ws.addRow(["31/10/2026", "07:55:37", "23:28:03", 15.54, "15:32", 15.5]);
   ws.addRow(["01/11/2026", "08:00:45", "22:56:28", 14.93, "14:55", 15]);
   ws.addRow(["01/11/2026", 0.75, 0.9375, 4.5]); // giờ dạng số (Excel / Google Sheet)
-  ws.addRow(["02/11/2026", "", "", 5]); // không có giờ → bỏ qua
+  ws.addRow(["02/11/2026", "", "", 5]); // chỉ có Tổng (D) 5h → tự điền 1 ca 08:00–13:00
   ws.addRow(["03/11/2026", "18:06:09", ""]); // thiếu giờ về
+  ws.addRow(["04/11/2026", "", "", 9.8, "", 10]); // F = 10h → 2 ca 08:00–18:00 (ưu tiên F hơn D)
+  ws.addRow(["05/11/2026", "", "", "", "", "5,5"]); // F lẻ 5,5h → 08:00–13:30
+  ws.addRow(["06/11/2026", "", "", "", "", ""]); // không có gì → bỏ qua
   const buf = await wb.xlsx.writeBuffer();
   const [s] = await readAttendanceWorkbook(buf as ArrayBuffer);
   assert.equal(s.name, "Le Thi Nga");
   assert.deepEqual(
-    s.sessions.map((x) => [x.date, x.inTime, x.outTime]),
+    s.sessions.map((x) => [x.date, x.inTime, x.outTime, x.excelHours ?? null, !!x.synth]),
     [
-      ["2026-10-31", "07:55", "23:28"],
-      ["2026-11-01", "08:00", "22:56"],
-      ["2026-11-01", "18:00", "22:30"],
-      ["2026-11-03", "18:06", null],
+      ["2026-10-31", "07:55", "23:28", 15.5, false],
+      ["2026-11-01", "08:00", "22:56", 15, false],
+      ["2026-11-01", "18:00", "22:30", 4.5, false], // không có F → lấy D
+      ["2026-11-02", "08:00", "13:00", 5, true],
+      ["2026-11-03", "18:06", null, null, false],
+      ["2026-11-04", "08:00", "18:00", 10, true],
+      ["2026-11-05", "08:00", "13:30", 5.5, true],
     ],
   );
   assert.equal(s.sessions[0].warn, undefined); // 15,5 tiếng: bình thường (ngưỡng 16 tiếng)
-  assert.equal(s.sessions[3].warn, "Thiếu giờ ra");
+  assert.equal(s.sessions[4].warn, "Thiếu giờ ra");
+  assert.match(s.sessions[3].warn ?? "", /tự điền theo ca/);
+  // ca đầu tiên của cơ sở bắt đầu 07:00 → tự điền từ 07:00
+  const [s2] = await readAttendanceWorkbook(buf as ArrayBuffer, { dayStart: "07:00" });
+  assert.deepEqual([s2.sessions[3].inTime, s2.sessions[3].outTime], ["07:00", "12:00"]);
   assert.equal(matchStaff(s.name, [{ id: "1", name: "Lê Thị Nga" }, { id: "2", name: "Trần Lâm" }])?.id, "1");
 });

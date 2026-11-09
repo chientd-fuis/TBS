@@ -41,7 +41,8 @@ export async function POST(req: Request) {
     if (!(f instanceof File)) throw new HttpError(400, "Chưa chọn file");
     if (f.size > MAX_BYTES) throw new HttpError(400, "File quá lớn (tối đa 8 MB)");
     if (!/\.xlsx$/i.test(f.name)) throw new HttpError(400, "Chỉ nhận file .xlsx (file .xls cũ: mở bằng Excel rồi Lưu thành .xlsx)");
-    const sheets = await readAttendanceWorkbook(await f.arrayBuffer()).catch(() => {
+    const ds = String(fd.get("dayStart") ?? "");
+    const sheets = await readAttendanceWorkbook(await f.arrayBuffer(), { dayStart: /^\d{2}:\d{2}$/.test(ds) ? ds : "08:00" }).catch(() => {
       throw new HttpError(400, "Không đọc được file – kiểm tra lại định dạng .xlsx");
     });
     if (!sheets.length) throw new HttpError(400, "Không thấy sheet nào đúng mẫu (cần hàng tiêu đề có cột “Ngày” và “Thời gian”)");
