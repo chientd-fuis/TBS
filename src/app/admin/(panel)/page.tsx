@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { can } from "@/lib/permissions";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, AdminAccount, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
+import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
@@ -39,8 +39,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const todoTotal = todo.reduce((a, x) => a + x.n, 0);
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
-  // yêu cầu làm admin (Gmail) đang chờ Admin Tổng duyệt
-  const pendingAdmins = admin.kind === "OWNER" ? await AdminAccount.countDocuments({ status: "PENDING" }) : 0;
 
   const showPay = can(admin, "payEstimate");
   const blocks = await Promise.all(
@@ -106,11 +104,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Alert tone="orange">
           Chưa kết nối Google Drive để lưu ảnh chấm công – ảnh đang được giữ tạm.{" "}
           {admin.kind === "OWNER" ? <Link className="underline" href="/admin/settings">Kết nối ngay</Link> : "Hãy báo Admin Tổng kết nối."}
-        </Alert>
-      )}
-      {pendingAdmins > 0 && (
-        <Alert tone="orange">
-          Có {pendingAdmins} Gmail xin làm admin. <Link className="underline" href="/admin/admins">Duyệt & phân quyền</Link>
         </Alert>
       )}
       {showPay && blocks.length > 1 && (

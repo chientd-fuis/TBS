@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, AdminAccount, CoverRequest, Device, PayrollFeedback, ShiftAssignment, User } from "@/lib/models";
+import { AdjustmentRequest, CoverRequest, Device, PayrollFeedback, ShiftAssignment, User } from "@/lib/models";
 import { localDate } from "@/lib/time";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui";
@@ -9,14 +9,13 @@ import AdminNav from "./AdminNav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
-  const [approvals, devices, adj, fb, shiftRequests, covers, admins] = await Promise.all([
+  const [approvals, devices, adj, fb, shiftRequests, covers] = await Promise.all([
     User.countDocuments({ status: "PENDING" }),
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
     AdjustmentRequest.countDocuments({ status: "PENDING" }),
     PayrollFeedback.countDocuments({ status: "OPEN" }),
     ShiftAssignment.countDocuments({ status: "PENDING", date: { $gte: localDate(new Date()) } }),
     CoverRequest.countDocuments({ status: "PENDING" }),
-    admin.kind === "OWNER" ? AdminAccount.countDocuments({ status: "PENDING" }) : 0,
   ]);
   return (
     <div className="min-h-screen lg:flex">
@@ -28,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <p className="text-xs opacity-80">Quản lý chấm công</p>
           </div>
         </div>
-        <AdminNav owner={admin.kind === "OWNER"} perms={admin.perms} counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests, admins }} />
+        <AdminNav owner={admin.kind === "OWNER"} perms={admin.perms} counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests }} />
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">

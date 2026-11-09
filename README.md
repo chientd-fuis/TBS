@@ -12,7 +12,7 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Làm tròn giờ công (bước 0,5h, làm tròn xuống, có tuỳ chọn dung sai), cảnh báo đi muộn / về sớm theo ca | 4.3, 4.4 |
 | | Xem chấm công tháng, lịch ca, bảng lương (sau khi công bố), gửi yêu cầu điều chỉnh, khiếu nại lương | 4.5, 4.6 |
 | | Đăng ký ca theo tuần (chỉ tuần tương lai), xem lịch của mình dạng bảng ca × ngày theo tuần / tháng | 4.7 |
-| Admin | Đăng nhập bằng **Gmail**: Chủ (OWNER_EMAIL) + admin được Chủ thêm / duyệt ở **Quản lý admin**; phân quyền từng chức năng (mặc định admin không có quyền tài chính, lương, xuất Excel, cơ sở, duyệt chấm công bù…) | 2.1 |
+| Admin | Đăng nhập bằng **Gmail**: Chủ (OWNER_EMAIL) + admin do Admin Tổng thêm Gmail ở **Quản lý admin**; phân quyền từng chức năng (mặc định admin không có quyền tài chính, lương, xuất Excel, cơ sở, duyệt chấm công bù…) | 2.1 |
 | | Dashboard hôm nay, duyệt đăng ký (+ thiết bị đầu tiên), nhân viên (lương giờ có ngày hiệu lực), thiết bị + cảnh báo nghi chấm hộ | 3.1, 3.3 |
 | | Cơ sở (3 cơ sở tạo sẵn), ca mẫu (hỗ trợ qua đêm), xếp ca hàng loạt, copy tuần trước | 1.2, 3.2, 3.4 |
 | | **Xếp ca tự động**: lịch tuần theo mẫu, duyệt đăng ký (từng ca / từng người / tất cả), xếp tay, định mức người/ca, xếp tự động có xem trước (ít ca nhất, hay làm ca, hay làm cùng), tổng hợp số ca & cảnh báo thiếu người | 3.2.1 |

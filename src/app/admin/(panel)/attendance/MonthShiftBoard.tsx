@@ -20,6 +20,7 @@ export default function MonthShiftBoard({
   compactLegend,
   linkable = true,
   holidays = {},
+  meId,
 }: {
   month: string;
   days: string[];
@@ -36,6 +37,8 @@ export default function MonthShiftBoard({
   linkable?: boolean;
   /** ngày lễ: ngày → tên + hệ số lương */
   holidays?: Record<string, { name: string; multiplier: number }>;
+  /** xem lịch cả cửa hàng: tô nổi tên của người đang xem */
+  meId?: string;
 }) {
   const border = "1px solid #9fb3cf";
   return (
@@ -94,7 +97,7 @@ export default function MonthShiftBoard({
                     const c = cells[`${d}|${t.id}`]?.[r];
                     return (
                       <td key={d} style={{ border, padding: "2px 3px", height: 28, whiteSpace: "nowrap", overflow: "hidden" }}>
-                        {c && <Chip c={c} month={month} storeNames={storeNames} href={hrefFor?.(c)} linkable={linkable} />}
+                        {c && <Chip c={c} month={month} storeNames={storeNames} href={hrefFor?.(c)} linkable={linkable} me={!!meId && c.userId === meId} />}
                       </td>
                     );
                   })}
@@ -108,7 +111,7 @@ export default function MonthShiftBoard({
   );
 }
 
-function Chip({ c, month, storeNames, href, linkable }: { c: BoardChip; month: string; storeNames: Record<string, string>; href?: string; linkable: boolean }) {
+function Chip({ c, month, storeNames, href, linkable, me = false }: { c: BoardChip; month: string; storeNames: Record<string, string>; href?: string; linkable: boolean; me?: boolean }) {
   const title = [
     c.state === "missed" ? "Bỏ ca – có lịch nhưng không chấm công" : c.state === "upcoming" ? "Ca chưa tới" : c.state === "pending" ? "Đăng ký – chờ duyệt" : "",
     c.late ? `Đi muộn ${c.late} phút` : "",
@@ -140,7 +143,7 @@ function Chip({ c, month, storeNames, href, linkable }: { c: BoardChip; month: s
         : c.state === "pending"
           ? ""
           : "text-ink/55";
-  const cls = `flex items-center gap-0.5 rounded px-1 leading-6 ${stateCls}`;
+  const cls = `flex items-center gap-0.5 rounded px-1 leading-6 ${stateCls}${me ? " bg-primary font-bold ring-1 ring-accent/40" : ""}`;
   return linkable ? (
     <Link
       href={href ?? `/admin/attendance?store=${c.linkStoreId}&user=${c.userId}&month=${month}`}

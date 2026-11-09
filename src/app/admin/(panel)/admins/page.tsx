@@ -4,7 +4,7 @@ import { parseUA } from "@/lib/device";
 import { ADMIN_PERMS } from "@/lib/permissions";
 import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
-import { Alert, Badge, Card, Empty, Field, Input, PageTitle } from "@/components/ui";
+import { Badge, Card, Empty, Field, Input, PageTitle } from "@/components/ui";
 import { addAdminAccount, saveAdminAccount, setAdminStatus } from "../../actions/admins";
 
 export const dynamic = "force-dynamic";
@@ -45,14 +45,12 @@ export default async function AdminsPage() {
     AdminLoginSession.find({ accountId: { $in: list.map((a) => a._id) }, revokedAt: null, expiresAt: { $gt: new Date() } }).lean(),
     AdminLoginLog.find({ kind: "GOOGLE", displayName: { $in: list.map((a) => a.email) } }).sort({ createdAt: -1 }).limit(300).lean(),
   ]);
-  const pending = list.filter((a) => a.status === "PENDING").length;
 
   return (
     <>
-      <PageTitle sub="Admin đăng nhập bằng Gmail. Admin Tổng thêm Gmail ở đây, hoặc admin tự đăng nhập Gmail tại /admin/login rồi gửi yêu cầu để Admin Tổng duyệt. Mặc định admin KHÔNG có các quyền bên dưới – tick để cấp. Lãi lỗ, Doanh thu theo ngày và trang này chỉ Admin Tổng xem.">
+      <PageTitle sub="Chỉ Admin Tổng thêm Gmail admin ở đây; admin tự đăng nhập bằng Gmail đó tại /admin/login. Mặc định admin KHÔNG có các quyền bên dưới – tick để cấp. Lãi lỗ, Doanh thu theo ngày và trang này chỉ Admin Tổng xem.">
         Quản lý admin
       </PageTitle>
-      {pending > 0 && <Alert tone="orange">Có {pending} yêu cầu làm admin đang chờ duyệt.</Alert>}
 
       <Card title="➕ Thêm admin">
         <ActionForm action={addAdminAccount} submitLabel="Thêm admin" successText="Đã thêm – admin đăng nhập bằng Gmail này tại /admin/login" className="space-y-2">

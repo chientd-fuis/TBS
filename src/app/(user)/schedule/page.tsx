@@ -14,7 +14,7 @@ import { loadMonthBoard } from "@/app/admin/(panel)/attendance/month-board-data"
 export const dynamic = "force-dynamic";
 
 /** Lịch làm việc của tôi – theo mẫu bảng ca × ngày, chỉ thấy lịch của mình (spec 4.7) */
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ week?: string; view?: string; month?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ week?: string; view?: string; month?: string; all?: string }> }) {
   const user = await requireActiveUser();
   const store = await Store.findById(user.storeId).lean();
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
@@ -23,6 +23,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const view = sp.view === "month" ? "month" : "week";
   const ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : localMonth(new Date(), tz);
+  // all=1: lịch làm việc của cả cửa hàng (mọi nhân viên) thay vì chỉ của tôi
+  const all = sp.all === "1";
+  const q = all ? "&all=1" : "";
 
   // chế độ tháng: 1 bảng ca × ngày cả tháng (chỉ của mình) – ngày đã qua hiện kết quả chấm công
   // bảng ca × ngày kèm cảnh báo chấm công (tuần: 7 ngày, tháng: cả tháng) – chỉ của mình
@@ -32,10 +35,18 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         view === "month" ? month : ws.slice(0, 7),
         tz,
         await Store.find().select("name createdAt").lean(),
-        String(user._id),
+        all ? undefined : String(user._id),
         view === "week" ? weekDays(ws) : undefined,
       )
     : null;
+  // cả cửa hàng: chỉ cho xem ai làm ca nào – ẩn cảnh báo chấm công (muộn / sớm / quên check-out) của người khác
+  if (board && all)
+    for (const list of Object.values(board.cells))
+      for (const c of list)
+        if (c.userId !== String(user._id)) {
+          c.late = c.early = undefined;
+          c.missingOut = undefined;
+        }
   // các tuần cần hiển thị
   const weeks: string[] = [];
   if (view === "week") weeks.push(ws);
@@ -123,10 +134,26 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-bold text-accent">Lịch làm việc</h1>
         <div className="flex rounded-xl bg-white p-1 text-sm ring-1 ring-[#f1e6c8]">
-          <Link href={`/schedule?week=${ws}`} className={cn("rounded-lg px-3 py-1", view === "week" && "bg-primary font-bold")}>Tuần</Link>
-          <Link href={`/schedule?view=month&month=${month}`} className={cn("rounded-lg px-3 py-1", view === "month" && "bg-primary font-bold")}>Tháng</Link>
+          <Link href={`/schedule?week=${ws}${q}`} className={cn("rounded-lg px-3 py-1", view === "week" && "bg-primary font-bold")}>Tuần</Link>
+          <Link href={`/schedule?view=month&month=${month}${q}`} className={cn("rounded-lg px-3 py-1", view === "month" && "bg-primary font-bold")}>Tháng</Link>
         </div>
       </div>
+      {/* lịch của tôi / cả cửa hàng */}
+      <div className="grid grid-cols-2 rounded-xl bg-white p-1 text-sm ring-1 ring-[#f1e6c8]">
+        {[
+          { on: !all, label: "👤 Lịch của tôi", qs: "" },
+          { on: all, label: "🏪 Cả cửa hàng", qs: "&all=1" },
+        ].map((t) => (
+          <Link
+            key={t.label}
+            href={view === "month" ? `/schedule?view=month&month=${month}${t.qs}` : `/schedule?week=${ws}${t.qs}`}
+            className={cn("rounded-lg py-1.5 text-center", t.on ? "bg-secondary font-bold text-white" : "text-ink/70")}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
+      {all && <p className="text-xs text-ink/60">Lịch làm việc của {store?.name}. Tên <b className="rounded bg-primary px-1">được tô vàng</b> là bạn.</p>}
 
       <LinkButton href={`/schedule/register?week=${ws >= nextWeek ? ws : nextWeek}`} className="w-full">
         📝 Đăng ký ca {ws >= nextWeek ? "tuần này đang xem" : "tuần sau"}
@@ -135,12 +162,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
       {view === "week" ? (
         <>
-          <WeekNav ws={ws} href={(w) => `/schedule?week=${w}`} label={ws === weekStartOf(today) ? "Tuần này" : ws === nextWeek ? "Tuần sau" : undefined} />
+          <WeekNav ws={ws} href={(w) => `/schedule?week=${w}${q}`} label={ws === weekStartOf(today) ? "Tuần này" : ws === nextWeek ? "Tuần sau" : undefined} />
           {!board || board.templates.length === 0 ? (
             <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert>
           ) : (
             <Card>
-              <MonthShiftBoard month={ws.slice(0, 7)} today={today} {...board} compactLegend linkable={false} />
+              <MonthShiftBoard month={ws.slice(0, 7)} today={today} {...board} compactLegend linkable={false} meId={all ? String(user._id) : undefined} />
             </Card>
           )}
           {supportList(weekDays(ws))}
@@ -149,13 +176,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ) : (
         <>
           <div className="flex items-center justify-between rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]">
-            <Link href={`/schedule?view=month&month=${prevMonth(month)}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">‹</Link>
+            <Link href={`/schedule?view=month&month=${prevMonth(month)}${q}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">‹</Link>
             <span className="text-sm font-bold">Tháng {viMonth(month)}</span>
-            <Link href={`/schedule?view=month&month=${nextMonth(month)}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">›</Link>
+            <Link href={`/schedule?view=month&month=${nextMonth(month)}${q}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">›</Link>
           </div>
           {board && board.templates.length ? (
             <Card>
-              <MonthShiftBoard month={month} today={today} {...board} compactLegend linkable={false} />
+              <MonthShiftBoard month={month} today={today} {...board} compactLegend linkable={false} meId={all ? String(user._id) : undefined} />
               <p className="mt-2 text-center text-sm">
                 Tháng này bạn có <b>{approvedCount(daysOfMonth(month))}</b> ca đã duyệt.
               </p>

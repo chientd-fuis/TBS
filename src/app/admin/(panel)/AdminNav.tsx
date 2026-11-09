@@ -40,7 +40,7 @@ const items = [
   { href: "/admin/export", label: "Xuất Excel", icon: FileSpreadsheet, perm: ["export"] },
   { href: "/admin/stores", label: "Cơ sở", icon: Store, perm: ["stores"] },
   { href: "/admin/activity", label: "Hoạt động admin", icon: History, perm: ["activity"] },
-  { href: "/admin/admins", label: "Quản lý admin", icon: ShieldCheck, owner: true, badge: "admins" },
+  { href: "/admin/admins", label: "Quản lý admin", icon: ShieldCheck, owner: true },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings },
 ] as const;
 
