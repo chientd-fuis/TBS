@@ -22,7 +22,7 @@ export default function AssistantChat({ enabled, left: left0, limit }: { enabled
     setQ("");
     setMsgs((m) => [...m, { role: "q", text: t }]);
     start(async () => {
-      const r = await askStoreAssistant(t);
+      const r = await askStoreAssistant(t).catch(() => ({ error: "Mất kết nối hoặc AI trả lời quá lâu – thử lại sau ít phút" }) as Awaited<ReturnType<typeof askStoreAssistant>>);
       if (r.error) setMsgs((m) => [...m, { role: "a", text: r.error!, status: "ERROR" }]);
       else {
         setMsgs((m) => [...m, { role: "a", text: r.answer!.answer, status: r.answer!.status }]);

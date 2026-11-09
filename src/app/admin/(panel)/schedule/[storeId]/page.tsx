@@ -1,3 +1,4 @@
+import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
 import { WeekBadge, weekLabel } from "@/components/WeekBadge";
 import { notFound } from "next/navigation";
@@ -53,7 +54,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           {can(admin, "export") && <LinkButton variant="outline" href={`/api/admin/export?type=lichca&store=${storeId}&from=${ws.slice(0, 7)}&to=${addDays(ws, 6).slice(0, 7)}`}>Xuất Excel</LinkButton>}
         </div>
       </div>
-      {data.templates.length > 0 && <ForecastPanel key={ws} storeId={storeId} weekStart={ws} />}
+      {data.templates.length > 0 && (await aiAllowed("forecast", `admin:${admin.accountId ?? "owner"}`)) && <ForecastPanel key={ws} storeId={storeId} weekStart={ws} />}
       {data.templates.length === 0 && weekNav}
       {data.templates.length === 0 ? (
         <Alert tone="orange">

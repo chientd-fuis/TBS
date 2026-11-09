@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/guards";
 import { AiUsage, AssistantLog, User } from "@/lib/models";
-import { AI_FEATURES, AI_MODELS, UNIT_LABEL, aiUsageStats, getAiConfig, monthTokens } from "@/lib/ai";
+import { AI_FEATURES, AI_MODELS, AI_ROLES, UNIT_LABEL, aiUsageStats, getAiConfig, monthTokens } from "@/lib/ai";
 import { geminiKeys } from "@/lib/ocr";
 import { storeManagers } from "@/lib/assistant";
 import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, PageTitle, Select, Textarea } from "@/components/ui";
 import { saveAiSettings, saveAssistantContent } from "../../../actions/ai";
+import RulesView from "@/components/RulesView";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,7 @@ export default async function AiSettingsPage() {
           <div className="overflow-x-auto">
             <table className="tbs text-sm">
               <thead>
-                <tr><th>Chức năng</th><th className="text-center">Bật</th><th>Model</th><th>Giới hạn (0 = không giới hạn)</th><th className="text-right">Tháng này</th></tr>
+                <tr><th>Chức năng</th><th className="text-center">Bật</th><th>Cho phép dùng<div className="text-[10px] font-normal">(Admin Tổng luôn dùng được)</div></th><th>Model</th><th>Giới hạn (0 = không giới hạn)</th><th className="text-right">Tháng này</th></tr>
               </thead>
               <tbody>
                 {AI_FEATURES.map((f) => {
@@ -88,6 +89,19 @@ export default async function AiSettingsPage() {
                         <div className="text-xs text-ink/60">{f.hint}</div>
                       </td>
                       <td className="text-center"><input type="checkbox" name={`on_${f.key}`} defaultChecked={c.enabled} className="h-4 w-4 accent-[#3c9c54]" aria-label={`Bật ${f.label}`} /></td>
+                      <td className="whitespace-nowrap text-xs">
+                        {f.roles.length ? (
+                          <div className="flex flex-col gap-1">
+                            {AI_ROLES.filter((r) => f.roles.includes(r.key)).map((r) => (
+                              <label key={r.key} className="flex items-center gap-1.5">
+                                <input type="checkbox" name={`role_${f.key}_${r.key}`} defaultChecked={c.roles[r.key]} className="h-4 w-4 accent-[#3c9c54]" /> {r.label}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-ink/50">Tự động (hệ thống / Admin Tổng)</span>
+                        )}
+                      </td>
                       <td>
                         <Select name={`model_${f.key}`} defaultValue={c.model} className="!w-44 !py-1">
                           {AI_MODELS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
@@ -124,7 +138,9 @@ export default async function AiSettingsPage() {
         </p>
         <ActionForm action={saveAssistantContent} submitLabel="Lưu nội dung trợ lý" successText="Đã lưu" className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-2">
-            <Field label="📋 Nội quy, quy định"><Textarea name="rules" rows={6} defaultValue={cfg.assistant.rules} placeholder="VD: Đến trước giờ ca 5 phút… Đi muộn quá 5 phút phạt 20.000 ₫…" /></Field>
+            <Field label="📋 Nội quy, quy định" hint="Hiện ở nút “Nội quy” trên header app nhân viên (badge NEW khi sửa) + trợ lý dùng để trả lời. Định dạng: # tiêu đề · 1. điều mục · - ý nhỏ · **đậm** · ! lưu ý">
+              <Textarea name="rules" rows={14} defaultValue={cfg.assistant.rules} className="font-mono text-xs" />
+            </Field>
             <Field label="👤 Ai là quản lý (bổ sung SĐT, ghi chú)" hint="Danh sách quản lý tự lấy từ admin & nhân viên được cấp quyền (bên dưới) – ghi thêm SĐT / ca phụ trách ở đây">
               <Textarea name="managers" rows={6} defaultValue={cfg.assistant.managers} placeholder="VD: Văn Phú – chị Hà 09xx xxx 123 (quản lý ca tối)" />
             </Field>
@@ -133,6 +149,12 @@ export default async function AiSettingsPage() {
             <Field label="🧾 Hướng dẫn chốt ca"><Textarea name="closing" rows={5} defaultValue={cfg.assistant.closing} /></Field>
             <Field label="⏰ Hướng dẫn chấm công"><Textarea name="attendance" rows={5} defaultValue={cfg.assistant.attendance} /></Field>
           </div>
+          <details className="rounded-xl bg-cream p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-accent">👁 Xem trước nội quy nhân viên thấy (bản đã lưu)</summary>
+            <div className="mx-auto mt-3 max-w-lg">
+              <RulesView text={cfg.assistant.rules} />
+            </div>
+          </details>
           <div className="rounded-xl bg-cream p-3 text-xs">
             <b>Quản lý tự động:</b>{" "}
             {managers.length ? managers.map((m) => `${m.store}: ${m.names.join(", ")}`).join(" · ") : "chưa có (cấp quyền quản lý cho nhân viên ở trang Nhân viên)"}

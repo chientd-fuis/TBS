@@ -1,3 +1,4 @@
+import { aiAllowed } from "@/lib/ai";
 import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
@@ -76,7 +77,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       )}
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
-      <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured()} />
+      <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured() && (await aiAllowed("closingOcr", `admin:${admin.accountId ?? "owner"}`))} />
       <Card>
         <div className="mb-3 flex flex-wrap gap-2 text-sm">
           {[{ id: "", name: "Tất cả" }, ...stores.map((s) => ({ id: String(s._id), name: s.name.replace(/^TBS\s*/i, "") }))].map((s) => {

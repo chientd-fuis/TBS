@@ -19,7 +19,7 @@ export default function PayExplain({ month, netPay, left: left0, limit }: { mont
         onClick={() =>
           start(async () => {
             setErr("");
-            const r = await explainPayAction(month);
+            const r = await explainPayAction(month).catch(() => ({ error: "Mất kết nối hoặc AI trả lời quá lâu – thử lại sau ít phút" }) as Awaited<ReturnType<typeof explainPayAction>>);
             if (r.error) setErr(r.error);
             else {
               setText(r.text ?? "");

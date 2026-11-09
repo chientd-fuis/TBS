@@ -10,6 +10,9 @@ import AskAiPanel from "./AskAiPanel";
 import { aiRemaining } from "@/lib/ai";
 import { geminiConfigured } from "@/lib/ocr";
 
+// các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
+export const maxDuration = 60;
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
   const [approvals, devices, adj, fb, shiftRequests, covers] = await Promise.all([

@@ -5,7 +5,7 @@ import { assertOwner } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
-import { AI_FEATURES, AI_MODELS, getAiConfig, type AiConfig } from "@/lib/ai";
+import { AI_FEATURES, AI_MODELS, AI_ROLES, getAiConfig, type AiConfig } from "@/lib/ai";
 import { errMsg, num, str, type FormState } from "./types";
 
 /** Lưu Cài đặt AI: bật/tắt + giới hạn + model từng chức năng, ngân sách token, ngưỡng bất thường. Chỉ Admin Tổng. */
@@ -18,7 +18,8 @@ export async function saveAiSettings(_: FormState, fd: FormData): Promise<FormSt
     const features = Object.fromEntries(
       AI_FEATURES.map((f) => {
         const model = str(fd.get(`model_${f.key}`));
-        return [f.key, { enabled: fd.get(`on_${f.key}`) === "on", limit: Math.max(0, Math.round(num(fd.get(`limit_${f.key}`), f.limit))), model: models.includes(model) ? model : "" }];
+        const roles = Object.fromEntries(AI_ROLES.map(({ key }) => [key, f.roles.includes(key) && fd.get(`role_${f.key}_${key}`) === "on"]));
+        return [f.key, { enabled: fd.get(`on_${f.key}`) === "on", limit: Math.max(0, Math.round(num(fd.get(`limit_${f.key}`), f.limit))), model: models.includes(model) ? model : "", roles }];
       }),
     ) as AiConfig["features"];
     const next: Partial<AiConfig> = {

@@ -1,3 +1,4 @@
+import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
@@ -162,7 +163,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
             key={String(store?._id)} // đổi cơ sở → nạp lại danh sách nhân viên
             storeId={String(store?._id)}
             month={month}
-            ocrEnabled={geminiConfigured()}
+            ocrEnabled={geminiConfigured() && (await aiAllowed("attendanceOcr", `admin:${admin.accountId ?? "owner"}`))}
             // gồm cả nhân viên đã nghỉ việc (nhập chấm công / tính lương tháng cũ)
             staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status !== "ACTIVE" }))}
             allStaff={allStaff.map((u) => ({

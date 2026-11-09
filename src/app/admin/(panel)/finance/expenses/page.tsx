@@ -1,3 +1,4 @@
+import { aiAllowed } from "@/lib/ai";
 import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
@@ -20,7 +21,7 @@ const vnd = (n: number) => n.toLocaleString("vi-VN");
 const TG = { SENT: ["Đã gửi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Đang gửi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string; cat?: string; edit?: string }> }) {
-  await requirePerm("finance.bills");
+  const admin = await requirePerm("finance.bills");
   await connectDB();
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());
@@ -87,7 +88,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           </Card>
         ) : (
           <Card title="Nhập chi phí từ sao kê / biên lai CK">
-            <StatementImport stores={storeOpts} today={today} ocrEnabled={geminiConfigured()} />
+            <StatementImport stores={storeOpts} today={today} ocrEnabled={geminiConfigured() && (await aiAllowed("billOcr", `admin:${admin.accountId ?? "owner"}`))} />
           </Card>
         )}
       </div>

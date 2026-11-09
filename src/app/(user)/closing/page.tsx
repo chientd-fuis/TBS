@@ -1,3 +1,4 @@
+import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
 import { ShiftClosing } from "@/lib/models";
@@ -69,7 +70,7 @@ export default async function ClosingPage() {
         storeName={ctx?.store.name}
         dayBefore={dayBefore}
         existing={existing}
-        ocrEnabled={ocrConfigured()}
+        ocrEnabled={ocrConfigured() && (await aiAllowed("closingOcr", `user:${user._id}`))}
       />
       {recent.length > 0 && (
         <Card title="Lần chốt ca gần đây">

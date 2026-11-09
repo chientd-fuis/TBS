@@ -23,7 +23,8 @@ export default function AskAiPanel({ left: left0, limit }: { left: number | null
     setQ("");
     setMsgs((m) => [...m, { role: "q", text: t }]);
     start(async () => {
-      const r = await askDataAction(t);
+      // server bị cắt (quá thời gian / mất mạng) → báo trong khung chat, không làm sập trang
+      const r = await askDataAction(t).catch(() => ({ error: "Mất kết nối hoặc AI trả lời quá lâu – thử lại sau ít phút" }) as Awaited<ReturnType<typeof askDataAction>>);
       setMsgs((m) => [...m, r.error ? { role: "a", text: r.error, error: true } : { role: "a", text: r.answer ?? "", source: r.source, denied: r.denied }]);
       if (r.left != null) setLeft(r.left);
     });

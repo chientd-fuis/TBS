@@ -20,14 +20,14 @@ export default function ForecastPanel({ storeId, weekStart }: { storeId: string;
     start(async () => {
       setErr("");
       setMsg("");
-      const r = await getForecast(storeId, weekStart);
+      const r = await getForecast(storeId, weekStart).catch(() => ({ error: "Mất kết nối hoặc AI trả lời quá lâu – thử lại sau ít phút" }) as Awaited<ReturnType<typeof getForecast>>);
       if (r.error) setErr(r.error);
       else setData(r.data!);
     });
   const apply = () =>
     start(async () => {
       if (!data) return;
-      const r = await applyForecast(storeId, weekStart, data.cells.map((c) => ({ tplId: c.tplId, date: c.date, target: c.suggest })));
+      const r = await applyForecast(storeId, weekStart, data.cells.map((c) => ({ tplId: c.tplId, date: c.date, target: c.suggest }))).catch(() => ({ error: "Mất kết nối hoặc AI trả lời quá lâu – thử lại sau ít phút" }) as Awaited<ReturnType<typeof applyForecast>>);
       if (r.error) setErr(r.error);
       else {
         setMsg("Đã áp dụng làm định mức cho tuần này. Bấm “Xếp tự động” (lấp tới định mức) để xếp người.");
