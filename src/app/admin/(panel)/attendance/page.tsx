@@ -104,6 +104,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
             rows={rows as AttRow[]}
             tz={tz}
             select={selected && !locked ? { formId: "att-bulk-delete", header: <SelectAllBox formId="att-bulk-delete" /> } : undefined}
+            totals={!!selected}
             actions={(r) => (
               <div className="flex flex-col gap-1 text-xs">
                 {!selected && <span className="font-semibold">{name.get(String((r as AttRow & { userId: unknown }).userId))}</span>}
@@ -201,11 +202,17 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
   );
 }
 
-function SummaryLine({ rows }: { rows: { status: string; roundedHours?: number | null; workDate: string; lateMinutes?: number | null; earlyMinutes?: number | null; source?: string | null }[] }) {
+function SummaryLine({ rows }: { rows: { status: string; roundedHours?: number | null; totalHours?: number | null; workDate: string; lateMinutes?: number | null; earlyMinutes?: number | null; source?: string | null }[] }) {
   const s = summarize(rows as AttRow[]);
+  const diff = Math.round((s.totalRounded - s.totalActual) * 100) / 100;
   return (
     <div className="mb-3 flex flex-wrap gap-2 text-sm">
       <Badge tone="yellow">Giờ công: {hoursVi(s.totalRounded)}</Badge>
+      <Badge tone="gray">Giờ thực tế: {hoursVi(s.totalActual)}</Badge>
+      <Badge tone={diff > 0 ? "green" : diff < 0 ? "red" : "gray"}>
+        Chênh: {diff > 0 ? "+" : diff < 0 ? "−" : ""}
+        {hoursVi(Math.abs(diff))}h
+      </Badge>
       <Badge tone="yellow">Ngày công: {s.workDays}</Badge>
       <Badge tone="orange">Muộn: {s.late}</Badge>
       <Badge tone="orange">Sớm: {s.early}</Badge>
