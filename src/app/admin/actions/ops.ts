@@ -212,7 +212,8 @@ export async function manualAttendance(_: FormState, fd: FormData): Promise<Form
 
 /* ===== Chấm công hộ hàng loạt (nhiều ngày / import Excel / AI đọc ảnh) ===== */
 export type BulkRow = { k: string; userId: string; date: string; inTime: string; outTime: string | null };
-export type BulkResult = { k: string; status: "ok" | "created" | "dup" | "error"; msg?: string };
+/** dup = nghi trùng giờ với lượt đã có: VẪN ghi (admin tự kiểm tra lại), chỉ đánh dấu cảnh báo */
+export type BulkResult = { k: string; status: "ok" | "created" | "dup" | "error"; msg?: string; dup?: boolean };
 const MAX_BULK = 60;
 
 /**
@@ -254,20 +255,18 @@ export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; d
           taken.set(key, ex.map((x) => [x.checkInAt.getTime(), x.checkOutAt ? x.checkOutAt.getTime() : x.checkInAt.getTime() + 3600_000]));
         }
         const list = taken.get(key)!;
-        if (list.some(([x, y]) => a < y && b > x)) {
-          results.push({ k: r.k, status: "dup", msg: "Trùng giờ với lượt đã có" });
-          continue;
-        }
+        // nghi trùng giờ với lượt đã có / trong danh sách → vẫn ghi, chỉ cảnh báo để admin kiểm tra tay
+        const dup = list.some(([x, y]) => a < y && b > x);
         if (input.dryRun) {
           await assertNotLocked(u.storeId, localMonth(new Date(a), tz));
           list.push([a, b]);
-          results.push({ k: r.k, status: "ok" });
+          results.push(dup ? { k: r.k, status: "dup", dup, msg: "Nghi trùng giờ với lượt đã có – vẫn ghi, kiểm tra lại" } : { k: r.k, status: "ok" });
           continue;
         }
-        await upsertAttendance(admin, { userId: r.userId, date: r.date, inTime: r.inTime.slice(0, 5), outTime: r.outTime ? r.outTime.slice(0, 5) : "", reason, source: "ADMIN_MANUAL", quiet: true });
+        await upsertAttendance(admin, { userId: r.userId, date: r.date, inTime: r.inTime.slice(0, 5), outTime: r.outTime ? r.outTime.slice(0, 5) : "", reason, source: "ADMIN_MANUAL", quiet: true, pastMissingOut: true });
         list.push([a, b]);
         done.push({ userId: r.userId, date: r.date });
-        results.push({ k: r.k, status: "created" });
+        results.push({ k: r.k, status: "created", ...(dup ? { dup, msg: "Nghi trùng giờ – đã ghi, kiểm tra lại" } : {}) });
       } catch (e) {
         results.push({ k: r.k, status: "error", msg: (e as Error).message || "Lỗi" });
       }

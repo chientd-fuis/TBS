@@ -24,7 +24,7 @@ import {
 import { bulkAttendance, type BulkResult } from "../../actions/ops";
 import { quickCreateOfflineStaff } from "../../actions/people";
 
-type Staff = { id: string; name: string; inactive?: boolean };
+type Staff = { id: string; name: string; inactive?: boolean; store?: string };
 type Tpl = { id: string; name: string; startTime: string; endTime: string };
 type Group = { key: string; label: string; userId: string };
 type Row = ImportSession & {
@@ -112,6 +112,8 @@ function TimeBox({
 export default function BulkAttendance({
   single,
   staff: staffProp,
+  allStaff = [],
+  storeName = "",
   templates,
   storeId,
   month,
@@ -119,6 +121,9 @@ export default function BulkAttendance({
 }: {
   single: ReactNode;
   staff: Staff[];
+  /** nhân viên mọi cơ sở (có tên cơ sở) – dùng ghép tên khi import Excel / AI */
+  allStaff?: Staff[];
+  storeName?: string;
   templates: Tpl[];
   storeId: string;
   month: string;
@@ -127,6 +132,22 @@ export default function BulkAttendance({
   const router = useRouter();
   // gồm cả nhân viên đã nghỉ (nhập chấm công tháng cũ) + nhân viên vừa tạo nhanh
   const [staff, setStaff] = useState<Staff[]>(staffProp);
+  // danh sách ghép tên: mọi cơ sở (cơ sở đang xem lên đầu) + nhân viên vừa tạo nhanh
+  const [pool, setPool] = useState<Staff[]>(() => {
+    const ids = new Set(staffProp.map((s) => s.id));
+    return [...staffProp.map((s) => ({ ...s, store: s.store ?? storeName })), ...allStaff.filter((s) => !ids.has(s.id))];
+  });
+  /** ưu tiên khớp nhân viên cơ sở đang xem, không có mới tìm ở cơ sở khác */
+  const guess = (name: string) => matchStaff(name, staff)?.id ?? matchStaff(name, pool)?.id ?? "";
+  const poolByStore = useMemo(() => {
+    const m = new Map<string, Staff[]>();
+    for (const s of pool) {
+      const k = s.store || storeName || "Khác";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(s);
+    }
+    return [...m.entries()];
+  }, [pool, storeName]);
   const [tab, setTab] = useState<Tab>("one");
   const [groups, setGroups] = useState<Group[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -161,8 +182,8 @@ export default function BulkAttendance({
   >([]);
 
   const staffName = useMemo(
-    () => new Map(staff.map((s) => [s.id, s.name])),
-    [staff],
+    () => new Map([...pool, ...staff].map((s) => [s.id, s.name])),
+    [pool, staff],
   );
   const userOf = (g: string) => groups.find((x) => x.key === g)?.userId ?? "";
   const reset = () => {
@@ -219,7 +240,8 @@ export default function BulkAttendance({
             ? {
                 ...r,
                 check: res.get(r.key),
-                include: res.get(r.key)!.status === "ok" ? r.include : false,
+                // không tự bỏ tích lượt nào – mọi lượt trong tháng đều được ghi, cảnh báo / lỗi chỉ ghi chú bên cạnh
+                include: r.include,
               }
             : r,
         ),
@@ -253,7 +275,7 @@ export default function BulkAttendance({
         [...res.values()].filter((x) => x.status === s).length;
       setMsg({
         tone: n("error") ? "orange" : "green",
-        text: `Đã ghi ${n("created")} lượt${n("dup") ? ` · bỏ qua ${n("dup")} lượt trùng` : ""}${n("error") ? ` · ${n("error")} lượt lỗi (xem cột Ghi chú)` : ""}.`,
+        text: `Đã ghi ${n("created")} lượt${[...res.values()].some((x) => x.dup) ? ` · ${[...res.values()].filter((x) => x.dup).length} lượt nghi trùng giờ (đã ghi – kiểm tra lại ở bảng chấm công)` : ""}${n("error") ? ` · ${n("error")} lượt lỗi (xem cột Ghi chú)` : ""}.`,
       });
       router.refresh();
     } catch (e) {
@@ -326,7 +348,7 @@ export default function BulkAttendance({
       const gs: Group[] = sheets.map((s) => ({
         key: `s:${s.sheet}`,
         label: s.name || s.sheet,
-        userId: matchStaff(s.name, staff)?.id ?? "",
+        userId: guess(s.name),
       }));
       load(
         gs,
@@ -383,7 +405,7 @@ export default function BulkAttendance({
     const gs: Group[] = names.map((n) => ({
       key: `n:${n}`,
       label: n || "Không rõ tên",
-      userId: matchStaff(n, staff)?.id ?? "",
+      userId: guess(n),
     }));
     setBusy("");
     if (imgRef.current) imgRef.current.value = "";
@@ -431,6 +453,7 @@ export default function BulkAttendance({
     const r = await quickCreateOfflineStaff(name, storeId, wage);
     if (r.error || !r.id) return setMsg({ tone: "red", text: r.error || "Không tạo được nhân viên" });
     setStaff((xs) => [...xs, { id: r.id!, name: r.name ?? name, inactive: true }]);
+    setPool((xs) => [{ id: r.id!, name: r.name ?? name, inactive: true, store: storeName }, ...xs]);
     setGroupUser(g.key, r.id);
     setMsg({ tone: "green", text: `Đã tạo nhân viên nghỉ việc ${r.name ?? name} – nhớ bấm Kiểm tra / Ghi` });
   }
@@ -804,11 +827,15 @@ export default function BulkAttendance({
                       className={`py-1 ${g.userId ? "" : "border-warn"}`}
                     >
                       <option value="">— Bỏ qua —</option>
-                      {staff.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                          {s.inactive ? " (nghỉ)" : ""}
-                        </option>
+                      {poolByStore.map(([store, list]) => (
+                        <optgroup key={store} label={store}>
+                          {list.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                              {s.inactive ? " (nghỉ)" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                       <option value="__new__">➕ Tạo NV đã nghỉ việc…</option>
                     </Select>
@@ -916,27 +943,20 @@ export default function BulkAttendance({
                       </td>
                       <td className="whitespace-nowrap text-xs">{r.shift}</td>
                       <td className="min-w-[9rem] text-xs">
+                        {/* ghi chú: trạng thái + mọi cảnh báo (thiếu giờ ra, ca dài, nghi trùng) – không tự bỏ lượt nào */}
                         {done ? (
-                          <span className="font-semibold text-secondary-dark">
-                            ✓ Đã ghi
-                          </span>
-                        ) : st === "dup" || st === "error" ? (
-                          <span
-                            className={
-                              st === "dup" ? "text-ink/60" : "text-danger"
-                            }
-                          >
-                            {r.check?.msg}
-                          </span>
-                        ) : (
-                          <>
-                            {r.warn && (
-                              <span className="text-warn">{r.warn}</span>
-                            )}
-                            {st === "ok" && !r.warn && (
-                              <span className="text-secondary-dark">OK</span>
-                            )}
-                          </>
+                          <span className="block font-semibold text-secondary-dark">✓ Đã ghi</span>
+                        ) : st === "error" ? (
+                          <span className="block text-danger">✗ {r.check?.msg}</span>
+                        ) : st === "ok" || st === "dup" ? (
+                          <span className="block text-secondary-dark">OK – sẽ ghi</span>
+                        ) : null}
+                        {r.check?.dup && (
+                          <span className="block font-semibold text-warn">⚠ Nghi trùng giờ với lượt đã có – kiểm tra lại</span>
+                        )}
+                        {r.warn && <span className="block text-warn">⚠ {r.warn}</span>}
+                        {r.warn === "Thiếu giờ ra" && (done || st) && (
+                          <span className="block text-ink/50">ghi là &quot;Quên check-out&quot;</span>
                         )}
                       </td>
                       <td>

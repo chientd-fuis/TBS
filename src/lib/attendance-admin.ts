@@ -25,6 +25,8 @@ export async function upsertAttendance(
     workStoreId?: string;
     /** chấm hộ hàng loạt: không ghi nhật ký từng lượt (ghi 1 dòng tổng) */
     quiet?: boolean;
+    /** import dữ liệu cũ: thiếu giờ ra ở ngày đã qua → ghi "Quên check-out" (không phải đang trong ca) */
+    pastMissingOut?: boolean;
   },
 ) {
   const user = await User.findById(opts.userId).lean();
@@ -62,7 +64,11 @@ export async function upsertAttendance(
   const shift = await findShiftFor(opts.userId, checkInAt, tz, storeId);
   const shiftAssignmentId = shift?.a._id ?? null;
   const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt });
-  const status = checkOutAt ? "COMPLETED" : "OPEN";
+  const status = checkOutAt
+    ? "COMPLETED"
+    : opts.pastMissingOut && Date.now() - checkInAt.getTime() > 16 * 3600_000
+      ? "MISSING_CHECKOUT"
+      : "OPEN";
   if (status === "OPEN") {
     const other = await Attendance.findOne({ userId: opts.userId, status: "OPEN", _id: { $ne: existing?._id } }).lean();
     if (other) throw new Error("Nhân viên đang có một lượt chưa check-out – hãy nhập cả giờ ra");

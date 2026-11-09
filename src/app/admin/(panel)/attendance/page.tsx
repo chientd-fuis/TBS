@@ -31,6 +31,8 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : localMonth(new Date(), tz);
   const staff = await User.find({ storeId: store?._id, status: { $in: ["ACTIVE", "INACTIVE"] } }).sort({ status: 1, name: 1 }).lean();
+  // ghép tên khi import Excel / AI: nhân viên của MỌI cơ sở (nhóm theo cơ sở)
+  const allStaff = await User.find({ storeId: { $exists: true, $ne: null }, status: { $in: ["ACTIVE", "INACTIVE"] } }).select("name storeId status").sort({ status: 1, name: 1 }).lean();
   const selected = staff.find((u) => String(u._id) === sp.user);
   const locked = store ? await isMonthLocked(store._id, month) : false;
   const params = { store: String(store?._id), user: sp.user, status: sp.status };
@@ -70,7 +72,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
               {staff.map((u) => <option key={String(u._id)} value={String(u._id)}>{u.name}{u.status === "INACTIVE" ? " (nghỉ)" : ""}</option>)}
             </Select>
           </Field>
-          <Field label="Tháng"><Input type="month" name="month" defaultValue={month} className="w-40" /></Field>
+          <input type="hidden" name="month" value={month} />
           <Field label="Trạng thái">
             <Select name="status" defaultValue={sp.status || ""} className="w-40">
               <option value="">Tất cả</option>
@@ -155,11 +157,19 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
       {!locked && (
         <Card title="Chấm công hộ">
           <BulkAttendance
+            key={String(store?._id)} // đổi cơ sở → nạp lại danh sách nhân viên
             storeId={String(store?._id)}
             month={month}
             ocrEnabled={geminiConfigured()}
             // gồm cả nhân viên đã nghỉ việc (nhập chấm công / tính lương tháng cũ)
             staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status !== "ACTIVE" }))}
+            allStaff={allStaff.map((u) => ({
+              id: String(u._id),
+              name: u.name,
+              inactive: u.status !== "ACTIVE",
+              store: stores.find((s) => String(s._id) === String(u.storeId))?.name ?? "?",
+            }))}
+            storeName={store?.name ?? ""}
             templates={templates.map((t) => ({ id: String(t._id), name: t.name, startTime: t.startTime, endTime: t.endTime }))}
             single={
                 <ActionForm action={manualAttendance} submitLabel="Ghi nhận chấm hộ" successText="Đã chấm hộ">
