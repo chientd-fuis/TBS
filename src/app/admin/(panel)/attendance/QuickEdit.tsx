@@ -15,12 +15,15 @@ export default function QuickEdit({
   inTime,
   outTime,
   missingOut,
+  extraHours = 0,
 }: {
   id: string;
   date: string;
   inTime: string;
   outTime: string;
   missingOut: boolean;
+  /** giờ cộng thêm đang có (0 / 0,5) */
+  extraHours?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState(editAttendance, null);
@@ -58,6 +61,11 @@ export default function QuickEdit({
               <Field label="Giờ ra"><TimeInput seconds name="outTime" defaultValue={outTime} autoFocus={missingOut} /></Field>
             </div>
             <p className="text-[11px] text-ink/60">Giờ ra nhỏ hơn giờ vào = ca qua đêm (tự cộng sang ngày hôm sau).</p>
+            <label className="flex items-center gap-2 rounded-lg bg-primary-light px-2 py-1.5 text-sm font-semibold">
+              <input type="checkbox" name="plusHalf" defaultChecked={extraHours > 0} className="h-4 w-4 accent-[#3c9c54]" />
+              +0,5h cho ca này
+              <span className="text-[11px] font-normal text-ink/60">(cộng vào giờ tính công)</span>
+            </label>
             <Field label="Ghi chú" hint="Không bắt buộc · nhân viên xem được ở Lịch sử chấm công"><Textarea name="note" rows={2} placeholder="VD: Quên check-out, đã sửa giờ ra 22:00" /></Field>
             {state?.error && <Alert tone="red">{state.error}</Alert>}
             <Button type="submit" disabled={pending} className="w-full">{pending ? "Đang lưu…" : "Lưu"}</Button>

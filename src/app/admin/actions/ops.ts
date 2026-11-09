@@ -303,6 +303,8 @@ export async function editAttendance(_: FormState, fd: FormData): Promise<FormSt
       // ghi chú (không bắt buộc) – nhân viên xem được ở Lịch sử chấm công
       reason: str(fd.get("note")),
       staffNote: str(fd.get("note")),
+      // ô "+0,5h cho ca này": tích = cộng 0,5h vào giờ tính công, bỏ tích = không cộng
+      extraHours: fd.get("plusHalf") === "on" ? 0.5 : 0,
       source: "ADMIN_MANUAL",
     });
     revalidatePath("/admin/attendance", "layout");

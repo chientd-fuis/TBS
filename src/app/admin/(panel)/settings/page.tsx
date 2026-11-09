@@ -72,7 +72,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <ActionForm action={saveConfig} submitLabel="Lưu cấu hình" successText="Đã lưu">
             <fieldset disabled={!isOwner} className="grid gap-3 sm:grid-cols-2">
               <Field label="Bước làm tròn (giờ)" hint="0,5 → 4h45' = 4,5h (làm tròn xuống)"><Input name="roundStepHours" defaultValue={s.roundStepHours} /></Field>
-              <Field label="Dung sai làm tròn (phút)" hint="VD 5 → 14h55' tính 15h. Mặc định 0"><Input name="roundGraceMinutes" defaultValue={s.roundGraceMinutes} /></Field>
+              <Field label="Dung sai làm tròn mốc 0,5 (phút)" hint="VD 3 → 3h27' tính 3,5h (thiếu ≤ 3' tới mốc :30)"><Input name="roundGraceMinutes" defaultValue={s.roundGraceMinutes} /></Field>
+              <Field label="Dung sai làm tròn mốc 1 giờ (phút)" hint="VD 4 → 3h56' tính 4h (thiếu ≤ 4' tới mốc tròn giờ)"><Input name="roundGraceHourMinutes" defaultValue={s.roundGraceHourMinutes ?? s.roundGraceMinutes} /></Field>
               <Field label="Ngưỡng đi muộn (phút)"><Input name="lateThresholdMinutes" defaultValue={s.lateThresholdMinutes} /></Field>
               <Field label="Ngưỡng về sớm (phút)"><Input name="earlyThresholdMinutes" defaultValue={s.earlyThresholdMinutes} /></Field>
               <Field label="Chặn check-out trong (phút) sau check-in"><Input name="minCheckoutMinutes" defaultValue={s.minCheckoutMinutes} /></Field>
@@ -81,6 +82,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <Field label="Sai số GPS tối đa (m)"><Input name="maxGpsAccuracyM" defaultValue={s.maxGpsAccuracyM} /></Field>
               <Field label="Phiên admin hết hạn sau (ngày)"><Input name="adminSessionDays" defaultValue={s.adminSessionDays} /></Field>
             </fieldset>
+            {isOwner && (
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="recompute" className="mt-0.5 accent-[#3c9c54]" />
+                <span>
+                  Tính lại giờ công theo cách làm tròn mới cho <b>tháng này và tháng trước</b> (bỏ qua tháng đã chốt lương). Không tick = chỉ áp dụng cho lượt
+                  chấm công mới.
+                </span>
+              </label>
+            )}
             {!isOwner && <p className="text-xs text-ink/60">Chỉ Admin Tổng được thay đổi cấu hình.</p>}
           </ActionForm>
         </Card>

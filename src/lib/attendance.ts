@@ -104,6 +104,8 @@ export async function computeFields(att: {
   shiftAssignmentId?: Id | null;
   checkInAt: Date;
   checkOutAt?: Date | null;
+  /** giờ admin cộng thêm cho lượt này (VD +0,5h) */
+  extraHours?: number | null;
 }) {
   const settings = await getSettings();
   const tz = await storeTz(att.storeId);
@@ -121,9 +123,10 @@ export async function computeFields(att: {
   }
   if (att.checkOutAt) {
     out.totalHours = totalHours(att.checkInAt, att.checkOutAt);
-    out.roundedHours = roundedHours(att.checkInAt, att.checkOutAt, {
+    out.roundedHours = (att.extraHours || 0) + roundedHours(att.checkInAt, att.checkOutAt, {
       stepHours: settings.roundStepHours,
       graceMinutes: settings.roundGraceMinutes,
+      graceHourMinutes: settings.roundGraceHourMinutes ?? settings.roundGraceMinutes,
     });
     if (block) out.earlyMinutes = earlyMinutesInBlock(att.checkOutAt, block.segments, settings.earlyThresholdMinutes);
   }
@@ -186,3 +189,39 @@ export async function markMissingCheckouts() {
   }
   return n;
 }
+
+
+/**
+ * Đổi cách làm tròn → tính lại giờ tính công (roundedHours) cho lượt đã check-out của tháng này + tháng trước,
+ * bỏ qua tháng đã chốt bảng lương; bảng lương nháp của các tháng đó được tính lại.
+ */
+export async function recomputeRounding(now = new Date()) {
+  await connectDB();
+  const settings = await getSettings();
+  const cfg = {
+    stepHours: settings.roundStepHours,
+    graceMinutes: settings.roundGraceMinutes,
+    graceHourMinutes: settings.roundGraceHourMinutes ?? settings.roundGraceMinutes,
+  };
+  const m = localMonth(now, "Asia/Ho_Chi_Minh");
+  const months = [m, prevMonthOf(m)];
+  const locked = new Set(
+    (await Payroll.find({ month: { $in: months }, status: { $ne: "DRAFT" } }).select("storeId month").lean()).map((p) => `${p.storeId}|${p.month}`),
+  );
+  const list = await Attendance.find({ month: { $in: months }, checkOutAt: { $ne: null } }).select("storeId homeStoreId month checkInAt checkOutAt roundedHours extraHours").lean();
+  const ops = [];
+  for (const a of list) {
+    if (locked.has(`${payStoreOf(a)}|${a.month}`)) continue;
+    const r = (a.extraHours || 0) + roundedHours(a.checkInAt, a.checkOutAt!, cfg);
+    if (r !== a.roundedHours) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { roundedHours: r } } } });
+  }
+  if (ops.length) await Attendance.bulkWrite(ops);
+  const { generatePayroll } = await import("./payroll");
+  for (const p of await Payroll.find({ month: { $in: months }, status: "DRAFT" }).select("storeId month").lean()) await generatePayroll(String(p.storeId), p.month);
+  return ops.length;
+}
+
+const prevMonthOf = (m: string) => {
+  const [y, mo] = m.split("-").map(Number);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`;
+};

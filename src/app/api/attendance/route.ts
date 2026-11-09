@@ -177,6 +177,7 @@ export async function POST(req: Request) {
         shiftAssignmentId: open.shiftAssignmentId,
         checkInAt: open.checkInAt,
         checkOutAt: now,
+        extraHours: open.extraHours,
       });
       const updated = await Attendance.findOneAndUpdate(
         { _id: open._id, status: "OPEN" }, // điều kiện → bấm 2 lần không ghi đè

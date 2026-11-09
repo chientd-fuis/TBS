@@ -25,6 +25,8 @@ export async function upsertAttendance(
     workStoreId?: string;
     /** chấm hộ hàng loạt: không ghi nhật ký từng lượt (ghi 1 dòng tổng) */
     quiet?: boolean;
+    /** giờ cộng thêm cho lượt này (VD 0,5) – undefined = giữ nguyên */
+    extraHours?: number;
     /** import dữ liệu cũ: thiếu giờ ra ở ngày đã qua → ghi "Quên check-out" (không phải đang trong ca) */
     pastMissingOut?: boolean;
   },
@@ -63,7 +65,8 @@ export async function upsertAttendance(
   // luôn tìm lại ca theo giờ vào mới (sửa ngày/giờ thì ca cũ có thể không còn đúng)
   const shift = await findShiftFor(opts.userId, checkInAt, tz, storeId);
   const shiftAssignmentId = shift?.a._id ?? null;
-  const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt });
+  const extraHours = opts.extraHours ?? existing?.extraHours ?? 0;
+  const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt, extraHours });
   const status = checkOutAt
     ? "COMPLETED"
     : opts.pastMissingOut && Date.now() - checkInAt.getTime() > 16 * 3600_000
@@ -84,6 +87,7 @@ export async function upsertAttendance(
     status,
     shiftAssignmentId,
     shiftLabel: fields.shiftLabel ?? null,
+    extraHours,
     outOfShift: !shift,
     ...(checkOutAt ? {} : { totalHours: null, roundedHours: null, earlyMinutes: 0 }),
   };

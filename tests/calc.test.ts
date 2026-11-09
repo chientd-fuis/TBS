@@ -15,6 +15,21 @@ test("làm tròn xuống 0,5h (spec 4.3)", () => {
   assert.equal(roundedHours(at(0, 0), at(4, 30), R), 4.5);
 });
 
+test("dung sai riêng mốc 0,5 (3 phút) và mốc 1 giờ (4 phút)", () => {
+  const G = { stepHours: 0.5, graceMinutes: 3, graceHourMinutes: 4 };
+  assert.equal(roundedHours(at(0, 0), at(3, 27), G), 3.5); // thiếu 3' tới 3h30 → 3,5
+  assert.equal(roundedHours(at(0, 0), at(3, 26), G), 3); // thiếu 4' tới 3h30 → giữ 3
+  assert.equal(roundedHours(at(0, 0), at(3, 56), G), 4); // thiếu 4' tới 4h00 → 4
+  assert.equal(roundedHours(at(0, 0), at(3, 55), G), 3.5); // thiếu 5' tới 4h00 → 3,5
+  assert.equal(roundedHours(at(0, 0), at(4, 0), G), 4);
+  assert.equal(roundedHours(at(0, 0), at(4, 26), G), 4); // thiếu 4' tới 4h30 (dung sai 3') → 4
+  assert.equal(roundedHours(at(0, 0), at(4, 29), G), 4.5); // thiếu 1' → 4,5
+  // bước 1 giờ: mọi mốc là tròn giờ → dùng dung sai mốc 1 giờ
+  assert.equal(roundedHours(at(0, 0), at(7, 56), { stepHours: 1, graceMinutes: 0, graceHourMinutes: 4 }), 8);
+  // không đặt dung sai mốc 1 giờ → dùng chung dung sai mốc lẻ (như cũ)
+  assert.equal(roundedHours(at(0, 0), at(14, 55), { stepHours: 0.5, graceMinutes: 5 }), 15);
+});
+
 test("dung sai làm tròn 5 phút (theo dữ liệu mẫu)", () => {
   const G = { stepHours: 0.5, graceMinutes: 5 };
   assert.equal(roundedHours(at(0, 0), at(14, 55), G), 15);

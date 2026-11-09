@@ -114,6 +114,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
                     inTime={localTime(r.checkInAt, tz)}
                     outTime={r.checkOutAt ? localTime(r.checkOutAt, tz) : ""}
                     missingOut={r.status === "MISSING_CHECKOUT"}
+                    extraHours={(r as AttRow & { extraHours?: number }).extraHours ?? 0}
                   />
                 )}
                 <Link className="text-accent underline" href={`/admin/attendance/${r._id}`}>Chi tiết / lịch sử</Link>

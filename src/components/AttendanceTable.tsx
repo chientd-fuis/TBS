@@ -21,6 +21,7 @@ export type AttRow = {
   manualReason?: string | null;
   note?: string | null;
   staffNote?: string | null;
+  extraHours?: number | null;
   checkInPhotoId?: string | null;
   checkOutPhotoId?: string | null;
   checkInPendingPhotoId?: unknown;
@@ -90,7 +91,10 @@ export function AttendanceTable({
                 <td>{r.checkOutAt ? localTime(r.checkOutAt, tz) : ""}</td>
                 <td className="text-right">{hoursVi(r.totalHours)}</td>
                 <td>{r.checkOutAt ? formatDuration(r.checkInAt, r.checkOutAt) : ""}</td>
-                <td className="text-right font-bold">{hoursVi(r.roundedHours)}</td>
+                <td className="text-right font-bold">
+                  {hoursVi(r.roundedHours)}
+                  {!!r.extraHours && <span className="block text-[10px] font-semibold text-secondary-dark" title="Admin cộng thêm cho ca này">gồm +{hoursVi(r.extraHours)}h</span>}
+                </td>
                 <td className="whitespace-nowrap text-xs">{r.shiftLabel || (r.outOfShift ? <Badge>Ngoài ca</Badge> : "")}</td>
                 <td className="space-x-1 whitespace-nowrap">
                   {!!r.lateMinutes && <Badge tone="orange">Muộn {r.lateMinutes}&apos;</Badge>}

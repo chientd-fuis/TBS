@@ -18,7 +18,8 @@ const SettingsSchema = new Schema(
     googleConnectedAt: Date,
     rootDriveFolderId: { type: String, default: "" },
     roundStepHours: { type: Number, default: 0.5 },
-    roundGraceMinutes: { type: Number, default: 0 },
+    roundGraceMinutes: { type: Number, default: 0 }, // dung sai lên mốc lẻ (VD :30)
+    roundGraceHourMinutes: { type: Number }, // dung sai lên mốc tròn giờ (:00) – trống = dùng roundGraceMinutes
     lateThresholdMinutes: { type: Number, default: 5 },
     earlyThresholdMinutes: { type: Number, default: 5 },
     minCheckoutMinutes: { type: Number, default: 5 },
@@ -242,7 +243,8 @@ const AttendanceSchema = new Schema(
     faceScoreIn: Number,
     faceScoreOut: Number,
     totalHours: Number,
-    roundedHours: Number,
+    roundedHours: Number, // giờ tính công = làm tròn + extraHours
+    extraHours: { type: Number, default: 0 }, // admin cộng thêm cho lượt này (VD +0,5h) – đã gồm trong roundedHours
     lateMinutes: { type: Number, default: 0 },
     earlyMinutes: { type: Number, default: 0 },
     outOfShift: { type: Boolean, default: false },

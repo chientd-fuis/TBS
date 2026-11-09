@@ -14,7 +14,8 @@ export async function saveConfig(_: FormState, fd: FormData): Promise<FormState>
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
     const data = {
       roundStepHours: dec(fd.get("roundStepHours"), 0.5),
-      roundGraceMinutes: num(fd.get("roundGraceMinutes"), 0),
+      roundGraceMinutes: Math.max(0, num(fd.get("roundGraceMinutes"), 0)),
+      roundGraceHourMinutes: Math.max(0, num(fd.get("roundGraceHourMinutes"), num(fd.get("roundGraceMinutes"), 0))),
       lateThresholdMinutes: num(fd.get("lateThresholdMinutes"), 5),
       earlyThresholdMinutes: num(fd.get("earlyThresholdMinutes"), 5),
       minCheckoutMinutes: num(fd.get("minCheckoutMinutes"), 5),
@@ -25,11 +26,17 @@ export async function saveConfig(_: FormState, fd: FormData): Promise<FormState>
       adminSessionDays: Math.max(1, num(fd.get("adminSessionDays"), 7)),
     };
     if (![0, 0.25, 0.5, 1].includes(data.roundStepHours)) return { error: "Bước làm tròn: 0 / 0,25 / 0,5 / 1 giờ" };
+    if (data.roundGraceMinutes >= 30 || data.roundGraceHourMinutes >= 30) return { error: "Dung sai làm tròn phải dưới 30 phút" };
     if (data.faceMatchThreshold < 0.3 || data.faceMatchThreshold > 0.7) return { error: "Ngưỡng khuôn mặt nên trong 0,3–0,7" };
     const before = await Settings.findOne({ key: "main" }).lean();
     await Settings.updateOne({ key: "main" }, { $set: data });
     await audit(adminActor(admin), "settings.config", { type: "Settings" }, before, data);
-    revalidatePath("/admin/settings");
+    // tuỳ chọn: tính lại giờ công (làm tròn) các lượt của tháng này + tháng trước chưa chốt lương
+    if (fd.get("recompute") === "on") {
+      const { recomputeRounding } = await import("@/lib/attendance");
+      await recomputeRounding();
+    }
+    revalidatePath("/admin", "layout");
     return { ok: true };
   } catch (e) {
     return errMsg(e);

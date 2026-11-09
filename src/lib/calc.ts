@@ -1,6 +1,10 @@
 /** Các công thức tính giờ công – thuần tuý, có unit test (tests/calc.test.ts). */
 
-export type RoundingConfig = { stepHours: number; graceMinutes: number };
+/**
+ * graceMinutes: dung sai để lên mốc lẻ (VD :30 khi bước 0,5h)
+ * graceHourMinutes: dung sai để lên mốc TRÒN GIỜ (:00) – không có thì dùng graceMinutes
+ */
+export type RoundingConfig = { stepHours: number; graceMinutes: number; graceHourMinutes?: number | null };
 
 /** Tổng giờ (thập phân, 2 chữ số) giữa 2 mốc. */
 export function totalHours(checkIn: Date, checkOut: Date) {
@@ -17,16 +21,20 @@ export function formatDuration(checkIn: Date, checkOut: Date) {
 }
 
 /**
- * Giờ tính công: làm tròn XUỐNG theo bước (mặc định 0,5h).
- * graceMinutes: dung sai (mặc định 0) – VD 5 → 14h55' được tính 15h.
- * VD: 4h45' → 4,5 ; 5h10' → 5 ; 13h41' → 13,5
+ * Giờ tính công: làm tròn XUỐNG theo bước (mặc định 0,5h), có dung sai riêng cho mốc lẻ và mốc tròn giờ.
+ * VD bước 0,5h, dung sai mốc 0,5 = 3', mốc 1h = 4':
+ *   3h27' → 3,5 (thiếu 3' tới 3h30) · 3h26' → 3 · 3h56' → 4 (thiếu 4' tới 4h00) · 3h55' → 3,5
  */
 export function roundedHours(checkIn: Date, checkOut: Date, cfg: RoundingConfig) {
   const minutes = Math.max(0, (checkOut.getTime() - checkIn.getTime()) / 60000);
   const stepMin = cfg.stepHours * 60;
   if (stepMin <= 0) return Math.round((minutes / 60) * 100) / 100;
-  const steps = Math.floor((minutes + cfg.graceMinutes) / stepMin + 1e-9);
-  return Math.round(steps * cfg.stepHours * 100) / 100;
+  const steps = Math.floor(minutes / stepMin + 1e-9);
+  const next = (steps + 1) * stepMin; // mốc kế tiếp (phút)
+  const isHour = Math.abs(next % 60) < 1e-9 || Math.abs((next % 60) - 60) < 1e-9;
+  const grace = isHour ? (cfg.graceHourMinutes ?? cfg.graceMinutes) : cfg.graceMinutes;
+  const n = minutes + Math.max(0, grace) >= next - 1e-9 ? steps + 1 : steps;
+  return Math.round(n * cfg.stepHours * 100) / 100;
 }
 
 /** Số phút đi muộn (0 nếu trong ngưỡng cho phép). */
