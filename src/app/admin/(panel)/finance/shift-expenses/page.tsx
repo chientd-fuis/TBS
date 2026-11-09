@@ -1,3 +1,4 @@
+import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
@@ -22,7 +23,7 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
   const stores = await Store.find({ active: { $ne: false } }).sort({ createdAt: 1 }).lean();
   const short = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]));
   const q: Record<string, unknown> = { workDate: { $gte: first, $lte: last }, $or: [{ "revenue.cp": { $nin: [0, null] } }, { "revenueInput.cp": { $nin: ["", null] } }] };
-  if (sp.store) q.storeId = sp.store;
+  if (sp.store && isValidObjectId(sp.store)) q.storeId = sp.store; // link sai tham số → bỏ qua lọc (tránh lỗi 500)
   const all = await ShiftClosing.find(q).sort({ workDate: -1, createdAt: -1 }).select("storeId workDate shiftName employeeName revenue revenueInput createdAt").lean();
   // chốt ca LUỸ KẾ (ca Tối = cả ngày) → mỗi cơ sở mỗi ngày chỉ lấy lượt chốt cuối, tránh cộng trùng
   const groups = new Map<string, typeof all>();

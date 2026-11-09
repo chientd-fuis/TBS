@@ -18,7 +18,7 @@ export async function submitAdjustment(_: FormState, fd: FormData): Promise<Form
   await AdjustmentRequest.create({
     userId: user._id,
     storeId: user.storeId,
-    attendanceId: fd.get("attendanceId") || undefined,
+    // form không có ô này – không nhận mã lượt chấm công từ phía nhân viên (tránh gắn lượt của người khác); admin tự tìm theo ngày khi duyệt
     workDate,
     checkInTime,
     checkOutTime,

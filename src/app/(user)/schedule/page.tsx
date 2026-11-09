@@ -44,8 +44,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     for (const list of Object.values(board.cells))
       for (const c of list)
         if (c.userId !== String(user._id)) {
+          // chỉ cho biết ai làm ca nào – không lộ cảnh báo của người khác (muộn / sớm / quên check-out / làm thêm ca / bỏ ca)
           c.late = c.early = undefined;
           c.missingOut = undefined;
+          c.extra = undefined;
+          if (c.state === "missed") c.state = "worked";
         }
   // các tuần cần hiển thị
   const weeks: string[] = [];

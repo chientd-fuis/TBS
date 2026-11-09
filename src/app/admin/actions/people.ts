@@ -232,3 +232,37 @@ export async function quickCreateOfflineStaff(name: string, storeId: string, hou
     return { error: (e as Error).message };
   }
 }
+
+/**
+ * Sửa nhanh từ danh sách nhân viên (popup): họ tên + lương giờ.
+ * Lương đổi → thêm mức lương hiệu lực từ ngày chọn (mặc định hôm nay); bảng lương nháp tự tính lại khi mở.
+ */
+export async function quickEditEmployee(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    await connectDB();
+    const user = await User.findById(str(fd.get("userId")));
+    if (!user) return { error: "Không tìm thấy nhân viên" };
+    const name = str(fd.get("name")).replace(/\s+/g, " ").slice(0, 80);
+    if (name.length < 2) return { error: "Họ tên quá ngắn" };
+    const wage = Math.round(num(fd.get("hourlyWage")));
+    if (!(wage > 0)) return { error: "Lương giờ phải > 0" };
+    const from = str(fd.get("effectiveFrom")) || localDate(new Date());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Ngày hiệu lực không hợp lệ" };
+    const before = { name: user.name, hourlyWage: user.hourlyWage };
+    user.name = name;
+    if (wage !== user.hourlyWage) {
+      await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: from, createdBy: adminActor(admin).name });
+      // lương hiện tại = mức có hiệu lực tới hôm nay (ngày hiệu lực ở tương lai → giữ lương cũ tới ngày đó)
+      const latest = await WageHistory.findOne({ userId: user._id, effectiveFrom: { $lte: localDate(new Date()) } }).sort({ effectiveFrom: -1, createdAt: -1 }).lean();
+      user.hourlyWage = latest?.hourlyWage ?? wage;
+    }
+    await user.save();
+    await audit(adminActor(admin), "user.update", { type: "User", id: String(user._id) }, before, { name, hourlyWage: wage, effectiveFrom: from });
+    revalidatePath("/admin/employees", "layout");
+    revalidatePath("/admin/payroll");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}

@@ -1,3 +1,4 @@
+import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { Store, User } from "@/lib/models";
@@ -5,6 +6,8 @@ import { vnd } from "@/lib/format";
 import { Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { createOfflineStaff } from "../../actions/people";
+import EditEmployeeButton from "./EditEmployeeButton";
+import { localDate } from "@/lib/time";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +25,14 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
   const q: Record<string, unknown> = {};
-  if (sp.store) q.storeId = sp.store;
+  if (sp.store && isValidObjectId(sp.store)) q.storeId = sp.store; // link sai tham số → bỏ qua lọc (tránh lỗi 500)
   q.status = sp.status || { $in: ["ACTIVE", "PENDING"] };
   if (sp.q) {
     const re = sp.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escape ký tự đặc biệt khi tìm
     q.$or = [{ name: { $regex: re, $options: "i" } }, { email: { $regex: re, $options: "i" } }, { phone: { $regex: re } }];
   }
   const users = await User.find(q).sort({ name: 1 }).lean();
+  const today = localDate(new Date());
   const storeName = new Map(stores.map((s) => [String(s._id), s.name]));
   return (
     <>
@@ -62,7 +66,10 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                     <td>{storeName.get(String(u.storeId))}</td>
                     <td className="text-right">{vnd(u.hourlyWage)}</td>
                     <td><Badge tone={STATUS[u.status].tone}>{STATUS[u.status].label}</Badge></td>
-                    <td><Link className="text-accent underline" href={`/admin/employees/${u._id}`}>Chi tiết</Link></td>
+                    <td className="whitespace-nowrap">
+                      <EditEmployeeButton id={String(u._id)} name={u.name || u.googleName || ""} hourlyWage={u.hourlyWage || 0} today={today} />
+                      <Link className="ml-1 text-sm text-accent underline" href={`/admin/employees/${u._id}`}>Chi tiết</Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

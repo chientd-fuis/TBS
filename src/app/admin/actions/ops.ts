@@ -454,32 +454,47 @@ export async function savePayrollExtras(_: FormState, fd: FormData): Promise<For
 export async function resolveAdjustment(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("adjustments"); // mặc định chỉ Admin Tổng; admin cần được cấp quyền
-    const req = await AdjustmentRequest.findById(str(fd.get("id")));
-    if (!req || req.status !== "PENDING") return { error: "Yêu cầu đã được xử lý" };
+    // GIỮ yêu cầu trước (nguyên tử): bấm đúp / 2 admin cùng bấm → chỉ 1 người xử lý, người sau nhận "đã được xử lý"
+    // (khoá quá 2 phút coi như bị treo – cho xử lý lại)
+    const req = await AdjustmentRequest.findOneAndUpdate(
+      { _id: str(fd.get("id")), status: "PENDING", $or: [{ lockedAt: null }, { lockedAt: { $lt: new Date(Date.now() - 2 * 60_000) } }] },
+      { $set: { lockedAt: new Date() } },
+      { returnDocument: "after" },
+    );
+    if (!req) return { error: "Yêu cầu đã được xử lý (hoặc đang được admin khác duyệt)" };
     const op = str(fd.get("op"));
     const reply = str(fd.get("reply"));
-    if (op === "approve") {
-      let target = req.attendanceId ? await Attendance.findById(req.attendanceId).lean() : null;
-      if (!target && req.workDate) {
-        // lượt cùng ngày đang thiếu giờ ra
-        target = await Attendance.findOne({ userId: req.userId, workDate: req.workDate, status: { $in: ["OPEN", "MISSING_CHECKOUT"] } }).lean();
+    try {
+      if (op === "approve") {
+        let target = req.attendanceId ? await Attendance.findById(req.attendanceId).lean() : null;
+        // chỉ sửa lượt của CHÍNH người gửi yêu cầu
+        if (target && String(target.userId) !== String(req.userId)) target = null;
+        if (!target && req.workDate) {
+          // lượt cùng ngày đang thiếu giờ ra
+          target = await Attendance.findOne({ userId: req.userId, workDate: req.workDate, status: { $in: ["OPEN", "MISSING_CHECKOUT"] } }).lean();
+        }
+        await upsertAttendance(admin, {
+          id: target ? String(target._id) : undefined,
+          userId: String(req.userId),
+          date: req.workDate || (target?.workDate ?? ""),
+          inTime: str(fd.get("inTime")) || req.checkInTime || "",
+          outTime: str(fd.get("outTime")) || req.checkOutTime || "",
+          reason: `Yêu cầu NV: ${req.reason}`,
+          source: "REQUEST",
+        });
+        req.status = "APPROVED";
+      } else {
+        req.status = "REJECTED";
       }
-      await upsertAttendance(admin, {
-        id: target ? String(target._id) : undefined,
-        userId: String(req.userId),
-        date: req.workDate || (target?.workDate ?? ""),
-        inTime: str(fd.get("inTime")) || req.checkInTime || "",
-        outTime: str(fd.get("outTime")) || req.checkOutTime || "",
-        reason: `Yêu cầu NV: ${req.reason}`,
-        source: "REQUEST",
-      });
-      req.status = "APPROVED";
-    } else {
-      req.status = "REJECTED";
+    } catch (e) {
+      // ghi lỗi → nhả khoá để duyệt lại được
+      await AdjustmentRequest.updateOne({ _id: req._id }, { $unset: { lockedAt: 1 } });
+      throw e;
     }
     req.adminName = adminActor(admin).name;
     req.adminReply = reply;
     req.resolvedAt = new Date();
+    req.set("lockedAt", undefined);
     await req.save();
     await audit(adminActor(admin), op === "approve" ? "adjustment.approve" : "adjustment.reject", { type: "AdjustmentRequest", id: String(req._id) }, null, {
       userId: String(req.userId),
@@ -541,36 +556,3 @@ export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<
 }
 
 
-/**
- * Sửa lương giờ ngay trong bảng lương (bảng nháp): lương mới áp dụng từ ngày 1 của tháng bảng lương trở đi
- * (mức lương đổi giữa tháng đó bị thay), rồi tính lại bảng lương.
- */
-export async function savePayrollWage(_: FormState, fd: FormData): Promise<FormState> {
-  try {
-    const admin = await assertPerm("payroll");
-    const actor = adminActor(admin);
-    const item = await PayrollItem.findById(str(fd.get("itemId"))).lean();
-    if (!item) return { error: "Không tìm thấy dòng lương" };
-    const p = await Payroll.findById(item.payrollId).lean();
-    if (p?.status !== "DRAFT") return { error: "Bảng lương đã công bố – mở khoá để sửa" };
-    const wage = Math.round(num(fd.get("hourlyWage")));
-    if (wage <= 0) return { error: "Lương giờ phải > 0" };
-    const { WageHistory } = await import("@/lib/models");
-    const { monthRange, localDate } = await import("@/lib/time");
-    const { first, last } = monthRange(p.month);
-    const before = await WageHistory.find({ userId: item.userId, effectiveFrom: { $gte: first, $lte: last } }).lean();
-    // mức lương đổi trong tháng này → thay bằng 1 mức từ ngày 1
-    await WageHistory.deleteMany({ userId: item.userId, effectiveFrom: { $gte: first, $lte: last } });
-    await WageHistory.create({ userId: item.userId, hourlyWage: wage, effectiveFrom: first, createdBy: actor.name });
-    // lương hiện tại của nhân viên = mức có hiệu lực tới hôm nay
-    const latest = await WageHistory.findOne({ userId: item.userId, effectiveFrom: { $lte: localDate(new Date()) } }).sort({ effectiveFrom: -1, createdAt: -1 }).lean();
-    if (latest) await User.updateOne({ _id: item.userId }, { $set: { hourlyWage: latest.hourlyWage } });
-    await audit(actor, "user.wage", { type: "User", id: String(item.userId) }, { wages: before.map((w) => ({ hourlyWage: w.hourlyWage, effectiveFrom: w.effectiveFrom })) }, { hourlyWage: wage, effectiveFrom: first, month: p.month });
-    await generatePayroll(String(p.storeId), p.month);
-    revalidatePath("/admin/payroll");
-    revalidatePath(`/admin/employees/${item.userId}`);
-    return { ok: true };
-  } catch (e) {
-    return errMsg(e);
-  }
-}

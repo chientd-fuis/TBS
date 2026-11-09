@@ -106,9 +106,12 @@ export function geminiModels() {
 }
 
 /** Diễn giải lỗi Gemini thành câu dễ hiểu (hết lượt theo ngày / theo phút / quá tải / key sai…). */
+/** Che API key trong thông báo lỗi của Google (VD "Consumer 'api_key:AIza…' has been suspended") – không lộ ra màn hình / log. */
+export const redactKeys = (t: string) => t.replace(/AIza[0-9A-Za-z_-]{20,}/g, "AIza***").replace(/api_key:[^'"\s)]+/gi, "api_key:***");
+
 export function describeGeminiError(status: number, body: unknown, model: string): { text: string; retryable: boolean } {
   const e = (body as GeminiErr)?.error;
-  const msg = e?.message ?? "";
+  const msg = redactKeys(e?.message ?? "");
   if (status === 400 && /API key/i.test(msg)) return { text: "GEMINI_API_KEY không hợp lệ", retryable: false };
   if (status === 400 && /location is not supported/i.test(msg))
     return {

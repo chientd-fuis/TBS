@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { APPROVED_SHIFT, CoverRequest, ShiftAssignment, Store, User, UserNotice } from "./models";
 import { findShiftClash } from "./support";
+import { localDate } from "./time";
 
 /* Nhờ làm hộ ca */
 
@@ -98,30 +99,69 @@ async function assertSwapFits(a: SwapShift, b: SwapShift, toName: string, fromNa
   if (c2) throw new Error(`${toName} đã có ${c2} – trùng giờ với ca nhận về`);
 }
 
+/**
+ * GIỮ yêu cầu trước khi duyệt / từ chối (nguyên tử): chỉ 1 người xử lý được – bấm đúp, Duyệt rồi Từ chối,
+ * 2 người cùng bấm → người sau nhận lỗi. Khoá quá 2 phút coi như bị treo, cho xử lý lại.
+ */
+async function claim(id: string) {
+  const r = await CoverRequest.findOneAndUpdate(
+    { _id: id, status: "PENDING", $or: [{ lockedAt: null }, { lockedAt: { $lt: new Date(Date.now() - 2 * 60_000) } }] },
+    { $set: { lockedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (!r) throw new Error("Yêu cầu đã được xử lý (hoặc đang được người khác duyệt)");
+  return r;
+}
+/** Lỗi giữa chừng → nhả khoá (nếu yêu cầu vẫn đang chờ) để xử lý lại được. */
+const release = (id: unknown) => CoverRequest.updateOne({ _id: id, status: "PENDING" }, { $unset: { lockedAt: 1 } }).catch(() => null);
+/** Kết thúc yêu cầu: trạng thái cuối + bỏ khoá. */
+async function finish(r: InstanceType<typeof CoverRequest>, status: "APPROVED" | "REJECTED" | "CANCELLED", by: string, reply?: string) {
+  r.set({ status, decidedBy: by, decidedAt: new Date(), reply: reply || undefined, lockedAt: undefined });
+  await r.save();
+}
+
+/** Ca đã qua (theo giờ cơ sở) → không duyệt nữa, huỷ yêu cầu. */
+async function assertNotPast(r: InstanceType<typeof CoverRequest>, by: string) {
+  const st = await Store.findById(r.storeId).select("timezone").lean();
+  const today = localDate(new Date(), st?.timezone || undefined);
+  const first = [r.date, r.toDate].filter(Boolean).sort()[0]!;
+  if (first < today) {
+    await finish(r, "CANCELLED", by, "Hết hạn – ca đã qua");
+    throw new Error("Ca đã qua – không duyệt được nữa, yêu cầu đã huỷ");
+  }
+}
+
+/** Người nhận ca có đăng ký CHỜ DUYỆT / BỊ TỪ CHỐI ở đúng ô ca đó → xoá để không vướng khoá trùng (userId + ngày + ca). */
+const clearSlot = (userId: unknown, sa: { _id: unknown; date: string; shiftTemplateId: unknown }) =>
+  ShiftAssignment.deleteMany({ userId, date: sa.date, shiftTemplateId: sa.shiftTemplateId, _id: { $ne: sa._id }, status: { $in: ["PENDING", "REJECTED"] } });
+
 /** Admin duyệt đổi ca: hoán đổi người của 2 ca → lịch làm việc cập nhật, báo cho cả 2. */
 async function approveSwap(r: InstanceType<typeof CoverRequest>, by: string, reply?: string) {
   const [a, b] = await Promise.all([ShiftAssignment.findById(r.shiftAssignmentId), ShiftAssignment.findById(r.toShiftAssignmentId)]);
   const ok = a && b && String(a.userId) === String(r.fromUserId) && String(b.userId) === String(r.toUserId) && isApproved(a) && isApproved(b);
   if (!ok) {
-    r.set({ status: "CANCELLED", decidedBy: by, decidedAt: new Date(), reply: "1 trong 2 ca đã thay đổi" });
-    await r.save();
+    await finish(r, "CANCELLED", by, "1 trong 2 ca đã thay đổi");
     throw new Error("1 trong 2 ca đã thay đổi (bị xoá / chuyển người / chưa duyệt) – yêu cầu đã huỷ");
   }
+  await assertNotPast(r, by);
   const [from, to] = await Promise.all([User.findById(r.fromUserId).select("name").lean(), User.findById(r.toUserId).select("name").lean()]);
   await assertSwapFits(a, b, to?.name ?? "Người nhận đổi", from?.name ?? "Người xin đổi");
+  // NV2 nhận ca a, NV1 nhận ca b → xoá đăng ký chờ / bị từ chối của họ ở đúng ô đó (tránh lỗi trùng khoá E11000)
+  await clearSlot(r.toUserId, a);
+  await clearSlot(r.fromUserId, b);
   const meta = { source: "MANUAL" as const, decidedBy: by, decidedAt: new Date() };
+  const aBefore = { userId: a.userId, source: a.source, decidedBy: a.decidedBy, decidedAt: a.decidedAt };
   a.set({ userId: r.toUserId, ...meta });
   await a.save();
   try {
     b.set({ userId: r.fromUserId, ...meta });
     await b.save();
   } catch (e) {
-    a.set({ userId: r.fromUserId }); // hoàn tác ca thứ nhất
+    a.set(aBefore); // hoàn tác đầy đủ ca thứ nhất
     await a.save();
     throw e;
   }
-  r.set({ status: "APPROVED", decidedBy: by, decidedAt: new Date(), reply: reply || undefined });
-  await r.save();
+  await finish(r, "APPROVED", by, reply);
   const sa = { date: r.date, shiftName: r.shiftName, startTime: r.startTime, endTime: r.endTime };
   const sb = { date: r.toDate!, shiftName: r.toShiftName, startTime: r.toStartTime, endTime: r.toEndTime };
   const note = reply ? ` Ghi chú: ${reply}` : "";
@@ -133,21 +173,29 @@ async function approveSwap(r: InstanceType<typeof CoverRequest>, by: string, rep
 /** Admin duyệt: chuyển ca từ NV1 sang NV2 (nhờ làm hộ) hoặc hoán đổi 2 ca (đổi ca), báo cho cả 2. */
 export async function approveCover(id: string, by: string, reply?: string) {
   await connectDB();
-  const r = await CoverRequest.findById(id);
-  if (!r || r.status !== "PENDING") throw new Error("Yêu cầu đã được xử lý");
-  if (r.kind === "SWAP") return approveSwap(r, by, reply);
+  const r = await claim(id);
+  try {
+    if (r.kind === "SWAP") return await approveSwap(r, by, reply);
+    return await approveCoverOne(r, by, reply);
+  } catch (e) {
+    await release(r._id);
+    throw e;
+  }
+}
+
+async function approveCoverOne(r: InstanceType<typeof CoverRequest>, by: string, reply?: string) {
   const sa = await ShiftAssignment.findById(r.shiftAssignmentId);
   if (!sa || String(sa.userId) !== String(r.fromUserId) || (sa.status && sa.status !== "APPROVED")) {
-    r.set({ status: "CANCELLED", decidedBy: by, decidedAt: new Date(), reply: "Ca không còn của người nhờ" });
-    await r.save();
+    await finish(r, "CANCELLED", by, "Ca không còn của người nhờ");
     throw new Error("Ca này đã thay đổi (bị xoá / chuyển người) – yêu cầu đã huỷ");
   }
+  await assertNotPast(r, by);
   const clash = await findShiftClash(r.toUserId, sa.date, sa.startTime!, sa.endTime!);
   if (clash) throw new Error(`Người làm hộ đã có ${clash} – trùng giờ`);
+  await clearSlot(r.toUserId, sa); // đăng ký chờ / bị từ chối của người làm hộ ở đúng ô này → tránh lỗi trùng khoá E11000
   sa.set({ userId: r.toUserId, source: "MANUAL", decidedBy: by, decidedAt: new Date() });
   await sa.save();
-  r.set({ status: "APPROVED", decidedBy: by, decidedAt: new Date(), reply: reply || undefined });
-  await r.save();
+  await finish(r, "APPROVED", by, reply);
   const [from, to, store] = await Promise.all([
     User.findById(r.fromUserId).select("name").lean(),
     User.findById(r.toUserId).select("name").lean(),
@@ -161,10 +209,13 @@ export async function approveCover(id: string, by: string, reply?: string) {
 
 export async function rejectCover(id: string, by: string, reply?: string) {
   await connectDB();
-  const r = await CoverRequest.findById(id);
-  if (!r || r.status !== "PENDING") throw new Error("Yêu cầu đã được xử lý");
-  r.set({ status: "REJECTED", decidedBy: by, decidedAt: new Date(), reply: reply || undefined });
-  await r.save();
+  const r = await claim(id);
+  try {
+    await finish(r, "REJECTED", by, reply);
+  } catch (e) {
+    await release(r._id);
+    throw e;
+  }
   const to = await User.findById(r.toUserId).select("name").lean();
   if (r.kind === "SWAP") {
     const sb = { date: r.toDate!, shiftName: r.toShiftName, startTime: r.toStartTime, endTime: r.toEndTime };

@@ -5,7 +5,6 @@ export const CLEANUP_KEYS = [
   "auditLogs",
   "adjustLogs",
   "photos",
-  "closings",
   "notices",
   "requests",
   "payrollFeedback",
@@ -43,7 +42,6 @@ export const CLEANUP_ITEMS: CleanupItem[] = [
   { key: "faces", group: "account", on: true, auto: false, label: "Dữ liệu khuôn mặt của người đã nghỉ", hint: "Dữ liệu sinh trắc – đi làm lại thì đăng ký lại" },
   { key: "photos", group: "photo", on: true, auto: false, label: "Ảnh check-in / check-out & chốt ca", hint: "Bỏ liên kết ảnh + xoá ảnh tạm trong database" },
   { key: "stuckPhotos", group: "photo", on: true, auto: true, label: "Ảnh tải lên bị kẹt", hint: "Ảnh tạm đã thử tải lên Drive 20 lần vẫn lỗi (mọi tháng)" },
-  { key: "closings", group: "data", on: true, auto: false, label: "Thông tin chốt ca & doanh thu từng ca", hint: "Tổng ngày đã ghi lên Google Sheet nên không cần giữ" },
   { key: "orphans", group: "data", on: true, auto: true, label: "Dữ liệu mồ côi (mọi tháng)", hint: "Doanh thu ngày không còn chốt ca, ca / thông báo / thiết bị của người hoặc cơ sở đã bị xoá" },
   { key: "metaData", group: "data", on: true, auto: true, label: "Dữ liệu phụ của chốt ca & chi phí", hint: "Kết quả AI đọc ảnh, mã tin nhắn Telegram – giữ nguyên số liệu" },
 ];

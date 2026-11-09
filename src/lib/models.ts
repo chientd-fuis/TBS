@@ -292,6 +292,7 @@ const AdjustmentRequestSchema = new Schema(
     adminName: String,
     adminReply: String,
     resolvedAt: Date,
+    lockedAt: Date, // đang được 1 admin xử lý – chống duyệt 2 lần (bấm đúp / 2 admin cùng bấm)
   },
   { timestamps: true },
 );
@@ -428,6 +429,7 @@ const CoverRequestSchema = new Schema(
     decidedBy: String,
     decidedAt: Date,
     reply: String,
+    lockedAt: Date, // đang được duyệt / từ chối – chống xử lý 2 lần (bấm đúp, Duyệt rồi Từ chối, 2 người cùng bấm)
   },
   { timestamps: true },
 );

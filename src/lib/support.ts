@@ -12,21 +12,31 @@ type Id = string | Types.ObjectId;
  * Trả về mô tả ca bị trùng, hoặc null.
  */
 export async function findShiftClash(userId: Id, date: string, startTime: string, endTime: string, skip?: { tplId: string; date: string }) {
+  return (await findShiftClashes(userId, date, startTime, endTime, skip))[0]?.text ?? null;
+}
+
+/** Mọi ca đã xếp / duyệt (ở bất kỳ cơ sở nào) trùng giờ – kèm id, cơ sở, mô tả. */
+export async function findShiftClashes(userId: Id, date: string, startTime: string, endTime: string, skip?: { tplId: string; date: string }) {
   const rows = await ShiftAssignment.find({ userId, date: { $gte: addDays(date, -1), $lte: addDays(date, 1) }, ...APPROVED_SHIFT })
     .select("storeId shiftTemplateId date startTime endTime shiftName")
     .lean();
   const days = [date];
   const [s, e] = slotInterval(days, date, { startTime, endTime });
+  const out: { id: string; storeId: string; text: string }[] = [];
   for (const r of rows) {
     if (!r.startTime || !r.endTime) continue;
     if (skip && String(r.shiftTemplateId) === skip.tplId && r.date === skip.date) continue;
     const [a, b] = slotInterval(days, r.date, { startTime: r.startTime, endTime: r.endTime });
     if (s < b && a < e) {
       const st = await Store.findById(r.storeId).select("name").lean();
-      return `${r.shiftName ?? "ca"} ${r.startTime}–${r.endTime} ngày ${r.date.slice(8)}/${r.date.slice(5, 7)} tại ${st?.name ?? "?"}`;
+      out.push({
+        id: String(r._id),
+        storeId: String(r.storeId),
+        text: `${r.shiftName ?? "ca"} ${r.startTime}–${r.endTime} ngày ${r.date.slice(8)}/${r.date.slice(5, 7)} tại ${st?.name ?? "?"}`,
+      });
     }
   }
-  return null;
+  return out;
 }
 
 /** Ca đã duyệt của các nhân viên ở cơ sở KHÁC trong tuần (± 1 ngày cho ca qua đêm). */

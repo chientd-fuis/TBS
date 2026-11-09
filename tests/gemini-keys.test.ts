@@ -37,3 +37,12 @@ test("Gemini: key 1 hết lượt miễn phí → tự chuyển sang key 2", asy
     process.env = env;
   }
 });
+
+test("Gemini: thông báo lỗi không lộ API key", async () => {
+  const { describeGeminiError } = await import("../src/lib/ocr");
+  const d = describeGeminiError(403, { error: { message: "Permission denied: Consumer 'api_key:AIzaSyA1234567890abcdefghijKLMNOP' has been suspended." } }, "m");
+  assert.ok(!/AIzaSyA1234567890/.test(d.text), d.text);
+  assert.match(d.text, /api_key:\*\*\*/);
+  const d2 = describeGeminiError(418, { error: { message: "bad key AIzaSyA1234567890abcdefghijKLMNOP here" } }, "m");
+  assert.ok(!/AIzaSyA1234567890/.test(d2.text), d2.text);
+});

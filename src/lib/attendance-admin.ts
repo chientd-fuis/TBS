@@ -42,6 +42,8 @@ export async function upsertAttendance(
   if (!opts.id && opts.reason.length < 3) throw new Error("Bắt buộc nhập lý do");
 
   const existing = opts.id ? await Attendance.findById(opts.id) : null;
+  // không bao giờ chuyển lượt chấm công của người này sang người khác
+  if (existing && String(existing.userId) !== String(opts.userId)) throw new Error("Lượt chấm công không thuộc nhân viên này");
   const homeStoreId = existing ? payStoreOf(existing) : user.storeId;
   let storeId = existing?.storeId ?? (opts.workStoreId ? new Types.ObjectId(opts.workStoreId) : user.storeId);
   if (opts.workStoreId && !(await Store.exists({ _id: opts.workStoreId }))) throw new Error("Cơ sở làm việc không hợp lệ");
@@ -69,9 +71,10 @@ export async function upsertAttendance(
   const shiftAssignmentId = shift?.a._id ?? null;
   const extraHours = opts.extraHours ?? existing?.extraHours ?? 0;
   const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt, extraHours });
+  // chưa có giờ ra: lượt đang "quên check-out" mà admin chỉ sửa giờ vào / ghi chú / +0,5h → giữ "quên check-out" (không mở lại thành đang trong ca)
   const status = checkOutAt
     ? "COMPLETED"
-    : opts.pastMissingOut && Date.now() - checkInAt.getTime() > 16 * 3600_000
+    : existing?.status === "MISSING_CHECKOUT" || (opts.pastMissingOut && Date.now() - checkInAt.getTime() > 16 * 3600_000)
       ? "MISSING_CHECKOUT"
       : "OPEN";
   if (status === "OPEN") {

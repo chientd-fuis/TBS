@@ -1,4 +1,5 @@
 "use server";
+import { Types } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store, User } from "@/lib/models";
 import { adminOrStaff } from "@/lib/staff-guard";
@@ -6,11 +7,13 @@ import { audit } from "@/lib/audit";
 import { addDays, isYmd, localDate, weekStartOf } from "@/lib/time";
 import { planAutoSchedule, type AutoOptions, type PlanChange } from "@/lib/schedule";
 import { loadHistory, loadWeek } from "@/lib/schedule-data";
-import { findShiftClash } from "@/lib/support";
+import { findShiftClash, findShiftClashes } from "@/lib/support";
+import { notifyUser } from "@/lib/cover";
 
 /* Xếp ca theo tuần (spec 3.2.1): duyệt đăng ký, xếp tay, xếp tự động. Gọi trực tiếp từ client. */
 
-export type Result = { ok?: boolean; error?: string; message?: string };
+/** clash: nhân viên đã có ca trùng giờ (ở cơ sở khác / cơ sở này) → giao diện hỏi "Vẫn yêu cầu hỗ trợ" (gọi lại với force) */
+export type Result = { ok?: boolean; error?: string; message?: string; clash?: string };
 const path = (storeId: string) => `/admin/schedule/${storeId}`;
 /** revalidate cả trang admin lẫn trang Quản lý của nhân viên */
 const revalidate = (storeId: string) => {
@@ -23,21 +26,40 @@ const fail = (e: unknown): Result => ({ error: (e as Error).message || "Lỗi h�
 export async function decideShifts(storeId: string, ids: string[], decision: "APPROVED" | "REJECTED"): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
-    if (!ids.length) return { error: "Không có đăng ký nào" };
-    const r = await ShiftAssignment.updateMany(
-      { _id: { $in: ids }, storeId, status: "PENDING" },
-      { $set: { status: decision, decidedBy: actor.name, decidedAt: new Date() } },
-    );
-    await audit(actor, decision === "APPROVED" ? "schedule.approve" : "schedule.reject", { type: "Store", id: storeId }, null, { ids, n: r.modifiedCount });
+    const list = (Array.isArray(ids) ? ids : []).map(String).filter((x) => Types.ObjectId.isValid(x));
+    if (!list.length) return { error: "Không có đăng ký nào" };
+    const meta = { decidedBy: actor.name, decidedAt: new Date() };
+    if (decision !== "APPROVED") {
+      const r = await ShiftAssignment.updateMany({ _id: { $in: list }, storeId, status: "PENDING" }, { $set: { status: "REJECTED", ...meta } });
+      await audit(actor, "schedule.reject", { type: "Store", id: storeId }, null, { ids: list, n: r.modifiedCount });
+      revalidate(storeId);
+      return { ok: true, message: `Đã từ chối ${r.modifiedCount} ca` };
+    }
+    // duyệt từng ca theo giờ: ca trùng giờ với ca đã duyệt (ở đây / cơ sở khác / vừa duyệt trong lượt này) → bỏ qua, báo lại
+    const pend = await ShiftAssignment.find({ _id: { $in: list }, storeId, status: "PENDING" }).sort({ date: 1, startTime: 1 }).lean();
+    const names = new Map((await User.find({ _id: { $in: pend.map((p) => p.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
+    let n = 0;
+    const skipped: string[] = [];
+    for (const p of pend) {
+      const clash = p.startTime && p.endTime ? await findShiftClash(p.userId, p.date, p.startTime, p.endTime, { tplId: String(p.shiftTemplateId), date: p.date }) : null;
+      if (clash) {
+        skipped.push(`${names.get(String(p.userId)) ?? "?"} ${p.date.slice(8)}/${p.date.slice(5, 7)} ${p.shiftName ?? ""} (trùng ${clash})`);
+        continue;
+      }
+      const r = await ShiftAssignment.updateOne({ _id: p._id, status: "PENDING" }, { $set: { status: "APPROVED", ...meta } });
+      n += r.modifiedCount;
+    }
+    await audit(actor, "schedule.approve", { type: "Store", id: storeId }, null, { ids: list, n, skipped: skipped.length });
     revalidate(storeId);
-    return { ok: true, message: `${decision === "APPROVED" ? "Đã duyệt" : "Đã từ chối"} ${r.modifiedCount} ca` };
+    if (skipped.length) return { ok: true, message: `Đã duyệt ${n} ca. ⚠ Bỏ qua ${skipped.length} ca trùng giờ: ${skipped.slice(0, 5).join("; ")}${skipped.length > 5 ? "…" : ""}` };
+    return { ok: true, message: `Đã duyệt ${n} ca` };
   } catch (e) {
     return fail(e);
   }
 }
 
 /** Xếp tay: thêm nhân viên vào 1 ô (ca × ngày). Nếu nhân viên đã đăng ký ô đó → duyệt luôn. */
-export async function addToSlot(storeId: string, tplId: string, date: string, userId: string): Promise<Result> {
+export async function addToSlot(storeId: string, tplId: string, date: string, userId: string, force = false): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(date)) return { error: "Ngày không hợp lệ" };
@@ -45,9 +67,26 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
     if (!tpl) return { error: "Ca không thuộc cơ sở này" };
     const user = await User.findOne({ _id: userId, status: "ACTIVE" }).select("name storeId").lean();
     if (!user) return { error: "Nhân viên không hợp lệ" };
-    // không xếp trùng giờ với ca đã duyệt khác – ở cơ sở này hoặc cơ sở khác (đi hỗ trợ)
-    const clash = await findShiftClash(userId, date, tpl.startTime, tpl.endTime, { tplId, date });
-    if (clash) return { error: `${user.name} đã có ca trùng giờ: ${clash}` };
+    // đã có ca xếp / duyệt trùng giờ (ở cơ sở này hoặc cơ sở khác) → hỏi lại; "Vẫn yêu cầu hỗ trợ" (force) = xoá ca đó rồi xếp vào đây
+    const clashes = await findShiftClashes(String(userId), date, tpl.startTime, tpl.endTime, { tplId: String(tplId), date });
+    if (clashes.length && !force)
+      return { error: `${user.name} đã có ca trùng giờ`, clash: `${user.name} đã được xếp: ${clashes.map((c) => c.text).join("; ")}` };
+    if (clashes.length) {
+      // nhân viên quản lý chỉ được bỏ ca ở cơ sở mình quản lý
+      if (actor.kind === "USER") for (const c of clashes) await adminOrStaff("schedule", c.storeId);
+      const removed = await ShiftAssignment.find({ _id: { $in: clashes.map((c) => c.id) } }).lean();
+      await ShiftAssignment.deleteMany({ _id: { $in: clashes.map((c) => c.id) } });
+      for (const a of removed) {
+        await audit(actor, "schedule.remove", { type: "ShiftAssignment", id: String(a._id) }, a, { reason: "Chuyển sang hỗ trợ cơ sở khác", toStoreId: storeId });
+        revalidate(String(a.storeId));
+      }
+      await notifyUser(
+        userId,
+        `Lịch của bạn đã đổi: bỏ ${clashes.map((c) => c.text).join("; ")} – chuyển sang làm ca ${tpl.name} ${tpl.startTime}–${tpl.endTime} ngày ${date.slice(8)}/${date.slice(5, 7)} (hỗ trợ cơ sở khác).`,
+        "orange",
+        "/schedule",
+      ).catch(() => null);
+    }
     await ShiftAssignment.updateOne(
       { userId, date, shiftTemplateId: tplId },
       {

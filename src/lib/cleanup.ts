@@ -199,15 +199,13 @@ async function opsFor(key: CleanupKey, c: Ctx): Promise<Op[]> {
         upd("lượt chốt ca (ảnh)", ShiftClosing, { workDate: { $lt: c.cutoffDate }, "photos.0": { $exists: true } }, { $set: { photos: [], photosPurgedAt: c.now } }),
         del("ảnh tạm trong database", PendingPhoto, byDate),
       ];
-    case "closings":
-      return [del("lượt chốt ca", ShiftClosing, { workDate: { $lt: c.cutoffDate } }), del("ngày doanh thu", DayRevenue, { date: { $lt: c.cutoffDate } })];
+    // KHÔNG dọn lượt chốt ca / doanh thu ngày: Lãi lỗ, Doanh thu, báo cáo, Excel đều tính lại từ đây (chỉ dọn ẢNH chốt ca ở mục "photos")
   }
 }
 
-async function warnFor(key: CleanupKey, c: Ctx) {
-  if (key !== "closings") return undefined;
-  const n = await DayRevenue.countDocuments({ date: { $lt: c.cutoffDate }, "sheet.status": { $ne: "SENT" } });
-  return n ? `${n} ngày doanh thu CHƯA ghi được lên Google Sheet – xoá là mất số liệu các ngày này. Nên vào Tài chính → Doanh thu theo ngày bấm “Ghi sheet” trước.` : undefined;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function warnFor(_key: CleanupKey, _c: Ctx): Promise<string | undefined> {
+  return undefined;
 }
 
 const chosen = (o: CleanupOpts) => CLEANUP_KEYS.filter((k) => o[k]);

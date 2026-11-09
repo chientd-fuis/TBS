@@ -31,9 +31,9 @@ export async function POST(req: Request) {
     });
     await connectDB();
     const staff = (await User.find({ status: { $in: ["ACTIVE", "INACTIVE"] } }).select("name").lean()).map((u) => u.name ?? "").filter(Boolean);
-    const dupes = txs.length
-      ? await Expense.find({ $or: txs.filter((t) => t.date).map((t) => ({ date: t.date, amount: t.amount })) }).select("date amount items vendor").lean()
-      : [];
+    // chỉ dò trùng các giao dịch có ngày ($or rỗng → MongoDB báo lỗi)
+    const dated = txs.filter((t) => t.date).map((t) => ({ date: t.date, amount: t.amount }));
+    const dupes = dated.length ? await Expense.find({ $or: dated }).select("date amount items vendor").lean() : [];
     const out = txs.map((t) => {
       const hint = detectSalary({ vendor: t.recipient, transferNote: t.transferNote, items: t.purpose }, staff);
       const dup = dupes.find((d) => d.date === t.date && d.amount === t.amount);

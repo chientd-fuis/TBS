@@ -8,7 +8,7 @@ test("mỗi loại dọn có đúng 1 mục giao diện", () => {
 });
 
 test("tự dọn hằng tháng chỉ gồm loại an toàn", () => {
-  for (const k of ["photos", "closings", "junkUsers", "devices", "faces", "auditLogs", "adjustLogs"]) assert.ok(!AUTO_KEYS_UI.includes(k as never), k);
+  for (const k of ["photos", "junkUsers", "devices", "faces", "auditLogs", "adjustLogs"]) assert.ok(!AUTO_KEYS_UI.includes(k as never), k);
   assert.ok(AUTO_KEYS_UI.includes("notices"));
 });
 
@@ -35,4 +35,8 @@ test("summarize bỏ dòng 0", () => {
 test("fmtBytes", () => {
   assert.equal(fmtBytes(512 * 1024 ** 2), "512.0 MB");
   assert.equal(fmtBytes(2048), "2 KB");
+});
+
+test("không còn lựa chọn dọn chốt ca / doanh thu (doanh thu tháng cũ phải giữ để tính Lãi lỗ)", () => {
+  assert.ok(!(CLEANUP_KEYS as readonly string[]).includes("closings"));
 });

@@ -1,3 +1,4 @@
+import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
@@ -29,7 +30,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const storeName = new Map(storeOpts.map((s) => [s.id, s.name.replace(/^TBS\s*/i, "")]));
   const q: Record<string, unknown> = { month };
   if (sp.store === "SHARED") q.scope = "SHARED";
-  else if (sp.store) q.storeId = sp.store;
+  else if (sp.store && isValidObjectId(sp.store)) q.storeId = sp.store; // link sai tham số → bỏ qua lọc (tránh lỗi 500)
   if (sp.cat) q.category = sp.cat;
   const list = await Expense.find(q).sort({ date: -1, createdAt: -1 }).lean();
   const counted = list.filter(isCountedExpense);

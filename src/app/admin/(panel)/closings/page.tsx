@@ -1,3 +1,4 @@
+import { isValidObjectId } from "mongoose";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { DayRevenue, ShiftClosing, Store, User } from "@/lib/models";
@@ -25,7 +26,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const stores = await Store.find().sort({ name: 1 }).lean();
   const q: Record<string, unknown> = {};
-  if (sp.store) q.storeId = sp.store;
+  if (sp.store && isValidObjectId(sp.store)) q.storeId = sp.store; // link sai tham số → bỏ qua lọc (tránh lỗi 500)
   if (isYmd(sp.date)) q.workDate = sp.date;
   if (sp.status) q["telegram.status"] = sp.status;
   if (sp.shift && ["Sáng", "Chiều", "Tối"].includes(sp.shift)) q.shiftName = sp.shift;

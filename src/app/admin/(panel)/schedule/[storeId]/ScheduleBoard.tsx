@@ -52,6 +52,8 @@ export default function ScheduleBoard(p: Props) {
   const [confirmApply, setConfirmApply] = useState(false);
   const [mode, setMode] = useState<"view" | "edit">("view"); // mặc định XEM như ảnh lịch tuần
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; tpl: string; date: string } | null>(null);
+  // nhân viên đã có ca trùng giờ → hỏi "Vẫn yêu cầu hỗ trợ" (bỏ ca cũ, xếp vào đây)
+  const [clashAsk, setClashAsk] = useState<{ tplId: string; date: string; userId: string; text: string } | null>(null);
   const [opts, setOpts] = useState<AutoOptions>({
     approvePending: true,
     fillTo: "min",
@@ -68,6 +70,22 @@ export default function ScheduleBoard(p: Props) {
       else {
         setMsg(r.message ? { tone: "green", text: r.message } : null);
         after?.(r);
+        router.refresh();
+      }
+    });
+
+  /** Xếp 1 người vào ô; trùng ca đã xếp ở nơi khác → mở popup cảnh báo thay vì báo lỗi. */
+  const addSlot = (tplId: string, date: string, userId: string, force = false) =>
+    start(async () => {
+      const r = await addToSlot(p.storeId, tplId, date, userId, force);
+      if (r.clash && !force) {
+        setClashAsk({ tplId, date, userId, text: r.clash });
+        return;
+      }
+      setClashAsk(null);
+      if (r.error) setMsg({ tone: "red", text: r.error });
+      else {
+        setMsg(r.message ? { tone: "green", text: r.message } : null);
         router.refresh();
       }
     });
@@ -277,6 +295,25 @@ export default function ScheduleBoard(p: Props) {
         )}
       </ConfirmDialog>
 
+      <ConfirmDialog
+        open={!!clashAsk}
+        danger
+        title="Nhân viên đã được xếp ca trùng giờ"
+        confirmLabel={pending ? "Đang xếp…" : "Vẫn yêu cầu hỗ trợ"}
+        busy={pending}
+        onCancel={() => setClashAsk(null)}
+        onConfirm={() => clashAsk && addSlot(clashAsk.tplId, clashAsk.date, clashAsk.userId, true)}
+      >
+        {clashAsk && (
+          <div className="space-y-2">
+            <p className="font-semibold text-danger">⚠ {clashAsk.text}</p>
+            <p>
+              Bấm <b>Vẫn yêu cầu hỗ trợ</b> để <b>bỏ ca đã xếp</b> ở trên và xếp nhân viên vào ca này. Nhân viên sẽ nhận thông báo đổi lịch.
+            </p>
+          </div>
+        )}
+      </ConfirmDialog>
+
       {/* Bảng lịch theo mẫu – thanh chọn tuần ghim trên đầu khi cuộn (điện thoại) */}
       <div className="sticky top-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#f1e6c8] bg-cream/95 px-4 py-2 shadow-sm backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
         {p.weekNav}
@@ -372,7 +409,7 @@ export default function ScheduleBoard(p: Props) {
                   className="w-full min-w-0 rounded border border-transparent bg-transparent text-[11px] text-ink/60 hover:border-[#c9d6e8] hover:bg-white"
                   value=""
                   disabled={pending}
-                  onChange={(ev) => ev.target.value && run(() => addToSlot(p.storeId, t.id, d, ev.target.value))}
+                  onChange={(ev) => ev.target.value && addSlot(t.id, d, ev.target.value)}
                 >
                   <option value="">＋ Thêm…</option>
                   <optgroup label="Nhân viên cơ sở">
