@@ -256,7 +256,7 @@ export async function buildExport(f: ExportFilter) {
       ]);
       for (const i of items) {
         const u = userMap.get(String(i.userId));
-        const row = s.add([viMonth(i.month), u?.name || "", storeName.get(String(i.storeId)) || "", i.totalHours, i.hourlyWage, i.basePay, i.allowance, i.totalBonus, i.totalPenalty, i.advance, i.netPay, statusOf(i.payrollId)]);
+        const row = s.add([viMonth(i.month), i.userName || u?.name || "", storeName.get(String(i.storeId)) || "", i.totalHours, i.hourlyWage, i.basePay, i.allowance, i.totalBonus, i.totalPenalty, i.advance, i.netPay, statusOf(i.payrollId)]);
         row.getCell(8).font = { color: { argb: COLORS.bonus } };
         row.getCell(9).font = { color: { argb: COLORS.penalty } };
         row.getCell(11).font = { bold: true };
@@ -273,8 +273,11 @@ export async function buildExport(f: ExportFilter) {
       ]);
       let idx = 1;
       for (const i of items.filter((x) => x.netPay > 0)) {
+        // tên / STK theo bản đã chốt trong dòng lương (dòng cũ chưa có bản chốt → hồ sơ hiện tại)
         const u = userMap.get(String(i.userId));
-        const row = s.add([idx++, u?.name || "", u?.bankName || "", decrypt(u?.bankAccountEnc), i.netPay, `TBS luong ${viMonth(i.month)} - ${(u?.name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D")}`]);
+        const snap = !!i.userName;
+        const name = (snap ? i.userName : u?.name) || "";
+        const row = s.add([idx++, name, (snap ? i.bankName : u?.bankName) || "", decrypt(snap ? i.bankAccountEnc : u?.bankAccountEnc), i.netPay, `TBS luong ${viMonth(i.month)} - ${name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D")}`]);
         row.getCell(4).numFmt = "@";
       }
       s.finish({ 5: "SUM" });

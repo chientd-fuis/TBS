@@ -12,8 +12,8 @@ import { Types } from "mongoose";
 import { loadForecast } from "@/lib/forecast";
 import { geminiGenerate } from "@/lib/ocr";
 import { addDays } from "@/lib/time";
-import { askData, ASK_TOOL_LABEL } from "@/lib/ask-ai";
-import type { AskCard, AskProposal } from "@/lib/ask-actions";
+import { askData, ASK_TOOL_LABEL, type AskPick } from "@/lib/ask-ai";
+import type { AskCard, AskProposal, PersonChoice } from "@/lib/ask-actions";
 import { setWage } from "./people";
 import { createBonusPenalty, manualAttendance, savePayrollExtras } from "./ops";
 import { PayrollItem } from "@/lib/models";
@@ -184,12 +184,24 @@ export async function applyForecast(storeId: string, weekStart: string, targets:
 }
 
 /* ===== Hỏi AI (admin) ===== */
-export async function askDataAction(question: string): Promise<{ answer?: string; source?: string; denied?: boolean; card?: AskCard; error?: string; left?: number }> {
+export async function askDataAction(
+  question: string,
+  picked?: AskPick & { userId: string },
+): Promise<{ answer?: string; source?: string; denied?: boolean; card?: AskCard; choices?: PersonChoice[]; pick?: AskPick; error?: string; left?: number }> {
   try {
     const admin = await assertAdmin();
-    const r = await askData(admin, String(question ?? ""));
+    // picked: admin bấm chọn 1 nhân viên trong danh sách gợi ý → soạn lại cho người đó (vẫn theo quyền của admin)
+    const r = await askData(admin, String(question ?? ""), picked && /^[a-f\d]{24}$/i.test(String(picked.userId)) ? picked : undefined);
     const left = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`);
-    return { answer: r.answer, source: r.tool ? ASK_TOOL_LABEL[r.tool] : undefined, denied: r.denied, card: r.card, left: Number.isFinite(left.left) ? left.left : undefined };
+    return {
+      answer: r.answer,
+      source: r.tool ? ASK_TOOL_LABEL[r.tool] : undefined,
+      denied: r.denied,
+      card: r.card,
+      choices: r.choices,
+      pick: r.pick,
+      left: Number.isFinite(left.left) ? left.left : undefined,
+    };
   } catch (e) {
     console.error("[ai] askDataAction", e);
     return { error: (e as Error).message || "AI đang bận, thử lại sau" };
@@ -273,7 +285,13 @@ export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean
         if (!item || String(item.userId) !== p.userId) return { error: "Không tìm thấy dòng lương – tính lại bảng lương rồi hỏi lại" };
         const allowance = item.allowance + (p.field === "allowance" ? p.amount : 0);
         const advance = item.advance + (p.field === "advance" ? p.amount : 0);
-        return done(await savePayrollExtras(null, fd({ itemId: p.itemId, allowance, advance })), `Đã cộng ${p.amount.toLocaleString("vi-VN")} ₫ ${p.field === "advance" ? "tạm ứng" : "phụ cấp"} cho ${p.name}.`);
+        const r = await savePayrollExtras(null, fd({ itemId: p.itemId, allowance, advance }));
+        if (r?.error) return { error: r.error };
+        await PayrollItem.updateOne(
+          { _id: p.itemId },
+          { $push: { extrasNotes: { field: p.field, amount: p.amount, note: String(p.note ?? "").slice(0, 200) || "Trợ lý AI", by: adminActor(admin).name, at: new Date() } } },
+        );
+        return { ok: true, message: `Đã cộng ${p.amount.toLocaleString("vi-VN")} ₫ ${p.field === "advance" ? "tạm ứng" : "phụ cấp"} cho ${p.name}.` };
       }
       case "manual_attendance": {
         const r = await manualAttendance(null, fd({ userId: p.userId, date: p.date, inTime: p.inTime, outTime: p.outTime, reason: p.reason }));

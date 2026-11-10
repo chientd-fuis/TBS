@@ -7,6 +7,7 @@ import { connectDB } from "./db";
 import { AiUsage, Settings, User } from "./models";
 import { DEFAULT_TZ, localDate, localMonth, zonedToDate } from "./time";
 import { RULES_TEMPLATE } from "./rules-format";
+import { LIMIT_QUIPS, pickQuip } from "./ai-quips";
 
 export type LimitUnit = "month" | "day" | "dayActor" | "monthActor";
 /** Role được Admin Tổng bật/tắt AI (Admin Tổng luôn dùng được mọi chức năng). */
@@ -56,7 +57,7 @@ export const AI_FEATURES: {
   { key: "payExplain", label: "Giải thích lương cho nhân viên", hint: "NV hỏi “vì sao lương tháng này là X”", unit: "monthActor", limit: 3, enabled: false, model: "", roles: ["manager", "staff"] },
   { key: "forecast", label: "Dự báo → gợi ý số người / ca", hint: "Thống kê doanh thu theo thứ / ngày lễ; AI viết lý do", unit: "month", limit: 10, enabled: true, model: "", roles: ["admin"] },
   { key: "rulesSummary", label: "Tóm tắt nội quy", hint: "Lưu nội quy đầy đủ → AI tóm tắt ~10 điều cho nút “Nội quy” của nhân viên", unit: "month", limit: 30, enabled: true, model: "", roles: [] },
-  { key: "ask", label: "Hỏi đáp dữ liệu (admin)", hint: "Hỏi bằng tiếng Việt, AI tra dữ liệu theo quyền", unit: "dayActor", limit: 30, enabled: true, model: "", roles: ["admin"] },
+  { key: "ask", label: "Trợ lý AI (admin)", hint: "Hỏi / nhờ làm bằng tiếng Việt: tra dữ liệu, thưởng phạt, chấm hộ, tạm ứng… theo quyền", unit: "dayActor", limit: 30, enabled: true, model: "", roles: ["admin"] },
 ];
 export const UNIT_LABEL: Record<LimitUnit, string> = { month: "lượt / tháng", day: "lượt / ngày", dayActor: "câu / ngày / người", monthActor: "lượt / tháng / người" };
 
@@ -170,7 +171,8 @@ export async function aiGuard(feature: AiFeatureKey, actor = "system") {
     if (meta.unit === "dayActor" || meta.unit === "monthActor") q.actor = actor;
     const used = await AiUsage.countDocuments(q);
     if (used >= fc.limit)
-      throw new AiLimitError(`Đã dùng hết ${fc.limit} ${UNIT_LABEL[meta.unit]} cho “${meta.label}”${byDay ? " – thử lại ngày mai" : " – thử lại tháng sau"}`);
+      // khung chat (Hỏi AI / Trợ lý) hết lượt → câu đùa; chức năng khác giữ câu giải thích rõ ràng
+      throw new AiLimitError(feature === "ask" || feature === "assistant" ? pickQuip(LIMIT_QUIPS) : `Đã dùng hết ${fc.limit} ${UNIT_LABEL[meta.unit]} cho “${meta.label}”${byDay ? " – thử lại ngày mai" : " – thử lại tháng sau"}`);
   }
   return { cfg, model: fc.model };
 }

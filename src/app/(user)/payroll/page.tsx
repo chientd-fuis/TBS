@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
-import { BonusPenalty, Payroll, PayrollFeedback, PayrollItem, Store } from "@/lib/models";
+import { BonusPenalty, Payroll, PayrollFeedback, PayrollItem, Store, type BpDetail, type ExtrasNote } from "@/lib/models";
 import { localMonth, prevMonth, viDate, viMonth } from "@/lib/time";
 import { hoursVi, vnd } from "@/lib/format";
 import { MonthPicker } from "@/components/MonthPicker";
@@ -22,7 +22,12 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const item = await PayrollItem.findOne({ userId: user._id, month }).lean();
   const payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
   const visible = payroll && payroll.status !== "DRAFT";
-  const bps = visible ? await BonusPenalty.find({ userId: user._id, month }).sort({ date: 1 }).lean() : [];
+  // bảng đã công bố: chi tiết thưởng / phạt theo bản đã chốt cùng tổng (bảng cũ chưa có bản chốt → dữ liệu hiện tại)
+  const bps: { key: string; kind?: string | null; date: string; content?: string | null; amountVnd: number; attendanceId?: unknown }[] = !visible
+    ? []
+    : item.bpDetails
+      ? (item.bpDetails as BpDetail[]).map((b, k) => ({ key: String(k), kind: b.kind, date: b.date ?? "", content: b.content, amountVnd: b.amountVnd ?? 0 }))
+      : (await BonusPenalty.find({ userId: user._id, month }).sort({ date: 1 }).lean()).map((b) => ({ ...b, key: String(b._id) }));
   const explain = await aiRemaining("payExplain", `user:${user._id}`);
   const feedbacks = item ? await PayrollFeedback.find({ payrollItemId: item._id }).sort({ createdAt: -1 }).lean() : [];
 
@@ -64,6 +69,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                 </>
               )}
               <dt>Phụ cấp</dt><dd className="text-right">{vnd(item.allowance)}</dd>
+              {(item.extrasNotes as ExtrasNote[] | undefined)?.filter((n) => n.field === "allowance").map((n, k) => (
+                <dd key={`pc${k}`} className="col-span-2 -mt-1 text-right text-xs text-ink/60">+{vnd(n.amount ?? 0)} · {n.note}</dd>
+              ))}
               <dt>Thưởng</dt><dd className="text-right text-bonus">+{vnd(item.totalBonus)}</dd>
               <dt>Phạt</dt><dd className="text-right text-danger">−{vnd(item.totalPenalty)}</dd>
               <dt>Tạm ứng</dt><dd className="text-right">−{vnd(item.advance)}</dd>
@@ -71,7 +79,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <dd className="border-t border-[#f1e6c8] pt-2 text-right text-lg font-bold text-secondary-dark">{vnd(item.netPay)}</dd>
             </dl>
             <p className="mt-2 text-xs text-ink/60">
-              {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu tự cập nhật theo chấm công, thưởng phạt cho tới khi quán trả lương."}
+              {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu đã chốt lúc công bố – quán tính lại thì sẽ cập nhật."}
             </p>
           </Card>
           {/* AI giải thích lương – chỉ hiện khi Admin Tổng bật ở Cài đặt → AI */}
@@ -84,10 +92,10 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
             ) : (
               <ul className="space-y-2 text-sm">
                 {bps.map((b) => (
-                  <li key={String(b._id)} className="flex justify-between gap-2">
+                  <li key={b.key} className="flex justify-between gap-2">
                     <span>
                       {viDate(b.date)} · {b.content}
-                      {b.attendanceId && (
+                      {!!b.attendanceId && (
                         <Link href={`/history?month=${month}`} className="ml-1 text-xs text-accent underline">(xem chấm công)</Link>
                       )}
                     </span>

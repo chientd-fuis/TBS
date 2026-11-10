@@ -16,14 +16,16 @@ function wageAt(history: { hourlyWage: number; effectiveFrom: string }[], date: 
 }
 
 /**
- * Tạo (nếu chưa có) + tính lại bảng lương. Tính lại cả khi đã công bố (nhân viên luôn thấy số mới nhất);
- * KHÔNG tính lại dòng đã trả (paidAt) và bảng lương "Đã trả". Giữ nguyên phụ cấp / tạm ứng admin đã nhập.
+ * Tạo (nếu chưa có) + tính lại bảng lương NHÁP. Đã công bố → bảng CHỐT số lúc công bố (kể cả tên, STK, chi tiết thưởng phạt),
+ * chỉ tính lại khi admin bấm "Tính lại" (`force`). KHÔNG tính lại dòng đã trả (paidAt) và bảng "Đã trả".
+ * Giữ nguyên phụ cấp / tạm ứng admin đã nhập.
  */
-export async function generatePayroll(storeId: string, month: string) {
+export async function generatePayroll(storeId: string, month: string, opts: { force?: boolean } = {}) {
   await connectDB();
   let payroll = await Payroll.findOne({ storeId, month });
   if (!payroll) payroll = await Payroll.create({ storeId, month, status: "DRAFT" });
   if (payroll.status === "PAID") return payroll;
+  if (payroll.status === "PUBLISHED" && !opts.force) return payroll;
 
   const atts = await Attendance.find({ month, status: "COMPLETED", ...payStoreFilter(storeId) }).lean();
   const bps = await BonusPenalty.find({ storeId, month }).lean();
@@ -88,6 +90,12 @@ export async function generatePayroll(storeId: string, month: string) {
           holidayHours,
           holidayExtra,
           holidayNote: holidayNote(myAtts, holidays),
+          userName: user.name,
+          bankName: user.bankName ?? "",
+          bankAccountEnc: user.bankAccountEnc ?? "",
+          bpDetails: [...myBps]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((b) => ({ kind: b.kind, date: b.date, content: b.content ?? "", amountVnd: b.amountVnd })),
         },
       },
       { upsert: true },

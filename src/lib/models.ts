@@ -584,11 +584,28 @@ const PayrollItemSchema = new Schema(
     // đã trả lương cho nhân viên này → dòng lương + chấm công / thưởng phạt tháng này của họ bị KHOÁ (mở khoá cần lý do)
     paidAt: Date,
     paidBy: String,
+    // ghi chú từng lần cộng phụ cấp / tạm ứng (VD qua Trợ lý AI: "Hỗ trợ ship 31 đơn × 5k")
+    extrasNotes: {
+      type: [{ _id: false, field: { type: String, enum: ["allowance", "advance"] }, amount: Number, note: String, by: String, at: Date }],
+      default: [],
+    },
+    // ảnh chụp lúc tính: bảng đã công bố / đã trả giữ nguyên tên, tài khoản, chi tiết thưởng phạt dù dữ liệu gốc đổi sau đó
+    userName: String,
+    bankName: String,
+    bankAccountEnc: String, // STK mã hoá AES (như User)
+    bpDetails: {
+      type: [{ _id: false, kind: { type: String, enum: ["BONUS", "PENALTY"] }, date: String, content: String, amountVnd: Number }],
+      default: undefined,
+    },
   },
   { timestamps: true },
 );
 PayrollItemSchema.index({ payrollId: 1, userId: 1 }, { unique: true });
 export const PayrollItem = getModel("PayrollItem", PayrollItemSchema);
+/** Chi tiết thưởng / phạt đã chốt trong 1 dòng lương (undefined = dòng cũ chưa có bản chốt) */
+export type BpDetail = { kind?: "BONUS" | "PENALTY" | null; date?: string | null; content?: string | null; amountVnd?: number | null };
+/** Ghi chú cộng phụ cấp / tạm ứng của 1 dòng lương */
+export type ExtrasNote = { field?: "allowance" | "advance" | null; amount?: number | null; note?: string | null; by?: string | null; at?: Date | null };
 
 /** Ngày nghỉ lễ: nhân viên đi làm ngày này được nhân lương giờ (mặc định ×2, tuỳ chọn ×3, ×4). Áp dụng mọi cơ sở. */
 const HolidaySchema = new Schema(

@@ -419,7 +419,8 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
     const storeId = str(fd.get("storeId"));
     const month = str(fd.get("month"));
     if (op === "generate") {
-      const p = await generatePayroll(storeId, month);
+      // "Tính lại": bảng đã công bố cũng tính lại theo chấm công / thưởng phạt / lương giờ / STK mới nhất (trừ dòng đã trả)
+      const p = await generatePayroll(storeId, month, { force: true });
       if (p.status === "PAID") return { error: "Bảng lương đã trả – mở khoá (nhập lý do) nếu cần tính lại" };
       await audit(actor, "payroll.generate", { type: "Payroll", id: String(p._id) });
     } else if (op === "publish") {
@@ -431,7 +432,7 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
       if (!r) return { error: "Bảng lương không ở trạng thái nháp" };
       await audit(actor, "payroll.publish", { type: "Payroll", id: String(p._id) });
     } else if (op === "paid") {
-      // trả hết: tính lại lần cuối → khoá mọi dòng chưa trả + cả bảng
+      // trả hết: bảng nháp tính lại lần cuối (đã công bố thì giữ số đã chốt) → khoá mọi dòng chưa trả + cả bảng
       const p = await Payroll.findOne({ storeId, month });
       if (!p || p.status === "PAID") return { error: "Bảng lương đã trả / chưa có" };
       await generatePayroll(storeId, month);
@@ -440,7 +441,7 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
       await Payroll.updateOne({ _id: p._id }, { $set: { status: "PAID", paidAt: now, ...(p.publishedAt ? {} : { publishedAt: now, publishedBy: actor.name }) } });
       await audit(actor, "payroll.paid", { type: "Payroll", id: `${storeId}:${month}` });
     } else if (op === "unlock") {
-      // mở khoá cả bảng: bỏ "đã trả" mọi dòng, bảng về "Đã công bố" (nhân viên vẫn xem được), tự tính lại
+      // mở khoá cả bảng: bỏ "đã trả" mọi dòng, bảng về "Đã công bố" (nhân viên vẫn xem được), giữ số đã chốt – muốn đổi thì bấm "Tính lại"
       const reason = str(fd.get("reason"));
       if (reason.length < 3) return { error: "Nhập lý do mở khoá" };
       const p = await Payroll.findOne({ storeId, month });
@@ -473,7 +474,7 @@ export async function payrollItemAction(_: FormState, fd: FormData): Promise<For
     const op = str(fd.get("op"));
     if (op === "paid") {
       if (item.paidAt) return { error: "Đã đánh dấu trả rồi" };
-      await generatePayroll(String(p.storeId), p.month); // chốt số mới nhất trước khi khoá
+      await generatePayroll(String(p.storeId), p.month); // bảng nháp: chốt số mới nhất trước khi khoá (đã công bố: giữ số đã chốt)
       await PayrollItem.updateOne({ _id: item._id, paidAt: null }, { $set: { paidAt: new Date(), paidBy: actor.name } });
       // trả đủ mọi người → cả bảng "Đã trả"
       if (!(await PayrollItem.exists({ payrollId: p._id, paidAt: null })))

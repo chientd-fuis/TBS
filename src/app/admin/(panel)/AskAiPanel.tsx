@@ -2,16 +2,31 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Loader2, Send, Sparkles, X } from "lucide-react";
-import { Button, Input } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { defaultCountInCost, EXPENSE_CATEGORIES } from "@/lib/finance";
 import { viDate } from "@/lib/time";
-import type { AskCard } from "@/lib/ask-actions";
+import type { AskCard, PersonChoice } from "@/lib/ask-actions";
+import type { AskPick } from "@/lib/ask-ai";
 import { askDataAction, executeAskProposal } from "../actions/ai";
 
 type Tx = { date?: string; amount: number; recipient?: string; transferNote?: string; purpose?: string; category?: string; dupHint?: string; pick?: boolean };
 type Msg =
   | { role: "q"; text: string; photo?: string }
-  | { role: "a"; text: string; source?: string; denied?: boolean; error?: boolean; card?: AskCard; state?: "wait" | "busy" | "done" | "cancel"; result?: string }
+  | {
+      role: "a";
+      text: string;
+      source?: string;
+      denied?: boolean;
+      error?: boolean;
+      card?: AskCard;
+      state?: "wait" | "busy" | "done" | "cancel";
+      result?: string;
+      /** tên chưa chắc → admin bấm chọn đúng người */
+      q?: string;
+      choices?: PersonChoice[];
+      pick?: AskPick;
+      picked?: string;
+    }
   | { role: "bill"; photo: string; txs: Tx[]; state?: "wait" | "busy" | "done"; result?: string };
 
 const SUGGEST = [
@@ -20,6 +35,8 @@ const SUGGEST = [
   "Thưởng 50k cho Lan và Hà vì làm tốt",
   "Chấm hộ Lan hôm nay vào 8h, vẫn đang trong ca",
   "Thêm tạm ứng 500k cho Minh tháng này",
+  "Khánh ship 31 đơn, mỗi đơn hỗ trợ 5k, thêm vào phụ cấp",
+  "Tính tiền: 3 trà sữa 35k, 2 sầu riêng 55k, giảm 10%",
 ];
 const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} ₫`;
 const catLabel = (k?: string) => EXPENSE_CATEGORIES.find((c) => c.key === k)?.label ?? "Khác";
@@ -47,7 +64,7 @@ async function fileToJpeg(file: File, maxSide = 2400): Promise<string> {
 }
 
 /**
- * Nút "Hỏi AI" + panel chat: tra cứu dữ liệu theo quyền, soạn sẵn thao tác (đổi lương, thưởng/phạt, tạm ứng/phụ cấp, chấm hộ)
+ * Nút "Trợ lý AI" + panel chat: tra cứu dữ liệu theo quyền, soạn sẵn thao tác (đổi lương, thưởng/phạt, tạm ứng/phụ cấp, chấm hộ)
  * để admin bấm Xác nhận, và kiểm tra ảnh bill đã nhập vào chi tiêu chưa.
  */
 export default function AskAiPanel({ left: left0, limit, billOk = false }: { left: number | null; limit: number; billOk?: boolean }) {
@@ -60,6 +77,19 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
   const [reading, setReading] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // có chuột (máy tính) → Enter gửi; màn hình cảm ứng → Enter xuống dòng
+  const desktop = useRef(false);
+  useEffect(() => {
+    desktop.current = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  }, []);
+  // ô nhập tự cao theo số dòng (tối đa ~6 dòng rồi cuộn)
+  useEffect(() => {
+    const t = taRef.current;
+    if (!t) return;
+    t.style.height = "auto";
+    t.style.height = `${Math.min(t.scrollHeight, 144)}px`;
+  }, [q, open]);
   // braces: newer browsers make scrollIntoView return a Promise, which React would call as the effect cleanup
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,7 +105,23 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
     start(async () => {
       // server bị cắt (quá thời gian / mất mạng) → báo trong khung chat, không làm sập trang
       const r = await askDataAction(t).catch(() => ({ error: NET_ERR }) as Awaited<ReturnType<typeof askDataAction>>);
-      setMsgs((m) => [...m, r.error ? { role: "a", text: r.error, error: true } : { role: "a", text: r.answer ?? "", source: r.source, denied: r.denied, card: r.card, state: r.card ? "wait" : undefined }]);
+      setMsgs((m) => [...m, toMsg(r, t)]);
+      if (r.left != null) setLeft(r.left);
+    });
+  };
+
+  const toMsg = (r: Awaited<ReturnType<typeof askDataAction>>, question: string): Msg =>
+    r.error
+      ? { role: "a", text: r.error, error: true }
+      : { role: "a", text: r.answer ?? "", source: r.source, denied: r.denied, card: r.card, state: r.card ? "wait" : undefined, q: question, choices: r.choices, pick: r.pick };
+
+  // admin bấm chọn 1 nhân viên trong danh sách gợi ý → soạn lại phiếu cho đúng người đó
+  const choose = (i: number, m: Extract<Msg, { role: "a" }>, c: PersonChoice) => {
+    if (!m.pick || !m.q || pending) return;
+    patch(i, { picked: c.id });
+    start(async () => {
+      const r = await askDataAction(m.q!, { ...m.pick!, userId: c.id }).catch(() => ({ error: NET_ERR }) as Awaited<ReturnType<typeof askDataAction>>);
+      setMsgs((ms) => [...ms, toMsg(r, m.q!)]);
       if (r.left != null) setLeft(r.left);
     });
   };
@@ -142,14 +188,14 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
   return (
     <>
       <Button type="button" className="px-3 py-1.5" onClick={() => setOpen(true)}>
-        <Sparkles size={15} /> Hỏi AI
+        <Sparkles size={15} /> Trợ lý AI
       </Button>
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end bg-ink/30" onClick={() => setOpen(false)}>
           <aside className="flex h-full w-full max-w-md flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <header className="flex items-center justify-between gap-2 border-b border-[#f1e6c8] px-4 py-3">
               <div>
-                <b className="text-accent">✨ Hỏi AI</b> <span className="text-xs text-ink/60">· tra cứu & thao tác theo quyền của bạn</span>
+                <b className="text-accent">✨ Trợ lý AI</b> <span className="text-xs text-ink/60">· tra cứu & thao tác theo quyền của bạn</span>
               </div>
               <div className="flex items-center gap-2">
                 {left != null && <span className="rounded-full bg-primary-light px-2 py-0.5 text-xs font-semibold">Còn {left}/{limit} câu hôm nay</span>}
@@ -161,7 +207,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
             <div className="flex-1 space-y-3 overflow-y-auto bg-cream px-4 py-3 text-sm">
               {!msgs.length && (
                 <p className="text-xs text-ink/60">
-                  Hỏi về chấm công, đi muộn, giờ công, lịch ca, nhân viên, lương… hoặc nhờ làm: đổi lương giờ, thưởng / phạt (1 hay nhiều người), thêm tạm ứng / phụ cấp vào bảng lương, chấm công hộ.
+                  Hỏi về chấm công, đi muộn, giờ công, lịch ca, nhân viên, lương… hoặc nhờ làm: đổi lương giờ, thưởng / phạt (1 hay nhiều người), thêm tạm ứng / phụ cấp vào bảng lương, chấm công hộ. Hỏi ngoài lề cũng được: tính tiền đơn, chia tiền, soạn tin nhắn…
                   {billOk && " Bấm 📷 gửi ảnh bill để kiểm tra đã nhập vào chi tiêu chưa."} Mọi thao tác sửa dữ liệu đều cần bạn bấm <b>Xác nhận</b>.
                 </p>
               )}
@@ -169,7 +215,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                 m.role === "q" ? (
                   <div key={i} className="ml-auto max-w-[85%] space-y-1.5 rounded-2xl rounded-br-md bg-primary px-3 py-2 font-medium">
                     {m.photo && <img src={m.photo} alt="Ảnh bill" className="max-h-40 rounded-lg" />}
-                    <div>{m.text}</div>
+                    <div className="whitespace-pre-line">{m.text}</div>
                   </div>
                 ) : m.role === "bill" ? (
                   <div key={i} className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md border border-[#f1e6c8] bg-white px-3 py-2">
@@ -203,6 +249,24 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                 ) : (
                   <div key={i} className={`max-w-[94%] rounded-2xl rounded-bl-md border px-3 py-2 whitespace-pre-line ${m.denied || m.error ? "border-[#fecaca] bg-[#fff7f7]" : "border-[#f1e6c8] bg-white"}`}>
                     {m.text}
+                    {!!m.choices?.length && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {m.choices.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            disabled={!!m.picked || pending}
+                            onClick={() => choose(i, m, c)}
+                            className={`rounded-xl border px-2.5 py-1.5 text-left text-[13px] leading-tight transition ${
+                              m.picked === c.id ? "border-secondary bg-secondary text-white" : m.picked ? "border-ink/10 bg-white text-ink/40" : "border-secondary/50 bg-[#f7fbf8] hover:bg-secondary hover:text-white"
+                            }`}
+                          >
+                            <b>{c.name}</b>
+                            <span className="block text-[11px] opacity-80">{c.store}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {m.card && (
                       <div className="mt-2 space-y-1.5 rounded-xl border border-secondary/40 bg-[#f7fbf8] p-2.5">
                         <p className="font-bold text-secondary-dark">📝 {m.card.title}</p>
@@ -244,7 +308,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                 ))}
               </div>
               <form
-                className="flex gap-2"
+                className="flex items-end gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   ask(q);
@@ -258,7 +322,23 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                     </Button>
                   </>
                 )}
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Hỏi hoặc nhờ làm (thưởng, chấm hộ…)" maxLength={400} aria-label="Câu hỏi" />
+                <textarea
+                  ref={taRef}
+                  value={q}
+                  rows={1}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    // máy tính: Enter = gửi, Shift+Enter = xuống dòng · điện thoại: Enter = xuống dòng (gửi bằng nút)
+                    // đang gõ dấu tiếng Việt (bộ gõ đang ghép chữ) → không gửi
+                    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || !desktop.current) return;
+                    e.preventDefault();
+                    ask(q);
+                  }}
+                  placeholder="Hỏi hoặc nhờ làm (thưởng, chấm hộ…) · Shift+Enter xuống dòng"
+                  maxLength={1000}
+                  aria-label="Câu hỏi"
+                  className="max-h-36 min-h-[40px] w-full resize-none rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm leading-snug outline-none focus:border-secondary focus:ring-2 focus:ring-secondary/20"
+                />
                 <Button type="submit" disabled={busy || !q.trim() || left === 0} aria-label="Gửi">
                   <Send size={16} />
                 </Button>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
-import { BonusPenalty, Payroll, PayrollItem, Store, User } from "@/lib/models";
+import { BonusPenalty, Payroll, PayrollItem, Store, User, type BpDetail, type ExtrasNote } from "@/lib/models";
 import { localMonth, prevMonth, viDateTime, viMonth } from "@/lib/time";
 import { hoursVi, vnd } from "@/lib/format";
 import { decrypt } from "@/lib/crypto";
@@ -9,11 +9,12 @@ import { MonthPicker } from "@/components/MonthPicker";
 import { Alert, Badge, Card, Empty, Input, LinkButton, PageTitle } from "@/components/ui";
 import { payrollAction, payrollItemAction, savePayrollExtras } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
+import { BpAmount, CopyAccount } from "./PayrollCells";
 
 export const dynamic = "force-dynamic";
 
 const ST = { DRAFT: ["Chưa công bố", "yellow"], PUBLISHED: ["Đã công bố", "green"], PAID: ["Đã trả – khoá", "green"] } as const;
-/** 20000 → "20k" (tooltip thưởng / phạt) */
+/** 20000 → "20k" (tooltip thưởng / phạt, ghi chú phụ cấp) */
 const k = (n: number) => (n % 1000 === 0 ? `${n / 1000}k` : n.toLocaleString("vi-VN"));
 
 /**
@@ -28,21 +29,23 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
   if (!store) return <p>Chưa có cơ sở</p>;
   const tz = store.timezone || "Asia/Ho_Chi_Minh";
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : prevMonth(localMonth(new Date(), tz));
-  // Bảng lương luôn tính sẵn: mở trang là tạo / tính lại (trừ dòng đã trả & bảng đã trả hết)
+  // Bảng nháp luôn tính sẵn: mở trang là tạo / tính lại. Đã công bố / đã trả → giữ số đã chốt (generatePayroll bỏ qua)
   const existing = await Payroll.findOne({ storeId: store._id, month }).select("status").lean();
   if (existing?.status !== "PAID" && month <= localMonth(new Date(), tz)) await generatePayroll(String(store._id), month);
   const payroll = await Payroll.findOne({ storeId: store._id, month }).lean();
   const items = payroll ? await PayrollItem.find({ payrollId: payroll._id }).lean() : [];
   const users = new Map((await User.find({ _id: { $in: items.map((i) => i.userId) } }).lean()).map((u) => [String(u._id), u]));
-  items.sort((a, b) => (users.get(String(a.userId))?.name || "").localeCompare(users.get(String(b.userId))?.name || ""));
+  // tên / STK / chi tiết thưởng phạt: lấy bản đã chốt trong dòng lương (bảng cũ chưa có bản chốt → dữ liệu hiện tại)
+  const nameOf = (i: (typeof items)[number]) => i.userName || users.get(String(i.userId))?.name || "";
+  items.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   const total = items.reduce((s, i) => s + i.netPay, 0);
   const paidCount = items.filter((i) => i.paidAt).length;
   // chi tiết thưởng / phạt từng người (tooltip khi rê chuột)
   const bps = payroll ? await BonusPenalty.find({ storeId: store._id, month }).sort({ date: 1, createdAt: 1 }).lean() : [];
-  const bpTip = (uid: string, kind: "BONUS" | "PENALTY") =>
-    bps
-      .filter((b) => String(b.userId) === uid && b.kind === kind)
-      .map((b) => `- ${b.date.slice(8)}/${b.date.slice(5, 7)} ${b.content} ${kind === "BONUS" ? "+" : "-"}${k(b.amountVnd)}`)
+  const bpTip = (i: (typeof items)[number], kind: "BONUS" | "PENALTY") =>
+    ((i.bpDetails as BpDetail[] | undefined) ?? bps.filter((b) => String(b.userId) === String(i.userId)))
+      .filter((b) => b.kind === kind)
+      .map((b) => `- ${(b.date ?? "").slice(8)}/${(b.date ?? "").slice(5, 7)} ${b.content ?? ""} ${kind === "BONUS" ? "+" : "-"}${k(b.amountVnd ?? 0)}`)
       .join("\n");
   const hidden = (op: string) => (
     <>
@@ -75,7 +78,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         actions={
           <div className="flex flex-wrap gap-2">
             {payroll?.status === "DRAFT" && (
-              <ActionForm action={payrollAction} submitLabel="Công bố cho nhân viên" variant="secondary" successText="" className="inline-block" confirm={`Công bố bảng lương tháng ${viMonth(month)}? Nhân viên sẽ xem được. Bảng lương vẫn tự tính lại tới khi bấm "Đã trả".`}>
+              <ActionForm action={payrollAction} submitLabel="Công bố cho nhân viên" variant="secondary" successText="" className="inline-block" confirm={`Công bố bảng lương tháng ${viMonth(month)}? Nhân viên sẽ xem được. Số liệu được CHỐT tại lúc công bố – sửa chấm công / thưởng phạt sau đó phải bấm "Tính lại" mới cập nhật.`}>
                 {hidden("publish")}
               </ActionForm>
             )}
@@ -84,7 +87,10 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                 <ActionForm action={payrollAction} submitLabel="Đã trả tất cả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu ĐÃ TRẢ lương tháng ${viMonth(month)} cho tất cả? Bảng lương sẽ bị khoá (mở khoá cần lý do).`}>
                   {hidden("paid")}
                 </ActionForm>
-                <ActionForm action={payrollAction} submitLabel="Huỷ công bố" variant="ghost" successText="" className="inline-block" confirm="Ẩn bảng lương khỏi nhân viên?">
+                <ActionForm action={payrollAction} submitLabel="Tính lại" variant="outline" successText="Đã tính lại" className="inline-block" confirm={`Tính lại bảng lương tháng ${viMonth(month)} theo chấm công, thưởng phạt, lương giờ, tài khoản ngân hàng MỚI NHẤT? Số nhân viên đang xem sẽ thay đổi (dòng đã trả giữ nguyên).`}>
+                  {hidden("generate")}
+                </ActionForm>
+                <ActionForm action={payrollAction} submitLabel="Huỷ công bố" variant="ghost" successText="" className="inline-block" confirm="Ẩn bảng lương khỏi nhân viên? (bảng về nháp, tự tính lại theo dữ liệu mới nhất)">
                   {hidden("unpublish")}
                 </ActionForm>
               </>
@@ -99,7 +105,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         )}
         {payroll?.status === "PUBLISHED" && (
           <Alert tone="green">
-            Đã công bố lúc {viDateTime(payroll.publishedAt)} bởi {payroll.publishedBy} – nhân viên xem được. Vẫn tự tính lại tới khi bấm <b>Đã trả</b>. Đã trả <b>{paidCount}/{items.length}</b> người.
+            Đã công bố lúc {viDateTime(payroll.publishedAt)} bởi {payroll.publishedBy} – nhân viên xem được. 🔒 Số liệu đã chốt lúc {viDateTime(payroll.calculatedAt)}, sửa chấm công / thưởng phạt sau đó không tự cập nhật – bấm <b>Tính lại</b> nếu cần. Đã trả <b>{paidCount}/{items.length}</b> người.
           </Alert>
         )}
         {payroll?.status === "PAID" && <Alert tone="green">🔒 Đã trả hết – bảng lương đã khoá. Cần sửa thì mở khoá (nhập lý do) ở cuối trang hoặc từng dòng.</Alert>}
@@ -117,13 +123,15 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
               <tbody>
                 {items.map((i) => {
                   const u = users.get(String(i.userId));
-                  const uid = String(i.userId);
                   const paid = !!i.paidAt;
-                  const tipB = bpTip(uid, "BONUS");
-                  const tipP = bpTip(uid, "PENALTY");
+                  const tipB = bpTip(i, "BONUS");
+                  const tipP = bpTip(i, "PENALTY");
+                  const name = nameOf(i);
+                  const bankName = i.userName ? i.bankName : u?.bankName;
+                  const bankAcc = decrypt(i.userName ? i.bankAccountEnc : u?.bankAccountEnc);
                   return (
                     <tr key={String(i._id)} className={paid ? "bg-[#f3faf5]" : ""}>
-                      <td className="font-semibold">{u?.name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}</td>
+                      <td className="font-semibold">{name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
                       <td className="text-right">{vnd(i.hourlyWage)}</td>
                       <td className="text-right">{vnd(i.basePay)}</td>
@@ -137,15 +145,24 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                         ) : (
                           <span className="text-xs">PC {vnd(i.allowance)} · TƯ {vnd(i.advance)}</span>
                         )}
+                        {!!i.extrasNotes?.length && (
+                          <ul className="mt-1 space-y-0.5 text-[11px] text-ink/70">
+                            {(i.extrasNotes as ExtrasNote[]).map((n, ni) => (
+                              <li key={ni} title={`${n.by ?? ""} · ${viDateTime(n.at)}`}>
+                                {n.field === "advance" ? "TƯ" : "PC"} +{k(n.amount ?? 0)}: {n.note}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </td>
                       <td className="text-right text-bonus">
-                        <span title={tipB || undefined} className={tipB ? "cursor-help underline decoration-dotted underline-offset-2" : ""}>{vnd(i.totalBonus)}</span>
+                        <BpAmount amount={vnd(i.totalBonus)} tip={tipB} title={`Thưởng · ${name}`} className="text-bonus" />
                       </td>
                       <td className="text-right text-danger">
-                        <span title={tipP || undefined} className={tipP ? "cursor-help underline decoration-dotted underline-offset-2" : ""}>{vnd(i.totalPenalty)}</span>
+                        <BpAmount amount={vnd(i.totalPenalty)} tip={tipP} title={`Phạt · ${name}`} className="text-danger" />
                       </td>
                       <td className="text-right text-base font-bold">{vnd(i.netPay)}</td>
-                      <td className="text-xs">{u?.bankName}<br />{decrypt(u?.bankAccountEnc)}</td>
+                      <td className="text-xs">{bankName}<br /><CopyAccount account={bankAcc} /></td>
                       <td className="whitespace-nowrap text-xs">
                         {paid ? (
                           <div className="space-y-1">
@@ -161,7 +178,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                             </details>
                           </div>
                         ) : (
-                          <ActionForm action={payrollItemAction} submitLabel="Đã trả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu đã trả ${vnd(i.netPay)} cho ${u?.name}? Dòng lương sẽ bị khoá (mở khoá cần lý do).`}>
+                          <ActionForm action={payrollItemAction} submitLabel="Đã trả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu đã trả ${vnd(i.netPay)} cho ${name}? Dòng lương sẽ bị khoá (mở khoá cần lý do).`}>
                             <input type="hidden" name="itemId" value={String(i._id)} />
                             <input type="hidden" name="op" value="paid" />
                           </ActionForm>
@@ -192,7 +209,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
 
       {payroll?.status === "PAID" && (
         <Card title="Mở khoá cả bảng lương">
-          <ActionForm action={payrollAction} submitLabel="Mở khoá" variant="danger" confirm="Mở khoá sẽ bỏ trạng thái Đã trả của mọi nhân viên, bảng lương tự tính lại (nhân viên vẫn xem được). Tiếp tục?" className="flex flex-wrap items-end gap-2">
+          <ActionForm action={payrollAction} submitLabel="Mở khoá" variant="danger" confirm="Mở khoá sẽ bỏ trạng thái Đã trả của mọi nhân viên, bảng về Đã công bố và GIỮ số đã chốt (bấm Tính lại nếu cần cập nhật). Nhân viên vẫn xem được. Tiếp tục?" className="flex flex-wrap items-end gap-2">
             {hidden("unlock")}
             <Input name="reason" placeholder="Lý do mở khoá (bắt buộc)" className="w-80" />
           </ActionForm>
