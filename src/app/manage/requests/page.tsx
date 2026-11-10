@@ -1,8 +1,8 @@
 import { requireStaff } from "@/lib/staff-guard";
 import { CoverRequest, Store, User } from "@/lib/models";
 import { viDate, viDateTime, weekdayVi } from "@/lib/time";
-import { ActionForm } from "@/components/ActionForm";
-import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
+import { ApproveRejectForm } from "@/components/ApproveRejectForm";
+import { Badge, Card, Empty, PageTitle } from "@/components/ui";
 import { staffResolveCover } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -48,18 +48,9 @@ export default async function ManageRequests() {
                   {own ? (
                     <p className="mt-2 text-xs text-warn">Yêu cầu có bạn trong đó – nhờ admin hoặc người quản lý khác duyệt.</p>
                   ) : (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <ActionForm action={staffResolveCover} submitLabel={c.kind === "SWAP" ? "Duyệt – đổi ca" : "Duyệt – chuyển ca"} variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
-                        <input type="hidden" name="id" value={String(c._id)} />
-                        <input type="hidden" name="op" value="approve" />
-                        <Input name="reply" placeholder="Ghi chú (tuỳ chọn)" className="w-44" />
-                      </ActionForm>
-                      <ActionForm action={staffResolveCover} submitLabel="Từ chối" variant="outline" successText="" className="flex items-end gap-1">
-                        <input type="hidden" name="id" value={String(c._id)} />
-                        <input type="hidden" name="op" value="reject" />
-                        <Input name="reply" placeholder="Lý do từ chối" className="w-40" />
-                      </ActionForm>
-                    </div>
+                    <ApproveRejectForm action={staffResolveCover} approveLabel={c.kind === "SWAP" ? "Duyệt – đổi ca" : "Duyệt – chuyển ca"}>
+                      <input type="hidden" name="id" value={String(c._id)} />
+                    </ApproveRejectForm>
                   )}
                 </div>
               );

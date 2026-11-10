@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2, Minus, Plus, Sparkles, X } from "lucide-react";
 import { Alert, Button } from "@/components/ui";
+import { DatePickButton } from "@/components/DatePickButton";
 import { mergeLines, parseGoodsText, qtyVi, type GoodsItem, type GoodsLine } from "@/lib/goods";
 import type { GoodsInput } from "@/lib/goods-server";
 
@@ -235,12 +236,12 @@ export default function GoodsForm({
           </div>
         )}
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" disabled={!preview.lines.length || !!busy} onClick={addText} className="flex-1">
+          <Button type="button" variant="secondary" disabled={!preview.lines.length || !!busy} onClick={addText} className="flex-1 basis-40 whitespace-nowrap">
             <Plus size={16} /> Thêm vào danh sách
           </Button>
           {ocrEnabled && (
             <>
-              <Button type="button" variant="outline" disabled={!!busy} onClick={() => fileRef.current?.click()} className="flex-1">
+              <Button type="button" variant="outline" disabled={!!busy} onClick={() => fileRef.current?.click()} className="flex-1 basis-40 whitespace-nowrap">
                 {busy === "ai" ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {busy === "ai" ? "AI đang đọc…" : "Ảnh nhóm chat"}
               </Button>
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPhotos(e.target.files)} />
@@ -257,15 +258,8 @@ export default function GoodsForm({
               <span className="text-xs text-ink/60">hôm nay {dm(today)}</span>
             ) : (
               <>
-                <input
-                  type="date"
-                  value={d.date}
-                  min={minDate}
-                  max={today}
-                  onChange={(e) => patch(d.key, { date: e.target.value })}
-                  className="rounded-lg border border-[#e9d9a8] px-2 py-0.5 text-sm"
-                />
-                {d.date !== today && <span className="text-xs text-ink/60">({dm(d.date)})</span>}
+                <DatePickButton small value={d.date} min={minDate} max={today} onChange={(v) => v && patch(d.key, { date: v })} />
+                {d.date === today && <span className="text-xs text-ink/60">hôm nay</span>}
               </>
             )}
             {d.sender && <span className="text-xs text-ink/60">· {d.sender}{d.time ? ` ${d.time}` : ""}</span>}

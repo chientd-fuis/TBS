@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { isValidObjectId } from "mongoose";
 import { requirePerm } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { connectDB } from "@/lib/db";
 import { GoodsReceipt, Store } from "@/lib/models";
 import { getGoodsCatalog, GOODS_OFF, goodsEnabled, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
@@ -11,7 +12,8 @@ import { isYmd, localDate, localMonth, localTime, viDate, weekdayVi } from "@/li
 import { MonthPicker } from "@/components/MonthPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
-import { Alert, Badge, Card, Empty, Input, PageTitle, Select } from "@/components/ui";
+import { DatePickButton } from "@/components/DatePickButton";
+import { Alert, Badge, Card, Empty, PageTitle, Select } from "@/components/ui";
 import GoodsTabs from "./GoodsTabs";
 import GoodsForm from "@/components/GoodsForm";
 import { deleteGoods, saveGoodsAdmin } from "../../actions/goods";
@@ -74,7 +76,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
       <PageTitle sub={stock ? "Số nguyên liệu còn ở các cơ sở (kiểm cuối ngày) – nhân viên báo ở nút “Tồn kho”, hoặc admin nhập từ ảnh nhóm chat" : "Đồ / nguyên liệu các cơ sở nhận mỗi ngày – nhân viên ghi ở nút “Nhận hàng”, hoặc admin nhập từ ảnh nhóm chat"}>
         {stock ? "Tồn kho" : "Nhận hàng"}
       </PageTitle>
-      <GoodsTabs active={stock ? "stock" : "receive"} stockOn={await stockEnabled()} />
+      <GoodsTabs active={stock ? "stock" : "receive"} stockOn={await stockEnabled()} admin={admin} />
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="space-y-3">
           {!on ? (
@@ -104,27 +106,30 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
               </p>
             </Card>
           )}
-          <Card title="Danh mục nguyên liệu">
-            <p className="text-sm text-ink/70">
-              {catalog.length} món. Thêm / sửa / xoá, cách gọi tắt và giá nhập ở tab{" "}
-              <Link href="/admin/goods/items" className="text-accent underline">Nguyên liệu &amp; giá</Link>.
-            </p>
-          </Card>
+          {can(admin, "goods.items") && (
+            <Card title="Danh mục nguyên liệu">
+              <p className="text-sm text-ink/70">
+                {catalog.length} món. Thêm / sửa / xoá, cách gọi tắt và giá nhập ở tab{" "}
+                <Link href="/admin/goods/items" className="text-accent underline">Nguyên liệu &amp; giá</Link>.
+              </p>
+            </Card>
+          )}
         </div>
 
         <div className="min-w-0 space-y-3">
           <Card>
             <div className="flex flex-wrap items-center gap-2">
               <MonthPicker month={month} base={path} params={{ store: store || undefined }} />
-              <AutoFilterForm className="flex flex-wrap gap-2">
+              {/* mobile: hàng 2 = ô cơ sở (giãn hết chiều ngang) + nút lịch; PC: cùng 1 hàng */}
+              <AutoFilterForm className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
                 <input type="hidden" name="month" value={month} />
-                <Select name="store" defaultValue={store} className="w-auto">
+                <Select name="store" defaultValue={store} className="flex-1 sm:w-56 sm:flex-none">
                   <option value="">Tất cả cơ sở</option>
                   {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
-                <Input type="date" name="date" defaultValue={date} max={today} className="!w-auto" />
+                <DatePickButton name="date" value={date} max={today} />
+                {date && <Link href={base} className="shrink-0 text-sm whitespace-nowrap text-accent underline">Cả tháng</Link>}
               </AutoFilterForm>
-              {date && <Link href={base} className="text-sm text-accent underline">Cả tháng</Link>}
             </div>
           </Card>
 

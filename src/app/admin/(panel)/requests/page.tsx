@@ -5,6 +5,7 @@ import { resolveCover } from "../../actions/cover";
 import { weekdayVi } from "@/lib/time";
 import { viDate, viDateTime, viMonth } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
+import { ApproveRejectForm } from "@/components/ApproveRejectForm";
 import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
 import { replyFeedback, resolveAdjustment } from "../../actions/ops";
 import TimeInput from "@/components/TimeInput";
@@ -61,18 +62,9 @@ export default async function RequestsPage() {
                 )}
                 {c.note && <p className="text-ink/70">Lời nhắn: {c.note}</p>}
                 <p className="text-xs text-ink/50">Gửi {viDateTime(c.createdAt)}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <ActionForm action={resolveCover} submitLabel={c.kind === "SWAP" ? "Duyệt – đổi ca" : "Duyệt – chuyển ca"} variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
-                    <input type="hidden" name="id" value={String(c._id)} />
-                    <input type="hidden" name="op" value="approve" />
-                    <Input name="reply" placeholder="Ghi chú (tuỳ chọn)" className="w-44" />
-                  </ActionForm>
-                  <ActionForm action={resolveCover} submitLabel="Từ chối" variant="outline" successText="" className="flex items-end gap-1">
-                    <input type="hidden" name="id" value={String(c._id)} />
-                    <input type="hidden" name="op" value="reject" />
-                    <Input name="reply" placeholder="Lý do từ chối" className="w-40" />
-                  </ActionForm>
-                </div>
+                <ApproveRejectForm action={resolveCover} approveLabel={c.kind === "SWAP" ? "Duyệt – đổi ca" : "Duyệt – chuyển ca"}>
+                  <input type="hidden" name="id" value={String(c._id)} />
+                </ApproveRejectForm>
               </div>
             ))}
           </div>
@@ -118,20 +110,13 @@ export default async function RequestsPage() {
                 <p>Ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b></p>
                 <p className="text-ink/70">Lý do: {r.reason}</p>
                 {canAdj && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <ActionForm action={resolveAdjustment} submitLabel="Duyệt & ghi nhận" variant="secondary" successText="" className="flex flex-wrap items-end gap-1">
-                    <input type="hidden" name="id" value={String(r._id)} />
-                    <input type="hidden" name="op" value="approve" />
-                    <TimeInput name="inTime" defaultValue={r.checkInTime} className="w-28" title="Giờ vào" />
-                    <TimeInput name="outTime" defaultValue={r.checkOutTime} className="w-28" title="Giờ ra" />
-                    <Input name="reply" placeholder="Ghi chú" className="w-40" />
-                  </ActionForm>
-                  <ActionForm action={resolveAdjustment} submitLabel="Từ chối" variant="outline" successText="" className="flex items-end gap-1">
-                    <input type="hidden" name="id" value={String(r._id)} />
-                    <input type="hidden" name="op" value="reject" />
-                    <Input name="reply" placeholder="Lý do từ chối" className="w-40" />
-                  </ActionForm>
-                </div>
+                <ApproveRejectForm action={resolveAdjustment} approveLabel="Duyệt & ghi nhận">
+                  <input type="hidden" name="id" value={String(r._id)} />
+                  <div className="flex gap-2">
+                    <TimeInput name="inTime" defaultValue={r.checkInTime} className="flex-1" title="Giờ vào" />
+                    <TimeInput name="outTime" defaultValue={r.checkOutTime} className="flex-1" title="Giờ ra" />
+                  </div>
+                </ApproveRejectForm>
                 )}
               </div>
             ))}

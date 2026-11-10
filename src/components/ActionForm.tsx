@@ -18,6 +18,7 @@ export function ActionForm({
   className,
   variant = "primary",
   confirm,
+  buttonClassName,
 }: {
   action: (s: State, fd: FormData) => Promise<State>;
   children?: ReactNode;
@@ -26,6 +27,8 @@ export function ActionForm({
   className?: string;
   variant?: "primary" | "secondary" | "outline" | "danger" | "ghost";
   confirm?: string;
+  /** class thêm cho nút gửi (VD w-full để các nút cùng cột rộng bằng nhau) */
+  buttonClassName?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -48,7 +51,7 @@ export function ActionForm({
       {children}
       {state?.error && <Alert tone="red">{state.error}</Alert>}
       {state?.ok && successText && <Alert tone="green">{successText}</Alert>}
-      <Button type="submit" variant={variant} disabled={pending}>
+      <Button type="submit" variant={variant} disabled={pending} className={buttonClassName}>
         {pending ? "Đang xử lý…" : submitLabel}
       </Button>
       {confirm && (

@@ -22,7 +22,7 @@ const q = (n: number, unit: string) => `${qtyVi(n)}${unit ? ` ${unit}` : ""}`;
  * Tồn kho bật + có 2 lần kiểm (trước tháng & trong tháng): tiêu thụ = tồn đầu + nhập − tồn cuối; không thì theo số nhập.
  */
 export default async function GoodsReportPage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string }> }) {
-  const admin = await requirePerm("goods");
+  const admin = await requirePerm("goods.report");
   await connectDB();
   const sp = await searchParams;
   const today = localDate(new Date());
@@ -75,7 +75,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageTitle sub="Tổng hàng nhập từng cơ sở (số lượng × giá nhập theo ngày) · tiêu thụ nguyên liệu; so % trên doanh thu giữa các cơ sở / tháng trước để soi thất thoát">Tổng hợp hàng nhập</PageTitle>
-      <GoodsTabs active="report" stockOn={useStock} />
+      <GoodsTabs active="report" stockOn={useStock} admin={admin} />
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <MonthPicker month={month} base="/admin/goods/report" params={{ store: store || undefined }} />

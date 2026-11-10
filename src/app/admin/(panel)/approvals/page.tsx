@@ -45,11 +45,11 @@ export default async function ApprovalsPage() {
                 {!dev.length && <span className="text-danger">chưa ghi nhận</span>}
               </div>
               <div className="mt-3 grid gap-2">
-                <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex items-end gap-2">
+                <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
                   <input type="hidden" name="userId" value={String(u._id)} />
                   <Input name="hourlyWage" inputMode="numeric" placeholder="Lương giờ (VND)" className="flex-1" />
                 </ActionForm>
-                <ActionForm action={rejectUser} submitLabel="Từ chối" successText="Đã từ chối" variant="outline" className="flex items-end gap-2">
+                <ActionForm action={rejectUser} submitLabel="Từ chối" successText="Đã từ chối" variant="outline" className="flex items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
                   <input type="hidden" name="userId" value={String(u._id)} />
                   <Input name="reason" placeholder="Lý do từ chối" className="flex-1" />
                 </ActionForm>

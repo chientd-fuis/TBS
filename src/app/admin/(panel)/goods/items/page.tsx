@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 /** Danh mục nguyên liệu: thêm / sửa / xoá, cách gọi tắt, giá nhập theo ngày áp dụng (tăng / giảm giá). */
 export default async function GoodsItemsPage() {
-  await requirePerm("goods");
+  const admin = await requirePerm("goods.items");
   const today = localDate(new Date());
   const items = await getGoodsItems();
   const active = items.filter((i) => i.active);
@@ -22,7 +22,7 @@ export default async function GoodsItemsPage() {
   return (
     <>
       <PageTitle sub="Tên, đơn vị tính giá, cách gọi tắt (để đọc tin “nhận 5mn…”) và giá nhập theo ngày – dùng cho Tổng hợp tháng">Nguyên liệu &amp; giá</PageTitle>
-      <GoodsTabs active="items" stockOn={await stockEnabled()} />
+      <GoodsTabs active="items" stockOn={await stockEnabled()} admin={admin} />
       <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
         <div className="space-y-3">
           <Card title="Thêm nguyên liệu">

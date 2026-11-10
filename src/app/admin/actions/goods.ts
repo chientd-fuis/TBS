@@ -74,7 +74,7 @@ const revalidateGoods = () => ["/admin/goods", "/admin/goods/stock", "/admin/goo
 /** Thêm (không có id) / sửa nguyên liệu. Đổi tên → đổi luôn tên trong các lần nhận / tồn kho cũ. */
 export async function saveGoodsItem(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertPerm("goods");
+    const admin = await assertPerm("goods.items");
     await connectDB();
     await getGoodsItems(); // tạo danh mục lần đầu
     const id = str(fd.get("id"));
@@ -110,7 +110,7 @@ export async function saveGoodsItem(_: FormState, fd: FormData): Promise<FormSta
 /** Xoá = ẩn khỏi danh mục (giữ lịch sử, khôi phục được). on=1 → khôi phục. */
 export async function toggleGoodsItem(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertPerm("goods");
+    const admin = await assertPerm("goods.items");
     await connectDB();
     const id = str(fd.get("id"));
     const on = str(fd.get("on")) === "1";
@@ -127,7 +127,7 @@ export async function toggleGoodsItem(_: FormState, fd: FormData): Promise<FormS
 /** Thêm mốc giá nhập: từ ngày `from` giá = `price` (cùng ngày → ghi đè). */
 export async function addGoodsPrice(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertPerm("goods");
+    const admin = await assertPerm("goods.items");
     await connectDB();
     const id = str(fd.get("id"));
     const from = str(fd.get("from"));
@@ -150,7 +150,7 @@ export async function addGoodsPrice(_: FormState, fd: FormData): Promise<FormSta
 
 export async function removeGoodsPrice(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertPerm("goods");
+    const admin = await assertPerm("goods.items");
     await connectDB();
     const id = str(fd.get("id"));
     const from = str(fd.get("from"));

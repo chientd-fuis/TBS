@@ -51,8 +51,8 @@ export const NAV: NavGroup[] = [
     links: [
       { href: "/admin/goods", label: "Nhận hàng", perm: ["goods"] },
       { href: "/admin/goods/stock", label: "Tồn kho", perm: ["goods"] },
-      { href: "/admin/goods/items", label: "Nguyên liệu & giá nhập", perm: ["goods"] },
-      { href: "/admin/goods/report", label: "Tổng hợp hàng nhập", perm: ["goods"] },
+      { href: "/admin/goods/items", label: "Nguyên liệu & giá nhập", perm: ["goods.items"] },
+      { href: "/admin/goods/report", label: "Tổng hợp hàng nhập", perm: ["goods.report"] },
     ],
   },
   {

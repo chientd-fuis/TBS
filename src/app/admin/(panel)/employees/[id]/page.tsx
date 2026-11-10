@@ -96,7 +96,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
                   <Badge tone={d.status === "APPROVED" ? "green" : d.status === "PENDING" ? "yellow" : "red"}>{d.status}</Badge>
                   <span className="block text-xs text-ink/60">Lần đầu {viDateTime(d.firstSeenAt)} · gần nhất {viDateTime(d.lastSeenAt)}</span>
                 </span>
-                <DeviceActions id={String(d._id)} status={d.status} />
+                <DeviceActions id={String(d._id)} status={d.status} stack={false} />
               </li>
             ))}
           </ul>
