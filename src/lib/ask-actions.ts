@@ -57,6 +57,38 @@ export function amountOf(a: ActArgs): { amount: number; calcLine?: string } {
   if (v != null && v > 0) return { amount: v, calcLine: /[×x*/÷:+\-%]/.test(c) ? `Cách tính: ${c} = ${vnd(v)}` : undefined };
   return { amount: Math.abs(money(a.amount)) };
 }
+/**
+ * Số tiền ghi trong câu hỏi ("300k", "300000", "1tr2", "300.000đ") – dùng khi AI bỏ trống amount.
+ * Bỏ qua số nhỏ không đơn vị (tháng 10, ngày 15) và năm (2026). Có 2 số tiền khác nhau → null (không đoán).
+ */
+export function moneyInText(text: string): number | null {
+  const found = new Set<number>();
+  // đơn vị phải đứng riêng ("10 Đức" không phải 10đ)
+  for (const m of text.matchAll(/(\d+(?:[.,]\d+)*)\s*(tr(?:iệu)?\s*\d{0,3}|k|nghìn|ngàn|đồng|đ|₫|vnd)?(?![\p{L}\d])/giu)) {
+    const unit = (m[2] ?? "").toLowerCase();
+    if (!unit && (/^(19|20)\d{2}$/.test(m[1]) || /^\d{1,2}[.,]\d{1,2}$/.test(m[1]))) continue;
+    const v = evalCalc(m[1] + (/^(đ|₫|vnd|đồng)$/.test(unit) ? "" : unit));
+    if (v != null && (unit || v >= 1000)) found.add(v);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+/** Phép nhân ghi bằng lời: "ship 31 đơn, mỗi đơn hỗ trợ 5k" → "31 × 5k" (null nếu không có). */
+export function calcInText(text: string): string | null {
+  const m = /(\d+)\s*(đơn|ly|cốc|lần|ca|ngày|buổi|giờ)(?![\p{L}])[^\d]*?mỗi\s*(?:\2)?[^\d]{0,30}?(\d+(?:[.,]\d+)*\s*(?:k|nghìn|ngàn|tr(?:iệu)?\s*\d{0,3}|đồng|đ)?)(?![\p{L}\d])/iu.exec(text);
+  if (!m) return null;
+  const expr = `${m[1]} × ${m[3].replace(/\s*(đồng|đ)$/i, "").trim()}`;
+  return (evalCalc(expr) ?? 0) > 0 ? expr : null;
+}
+/** Các giờ ghi trong câu theo thứ tự ("8h", "8h30", "8:30", "8 giờ") → ["08:00", "17:30"]. */
+export function timesInText(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/(\d{1,2})\s*(?:h|giờ|:)\s*(\d{2})?(?![\p{L}\d])/giu)) {
+    const h = Number(m[1]);
+    const mi = Number(m[2] ?? 0);
+    if (h < 24 && mi < 60) out.push(`${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`);
+  }
+  return out;
+}
 /** Đổi tên admin đã chọn ("forName") thành "#id:<id>" trong tham số (person / people). */
 export function applyPick(a: ActArgs, forName: string, userId: string): ActArgs {
   const tag = `#id:${userId}`;
@@ -97,7 +129,7 @@ async function one(a: ActArgs, ctx: Ctx, find: Finder): Promise<{ person: Person
 export const WRITE_TOOLS: WriteTool[] = [
   {
     key: "set_wage",
-    desc: "ĐỔI lương giờ của 1 nhân viên (args: person, amount = lương giờ mới ₫/giờ, date = ngày hiệu lực, mặc định hôm nay). Cần quyền Bảng lương",
+    desc: "ĐỔI lương giờ của 1 nhân viên (args: person, amount = lương giờ mới, SỐ đồng/giờ – '23k/h' = 23000, date = ngày hiệu lực – 'từ tháng 11' = ngày 01 tháng đó, mặc định hôm nay). Cần quyền Bảng lương",
     allowed: (a) => can(a, "payroll"),
     plan: async (a, ctx, find) => {
       const r = await one(a, ctx, find);

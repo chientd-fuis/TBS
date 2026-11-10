@@ -15,7 +15,7 @@ import type { AdminSession } from "./admin-session";
 import { loadWeek } from "./schedule-data";
 import { slotLevel, targetFor } from "./schedule";
 import { loadDayRevenue } from "./finance-data";
-import { applyPick, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
+import { amountOf, applyPick, calcInText, moneyInText, timesInText, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
 import { foldVi } from "./finance";
 import { OFFTOPIC_QUIPS, pickQuip } from "./ai-quips";
 
@@ -293,6 +293,8 @@ export async function askData(admin: AdminSession, question: string, picked?: As
         reply: { type: "STRING", nullable: true },
       },
       required: ["tool"],
+      // mặc định Gemini viết theo ABC → "args" trước "tool" → điền tham số khi chưa chọn công cụ (bỏ trống amount / inTime…)
+      propertyOrdering: ["tool", "args", "reply"],
     },
     prompt: `Bạn phân loại câu hỏi của admin chuỗi quán trà sữa Tiệm Bơ Sầu để chọn ĐÚNG 1 công cụ truy vấn dữ liệu. Hôm nay ${ctx.today} (tuần bắt đầu ${weekStartOf(ctx.today)}). Cơ sở: ${stores.map((s, i) => `CS${i + 1} = ${s.name}`).join("; ")}.
 Công cụ TRA CỨU:
@@ -312,8 +314,22 @@ ${q.replace(/<<<|>>>/g, "")}
   if (plan.tool === "denied") return { answer: "🔒 Bạn chưa được Admin Tổng cấp quyền cho việc này nên mình không làm được.", denied: true };
   const act = acts.find((t) => t.key === plan.tool);
   if (act) {
-    const r = await act.plan(plan.args ?? {}, ctx, findPerson);
-    if ("choices" in r) return { answer: r.message, tool: act.key, choices: r.choices, pick: { tool: act.key, args: plan.args ?? {}, forName: r.forName } };
+    const args: Args = { ...(plan.args ?? {}) };
+    if (!picked) console.info("[ask] plan", act.key, JSON.stringify(plan.args ?? {}));
+    // AI hay bỏ trống / đọc sai số tiền ("23k" → 23, calc "23k/h" không tính được) → dưới 1.000đ thì lấy số ghi trong câu hỏi
+    if (amountOf(args).amount < 1000) {
+      const calc = calcInText(q); // "31 đơn, mỗi đơn 5k" → 31 × 5k
+      const m = calc ? null : moneyInText(q);
+      if (calc) Object.assign(args, { calc, amount: null });
+      else if (m) Object.assign(args, { amount: m, calc: null });
+    }
+    // chấm hộ: AI bỏ trống giờ → lấy giờ ghi trong câu ("vào 8h, ra 17h30")
+    if (act.key === "manual_attendance" && !String(args.inTime ?? "").trim()) {
+      const [inT, outT] = timesInText(q);
+      if (inT) Object.assign(args, { inTime: inT, outTime: args.outTime || outT || null });
+    }
+    const r = await act.plan(args, ctx, findPerson);
+    if ("choices" in r) return { answer: r.message, tool: act.key, choices: r.choices, pick: { tool: act.key, args, forName: r.forName } };
     if ("error" in r) return { answer: r.error, tool: act.key };
     return { answer: "Mình đã soạn sẵn – bạn kiểm tra rồi bấm “Xác nhận” để ghi (chưa có gì được lưu).", tool: act.key, card: r };
   }
