@@ -13,6 +13,7 @@ export const ADMIN_PERMS = [
   { key: "finance.settings", label: "Tài chính – Cài đặt", group: "Tài chính" },
   { key: "payroll", label: "Bảng lương", group: "Lương" },
   { key: "payEstimate", label: "Lương tạm tính ở Tổng quan", group: "Lương" },
+  { key: "goods", label: "Nhận hàng các cơ sở (xem / nhập / danh mục)", group: "Khác" },
   { key: "export", label: "Xuất Excel", group: "Khác" },
   { key: "stores", label: "Cơ sở (cài đặt cơ sở)", group: "Khác" },
   { key: "activity", label: "Hoạt động admin", group: "Khác" },

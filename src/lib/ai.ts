@@ -27,7 +27,8 @@ export type AiFeatureKey =
   | "payExplain"
   | "forecast"
   | "ask"
-  | "rulesSummary";
+  | "rulesSummary"
+  | "goodsOcr";
 
 export const AI_MODELS = [
   { key: "", label: "Mặc định (GEMINI_MODEL)" },
@@ -49,6 +50,7 @@ export const AI_FEATURES: {
   roles: AiRole[];
 }[] = [
   { key: "closingOcr", label: "Đọc ảnh tờ chốt ca", hint: "Nhân viên / admin chụp tờ chốt ca → tự điền số", unit: "month", limit: 2000, enabled: true, model: "", essential: true, roles: ["admin", "manager", "staff"] },
+  { key: "goodsOcr", label: "Đọc tin nhắn nhận hàng", hint: "Ảnh nhóm chat / chữ “nhận 5mn, 2nl…” → các món + số lượng", unit: "month", limit: 600, enabled: true, model: "", roles: ["admin", "manager", "staff"] },
   { key: "billOcr", label: "Đọc bill / sao kê", hint: "Nhập chi phí từ ảnh", unit: "month", limit: 300, enabled: true, model: "", roles: ["admin"] },
   { key: "attendanceOcr", label: "Đọc ảnh bảng chấm công", hint: "Chấm công hộ → Đọc ảnh (AI)", unit: "month", limit: 100, enabled: true, model: "", roles: ["admin"] },
   { key: "reportComment", label: "Nhận xét báo cáo tài chính", hint: "Đoạn nhận xét trong tin Telegram ngày / tuần / tháng", unit: "month", limit: 60, enabled: true, model: "", roles: [] },

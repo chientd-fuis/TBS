@@ -13,6 +13,7 @@ import {
   Gift,
   Inbox,
   Receipt,
+  Package,
   LayoutDashboard,
   PiggyBank,
   Settings,
@@ -36,6 +37,7 @@ const items = [
   { href: "/admin/requests", label: "Yêu cầu", icon: Inbox, badge: "requests" },
   { href: "/admin/finance", label: "Tài chính", icon: PiggyBank, perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.settings"] },
   { href: "/admin/closings", label: "Chốt ca", icon: Receipt },
+  { href: "/admin/goods", label: "Nhận hàng", icon: Package, perm: ["goods"] },
   { href: "/admin/shifts", label: "Ca làm việc", icon: CalendarClock },
   { href: "/admin/holidays", label: "Ngày lễ", icon: CalendarHeart },
   { href: "/admin/devices", label: "Thiết bị", icon: Smartphone, badge: "devices" },
@@ -46,11 +48,11 @@ const items = [
   { href: "/admin/settings", label: "Cài đặt", icon: Settings },
 ] as const;
 
-export default function AdminNav({ counts, owner = false, perms = [] }: { counts: Record<string, number>; owner?: boolean; perms?: string[] }) {
+export default function AdminNav({ counts, owner = false, perms = [], hide = [] }: { counts: Record<string, number>; owner?: boolean; perms?: string[]; hide?: string[] }) {
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3">
-      {items.filter((it) => owner || (!("owner" in it) && (!("perm" in it) || it.perm.some((p) => perms.includes(p))))).map(({ href, label, icon: Icon, ...rest }) => {
+      {items.filter((it) => !hide.includes(it.href)).filter((it) => owner || (!("owner" in it) && (!("perm" in it) || it.perm.some((p) => perms.includes(p))))).map(({ href, label, icon: Icon, ...rest }) => {
         const active = href === "/admin" ? path === "/admin" : path.startsWith(href);
         const n = "badge" in rest ? counts[rest.badge] : 0;
         return (

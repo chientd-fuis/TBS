@@ -5,7 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveConfig } from "../../actions/settings";
+import { disconnectDrive, saveConfig, saveGoodsEnabled } from "../../actions/settings";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
 
@@ -40,6 +40,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               Bật / tắt và giới hạn từng chức năng AI (kiểm soát token), nội dung Trợ lý cửa hàng, ngưỡng phát hiện bất thường.{" "}
               <Link className="text-accent underline" href="/admin/settings/ai">Mở Cài đặt AI →</Link>
             </p>
+          </Card>
+        )}
+
+        {isOwner && (
+          <Card title="📦 Nhận hàng các cơ sở">
+            <ActionForm action={saveGoodsEnabled} submitLabel="Lưu" successText="Đã lưu">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="goodsEnabled" defaultChecked={s.goodsEnabled !== false} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Bật chức năng Nhận hàng</b>
+                  <span className="block text-xs text-ink/60">
+                    Tắt → nhân viên không thấy nút “Nhận hàng” dưới Chốt ca, admin không nhập mới được (dữ liệu cũ vẫn giữ). Riêng phần AI đọc ảnh / tin bật tắt ở{" "}
+                    <Link className="text-accent underline" href="/admin/settings/ai">Cài đặt AI</Link> → “Đọc tin nhắn nhận hàng”.
+                  </span>
+                </span>
+              </label>
+            </ActionForm>
+            <Link href="/admin/goods" className="mt-2 inline-block text-sm text-accent underline">Mở trang Nhận hàng →</Link>
           </Card>
         )}
 

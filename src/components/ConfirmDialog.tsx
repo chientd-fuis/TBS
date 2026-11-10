@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -31,13 +32,14 @@ export function ConfirmDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, busy, onCancel]);
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => !busy && onCancel()}>
+  if (!open || typeof document === "undefined") return null;
+  // Portal ra <body>: hộp thoại hay nằm trong ô bảng (whitespace-nowrap, text-right, overflow…) → không kế thừa style đó.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 text-left whitespace-normal" onClick={() => !busy && onCancel()}>
       <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="flex items-center gap-2 text-base font-bold text-accent">
-          {danger && <TriangleAlert size={18} className="text-danger" />}
-          {title}
+        <h3 className="flex items-start gap-2 text-base font-bold text-accent">
+          {danger && <TriangleAlert size={18} className="mt-0.5 shrink-0 text-danger" />}
+          <span className="min-w-0 break-words">{title}</span>
         </h3>
         {children && <div className="mt-3 space-y-2 text-sm">{children}</div>}
         <div className="mt-5 flex justify-end gap-2">
@@ -48,6 +50,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

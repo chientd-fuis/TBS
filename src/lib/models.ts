@@ -37,6 +37,9 @@ const SettingsSchema = new Schema(
     // Cài đặt AI (lib/ai.ts): bật/tắt + giới hạn từng chức năng, ngân sách token, nội dung Trợ lý cửa hàng
     ai: { type: Schema.Types.Mixed, default: {} },
     autoCleanup: { type: Boolean, default: false }, // tự dọn dữ liệu rác mỗi tháng (cron)
+    // Nhận hàng: danh mục nguyên liệu dạng chữ (lib/goods.ts) – trống → danh mục mặc định
+    goodsCatalog: { type: String, default: "" },
+    goodsEnabled: { type: Boolean, default: true }, // Admin Tổng bật / tắt cả chức năng Nhận hàng
   },
   { timestamps: true },
 );
@@ -452,6 +455,29 @@ const UserNoticeSchema = new Schema(
 );
 UserNoticeSchema.index({ userId: 1, readAt: 1, createdAt: -1 });
 export const UserNotice = getModel("UserNotice", UserNoticeSchema);
+
+/* ---------- Nhận hàng: đồ / nguyên liệu các cơ sở nhận mỗi ngày ---------- */
+const GoodsReceiptSchema = new Schema(
+  {
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true }, // ngày nhận YYYY-MM-DD
+    month: { type: String, required: true },
+    items: { type: [{ _id: false, name: String, qty: Number, unit: String }], default: [] },
+    note: String,
+    raw: String, // nguyên văn tin nhắn / chữ gõ
+    sender: String, // người báo trong ảnh nhóm chat
+    source: { type: String, enum: ["TEXT", "PHOTO", "MANUAL"], default: "TEXT" },
+    byUserId: { type: Schema.Types.ObjectId, ref: "User" },
+    byName: String,
+    byAdmin: { type: Boolean, default: false },
+    telegram: { status: { type: String, enum: ["PENDING", "SENT", "FAILED", "DISABLED", "SKIPPED"], default: "PENDING" }, messageId: Number, error: String },
+  },
+  { timestamps: true },
+);
+GoodsReceiptSchema.index({ storeId: 1, date: -1 });
+GoodsReceiptSchema.index({ month: 1, date: -1 });
+export type GoodsReceiptDoc = InferSchemaType<typeof GoodsReceiptSchema> & { _id: Types.ObjectId };
+export const GoodsReceipt = getModel("GoodsReceipt", GoodsReceiptSchema);
 
 /* ---------- Tài chính: chi phí (bill), chi phí cố định, nhật ký báo cáo ---------- */
 const ShareSchema = new Schema({ storeId: { type: Schema.Types.ObjectId, ref: "Store" }, pct: Number }, { _id: false });

@@ -42,12 +42,13 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
   const q: Record<string, unknown> = { month, ...(store ? payStoreFilter(store._id) : {}) };
   if (selected) q.userId = selected._id;
   if (sp.status) q.status = sp.status;
-  const rows = await labelSupport(await Attendance.find(q).sort({ checkInAt: 1 }).lean(), String(store?._id));
+  // ca mới nhất lên đầu
+  const rows = await labelSupport(await Attendance.find(q).sort({ checkInAt: -1 }).lean(), String(store?._id));
   const name = new Map(staff.map((u) => [String(u._id), u.name]));
   // nhân viên cơ sở khác sang hỗ trợ tại cơ sở này (lương tính ở cơ sở gốc của họ)
   const visitors = store
     ? await labelSupport(
-        await Attendance.find({ storeId: store._id, month, homeStoreId: { $exists: true, $ne: store._id } }).sort({ checkInAt: 1 }).lean(),
+        await Attendance.find({ storeId: store._id, month, homeStoreId: { $exists: true, $ne: store._id } }).sort({ checkInAt: -1 }).lean(),
         String(store._id),
       )
     : [];

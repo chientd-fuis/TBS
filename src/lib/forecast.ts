@@ -144,11 +144,45 @@ export async function loadForecast(storeId: string, weekStart: string, opts: { w
 }
 
 export type WeatherCut = { tplId: string; tplName: string; suggest: number; planned: number; rev: number };
-export type WeatherDayAlert = { date: string; warn: string; dropPct: number; cuts: WeatherCut[] };
+export type WeatherDayAlert = { date: string; warn: string; dropPct: number; cuts: WeatherCut[]; noData: string[] };
 
 /**
- * Tổng quan: các ngày còn lại của tuần đang chạy (hôm nay → CN) có mưa > 60% / lạnh (TB ngày < 22°C)
- * → ca nào nên giảm người, còn bao nhiêu (so với số đang xếp; chưa xếp thì so định mức).
+ * Hàm thuần: ngày xấu trời → ca nào nên giảm người.
+ * Chỉ ca CÓ dữ liệu doanh thu (rev > 0, doanh thu/người > 0) mới gợi ý giảm; ca chưa có dữ liệu → noData
+ * (không lấy định mức làm số gợi ý rồi đổ cho thời tiết). planned = số người đang xếp, chưa xếp ai → định mức ca.
+ */
+export function buildWeatherAlerts(input: {
+  days: string[];
+  weather: Map<string, DayWeather>;
+  factors: WeatherFactors;
+  templates: ForecastTpl[];
+  cells: ForecastCell[];
+  perStaff: Record<string, number>;
+  assigned: Record<string, number>;
+}): WeatherDayAlert[] {
+  return input.days.flatMap((date) => {
+    const w = input.weather.get(date);
+    const a = w && weatherAdvice(w, input.factors);
+    if (!a?.reduce) return [];
+    const cuts: WeatherCut[] = [];
+    const noData: string[] = [];
+    for (const t of input.templates) {
+      const c = input.cells.find((x) => x.date === date && x.tplId === t.id);
+      if (!c) continue;
+      if (!(c.rev > 0 && (input.perStaff[t.id] ?? 0) > 0)) {
+        noData.push(t.name);
+        continue;
+      }
+      const planned = input.assigned[`${date}|${t.id}`] || c.current;
+      if (c.suggest < planned) cuts.push({ tplId: t.id, tplName: t.name, suggest: c.suggest, planned, rev: c.rev });
+    }
+    return [{ date, warn: a.text.replace(/ → nên giảm ca$/, ""), dropPct: Math.round((1 - a.factor) * 100), cuts, noData }];
+  });
+}
+
+/**
+ * Tổng quan: các ngày còn lại của tuần đang chạy (hôm nay → CN) của 1 cơ sở có mưa > 60% / lạnh (TB ngày < 22°C)
+ * → ca nào nên giảm người. Thời tiết theo GPS của chính cơ sở; doanh thu, ca mẫu, người đang xếp đều của cơ sở đó.
  * Thời tiết tốt cả tuần → không nạp dự báo doanh thu (nhẹ).
  */
 export async function weekWeatherAlerts(storeId: string, tz = "Asia/Ho_Chi_Minh"): Promise<WeatherDayAlert[]> {
@@ -160,15 +194,5 @@ export async function weekWeatherAlerts(storeId: string, tz = "Asia/Ho_Chi_Minh"
   const weather = await loadWeather(rest, store?.lat, store?.lng);
   if (![...weather.values()].some((w) => weatherKind(w) !== "normal")) return [];
   const f = await loadForecast(storeId, ws);
-  return rest.flatMap((date) => {
-    const w = weather.get(date);
-    const a = w && weatherAdvice(w, f.factors);
-    if (!a?.reduce) return [];
-    const cuts = f.templates.flatMap((t) => {
-      const c = f.cells.find((x) => x.date === date && x.tplId === t.id);
-      const planned = f.assigned[`${date}|${t.id}`] ?? c?.current ?? 0;
-      return c && c.suggest < planned ? [{ tplId: t.id, tplName: t.name, suggest: c.suggest, planned, rev: c.rev }] : [];
-    });
-    return [{ date, warn: a.text.replace(/ → nên giảm ca$/, ""), dropPct: Math.round((1 - a.factor) * 100), cuts }];
-  });
+  return buildWeatherAlerts({ days: rest, weather, factors: f.factors, templates: f.templates, cells: f.cells, perStaff: f.perStaff, assigned: f.assigned });
 }

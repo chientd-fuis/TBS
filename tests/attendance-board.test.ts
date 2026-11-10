@@ -70,3 +70,32 @@ test("bảng chấm công theo ca: đang trong ca nhấp nháy – xuyên ca / �
   assert.equal(pick("2026-11-04|S", "u2")?.state, "worked");
   assert.equal(pick("2026-11-04|C", "u2")?.live, true);
 });
+
+test("đến sớm cho ca sau (12:51 → ca Chiều 13h) không bị tính là làm ca Sáng – phải ở trong ca ≥ 30 phút", () => {
+  const a = (now: Date, extra: Partial<BoardAtt> = {}) =>
+    buildMonthBoard({
+      ...base,
+      now,
+      assignments: [{ id: "c1", userId: "u1", tplId: "C", date: "2026-11-04", startTime: "13:00", endTime: "18:00" }],
+      attendances: [
+        // u1 có lịch ca Chiều, vào 12:51 (đang mở)
+        att({ id: "o1", userId: "u1", workDate: "2026-11-04", checkInAt: at(4, 12, 51), status: "OPEN" }),
+        // u2 KHÔNG có lịch, vào 12:51 làm thêm ca Chiều
+        att({ id: "o2", userId: "u2", workDate: "2026-11-04", checkInAt: at(4, 12, 51), status: "OPEN", outOfShift: true, ...extra }),
+      ],
+    }).cells;
+  for (const now of [at(4, 12, 55), at(4, 13, 5), at(4, 16, 38)]) {
+    const c = a(now);
+    assert.equal(c["2026-11-04|S"]?.length ?? 0, 0, `lúc ${now.toISOString()} ca Sáng phải trống`);
+    assert.deepEqual(c["2026-11-04|C"].map((x) => [x.name, x.state, !!x.live]).sort(), [["An", "worked", true], ["Bình", "worked", true]]);
+  }
+  // đã check-out 12:45 → 18:00 (ở ca Sáng 15 phút) → chỉ tính ca Chiều
+  const done = (inM: number) =>
+    buildMonthBoard({
+      ...base,
+      assignments: [],
+      attendances: [att({ id: "d1", userId: "u2", workDate: "2026-11-03", checkInAt: at(3, 12, inM), checkOutAt: at(3, 18), outOfShift: true })],
+    }).cells;
+  assert.equal(done(45)["2026-11-03|S"]?.length ?? 0, 0);
+  assert.equal(done(45)["2026-11-03|C"].length, 1);
+});

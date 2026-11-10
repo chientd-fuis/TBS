@@ -2,16 +2,18 @@ import Link from "next/link";
 import { can } from "@/lib/permissions";
 import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
+import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
+import { liveBadges, type LiveBadge } from "@/lib/live-badges";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
 import { weekWeatherAlerts } from "@/lib/forecast";
 import { getAiConfig } from "@/lib/ai";
+import { goodsEnabled } from "@/lib/goods-server";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
-import { BellRing, ChevronRight, Receipt } from "lucide-react";
+import { BellRing, ChevronRight, Package, Receipt } from "lucide-react";
 import ActivityFeed from "./activity/ActivityFeed";
 import { activityDays, loadActivities, loadSessions } from "./activity/data";
 
@@ -52,13 +54,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     stores.map(async (s) => {
       const tz = s.timezone || "Asia/Ho_Chi_Minh";
       const today = localDate(now, tz);
-      const [shifts, atts, users] = await Promise.all([
+      const [shifts, atts, users, tpls] = await Promise.all([
         ShiftAssignment.find({ storeId: s._id, date: today, ...APPROVED_SHIFT }).lean(),
         Attendance.find({ storeId: s._id, workDate: today }).lean(),
         User.find({ storeId: s._id, status: "ACTIVE" }).select("name").lean(),
+        ShiftTemplate.find({ storeId: s._id, active: { $ne: false } }).select("startTime endTime").lean(),
       ]);
       const name = new Map(users.map((u) => [String(u._id), u.name]));
       const working = atts.filter((a) => a.status === "OPEN");
+      // badge Mới đến / Sắp hết ca / Làm thêm giờ cho người đang làm (chưa check-out)
+      const winOf = (x: { startTime?: string | null; endTime?: string | null }) => {
+        const w = shiftWindow(today, x.startTime!, x.endTime!, tz);
+        return { start: w.start.getTime(), end: w.end.getTime() };
+      };
+      const tplWins = tpls.filter((x) => x.startTime && x.endTime).map(winOf);
+      const badges = new Map<string, LiveBadge[]>(
+        working.map((a) => [
+          String(a._id),
+          liveBadges(
+            new Date(a.checkInAt).getTime(),
+            now.getTime(),
+            shifts.filter((sh) => String(sh.userId) === String(a.userId) && sh.startTime && sh.endTime).map(winOf),
+            tplWins,
+          ),
+        ]),
+      );
       const late = atts.filter((a) => (a.lateMinutes || 0) > 0);
       const absent = shifts.filter((sh) => {
         const { start } = shiftWindow(sh.date, sh.startTime!, sh.endTime!, tz);
@@ -74,7 +94,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         .lean();
       // mưa / lạnh các ngày còn lại trong tuần → ca nên giảm người (theo doanh thu + thời tiết quá khứ của quán)
       const weatherAlerts = wxOn ? await weekWeatherAlerts(String(s._id), tz).catch(() => []) : [];
-      return { s, tz, shifts, working, late, absent, name, missing, month, pay, staffActs, weatherAlerts, noCoords: s.lat == null || s.lng == null };
+      return { s, tz, shifts, working, badges, late, absent, name, missing, month, pay, staffActs, weatherAlerts, noCoords: s.lat == null || s.lng == null };
     }),
   );
 
@@ -82,9 +102,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
-        <LinkButton href="/admin/finance/expenses" variant="secondary" className="mb-4 py-2.5">
-          <Receipt size={18} /> Nhập chi phí (sao kê / CK)
-        </LinkButton>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <LinkButton href="/admin/finance/expenses" variant="secondary" className="py-2.5">
+            <Receipt size={18} /> Nhập chi phí (sao kê / CK)
+          </LinkButton>
+          {can(admin, "goods") && (await goodsEnabled()) && (
+            <LinkButton href="/admin/goods" variant="primary" className="py-2.5">
+              <Package size={18} /> Nhận hàng các cơ sở
+            </LinkButton>
+          )}
+        </div>
       </div>
       {todoTotal > 0 && (
         <div className="mb-4 overflow-hidden rounded-2xl bg-[#fff4e5] ring-1 ring-warn/40 lg:hidden">
@@ -182,7 +209,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                           ))}
                         </ul>
                       ) : (
-                        <span className="text-[13px] text-ink/60"> – số người đang xếp đã hợp lý</span>
+                        !w.noData.length && <span className="text-[13px] text-ink/60"> – số người đang xếp đã hợp lý</span>
+                      )}
+                      {w.noData.length > 0 && (
+                        <span className="block pl-3 text-[12px] text-ink/50">Ca {w.noData.join(", ")}: chưa đủ doanh thu chốt ca 4 tuần để gợi ý số người – cân nhắc tự giảm.</span>
                       )}
                     </li>
                   ))}
@@ -210,6 +240,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                   <span className="tbs-live-dot mx-0.5" aria-hidden />
                   <span><b className="text-[#166534]">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
                   {!!a.lateMinutes && <Badge tone="orange">Muộn {a.lateMinutes}&apos;</Badge>}
+                  {b.badges.get(String(a._id))?.map((x) => (
+                    <Badge key={x.kind + x.text} tone={x.kind === "new" ? "blue" : x.kind === "ending" ? "yellow" : "red"}>{x.text}</Badge>
+                  ))}
                 </p>
               ))}
               {b.absent.map((sh) => (

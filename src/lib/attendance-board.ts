@@ -44,6 +44,8 @@ const win = (date: string, start: string, end: string, tz: string) => {
   return [s.getTime(), e.getTime()] as const;
 };
 const overlap = (a: readonly [number, number], b: readonly [number, number]) => Math.max(0, Math.min(a[1], b[1]) - Math.max(a[0], b[0]));
+/** Phải ở trong ca ≥ 30 phút mới tính là làm ca đó (nhân viên thường đến sớm ~15 phút trước ca sau → không tính là làm ca trước). */
+export const MIN_IN_SHIFT_MS = 30 * 60_000;
 
 export function buildMonthBoard(input: {
   storeId: string;
@@ -64,6 +66,22 @@ export function buildMonthBoard(input: {
   const push = (date: string, tplId: string, c: BoardChip) => ((cells[`${date}|${tplId}`] ??= []).push(c));
   const attWin = (a: BoardAtt) =>
     [a.checkInAt.getTime(), (a.checkOutAt ?? (a.status === "OPEN" ? input.now : new Date(a.checkInAt.getTime() + 3600_000))).getTime()] as const;
+  /**
+   * Lượt chấm công có tính là làm ca (khung w) không:
+   *  - ở trong ca ≥ 30 phút; hoặc
+   *  - lượt ngắn đã check-out mà phần lớn thời gian nằm trong ca; hoặc
+   *  - đang mở (chưa check-out), vào trong khoảng 1 giờ trước giờ bắt đầu → trước khi ca hết 30 phút (đến sớm / đang làm ca này).
+   */
+  const inShift = (a: BoardAtt, w: readonly [number, number]) => {
+    const aw = attWin(a);
+    const ov = overlap(aw, w);
+    if (ov >= MIN_IN_SHIFT_MS) return true;
+    if (a.status === "OPEN") {
+      const t = a.checkInAt.getTime();
+      return t >= w[0] - 3600_000 && t < w[1] - MIN_IN_SHIFT_MS && input.now.getTime() < w[1];
+    }
+    return ov > 0 && ov * 2 >= aw[1] - aw[0];
+  };
   const used = new Set<string>(); // lượt chấm công đã gắn vào ít nhất 1 ca có lịch
   const tagFor = (a: BoardAtt): BoardChip["tag"] =>
     a.storeId !== storeId
@@ -76,7 +94,7 @@ export function buildMonthBoard(input: {
   for (const s of input.assignments) {
     const w = win(s.date, s.startTime, s.endTime, tz);
     const mine = input.attendances
-      .filter((a) => a.userId === s.userId && a.storeId === storeId && overlap(attWin(a), w) > 0)
+      .filter((a) => a.userId === s.userId && a.storeId === storeId && inShift(a, w))
       .sort((x, y) => x.checkInAt.getTime() - y.checkInAt.getTime());
     mine.forEach((a) => used.add(a.id));
     const a0 = mine[0];
@@ -110,7 +128,9 @@ export function buildMonthBoard(input: {
     let bestScore = -Infinity;
     for (const t of templates) {
       const w = win(a.workDate, t.startTime, t.endTime, tz);
-      const score = overlap(aw, w) || -Math.abs(aw[0] - w[0]) / 1000; // ưu tiên chồng giờ, sau đó gần giờ bắt đầu
+      // ưu tiên ca ở trong đó ≥ 30 phút (lâu nhất), không có thì ca có giờ bắt đầu gần giờ vào nhất
+      const ov = overlap(aw, w);
+      const score = ov >= MIN_IN_SHIFT_MS ? ov : -Math.abs(aw[0] - w[0]) / 1000;
       if (score > bestScore) {
         bestScore = score;
         best = t;
@@ -137,7 +157,7 @@ export function buildMonthBoard(input: {
     if (a.status !== "OPEN" || !days.includes(a.workDate)) continue;
     const aw = attWin(a);
     for (const t of templates) {
-      if (overlap(aw, win(a.workDate, t.startTime, t.endTime, tz)) <= 0) continue;
+      if (!inShift(a, win(a.workDate, t.startTime, t.endTime, tz))) continue;
       const list = cells[`${a.workDate}|${t.id}`] ?? [];
       const has = list.find((c) => c.userId === a.userId && c.state !== "pending");
       if (has) {

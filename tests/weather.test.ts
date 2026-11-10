@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { weatherAdvice, weatherIcon, weatherKind } from "../src/lib/weather";
-import { forecastStaff, learnWeatherImpact } from "../src/lib/forecast";
+import { buildWeatherAlerts, forecastStaff, learnWeatherImpact } from "../src/lib/forecast";
 
 const day = (tMax: number, rainPct: number) => ({ date: "2026-11-12", tMin: tMax - 5, tMax, rainPct, rainMm: 0, code: 3 });
 
@@ -48,4 +48,31 @@ test("Thời tiết: ngày đã qua mưa theo lượng mưa thực", () => {
   const w = { date: "2026-10-01", tMin: 24, tMax: 30, rainPct: 30, rainMm: 12, code: 63 };
   assert.equal(weatherKind(w, true), "rain");
   assert.equal(weatherKind(w), "normal");
+});
+
+test("Thời tiết: cảnh báo Tổng quan chỉ gợi ý giảm ca có dữ liệu doanh thu", () => {
+  const templates = [
+    { id: "S", name: "Sáng", startTime: "08:00", targetStaff: 2, minStaff: 1 },
+    { id: "T", name: "Tối", startTime: "18:00", targetStaff: 2, minStaff: 1 },
+  ];
+  const d = "2026-11-12";
+  const weather = new Map([[d, { date: d, tMin: 22, tMax: 28, rainPct: 85, rainMm: 10, code: 63 }], ["2026-11-13", { date: "2026-11-13", tMin: 25, tMax: 31, rainPct: 10, rainMm: 0, code: 1 }]]);
+  const cells = [
+    { date: d, tplId: "S", rev: 1_600_000, suggest: 2, current: 2, samples: 4 }, // có dữ liệu: gợi ý 2, đang xếp 3 → giảm 1
+    { date: d, tplId: "T", rev: 0, suggest: 2, current: 2, samples: 0 }, // chưa có dữ liệu: KHÔNG gợi ý giảm dù đang xếp 4
+    { date: "2026-11-13", tplId: "S", rev: 3_000_000, suggest: 2, current: 2, samples: 4 },
+  ];
+  const out = buildWeatherAlerts({
+    days: [d, "2026-11-13"],
+    weather,
+    factors: { rain: 0.8, cold: 0.8, both: 0.65 },
+    templates,
+    cells,
+    perStaff: { S: 800_000 },
+    assigned: { [`${d}|S`]: 3, [`${d}|T`]: 4, "2026-11-13|S": 5 },
+  });
+  assert.equal(out.length, 1); // 13/11 trời đẹp → không cảnh báo (dù đang xếp 5)
+  assert.deepEqual(out[0].cuts.map((c) => [c.tplName, c.suggest, c.planned]), [["Sáng", 2, 3]]);
+  assert.deepEqual(out[0].noData, ["Tối"]);
+  assert.equal(out[0].dropPct, 20);
 });

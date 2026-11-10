@@ -88,6 +88,22 @@ export async function loadStorageStats(): Promise<{ error?: string; stats?: impo
   }
 }
 
+/** Admin Tổng bật / tắt cả chức năng Nhận hàng (nhân viên + admin). */
+export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được bật / tắt" };
+    await connectDB();
+    const on = fd.get("goodsEnabled") === "on";
+    await Settings.updateOne({ key: "main" }, { $set: { goodsEnabled: on } }, { upsert: true });
+    await audit(adminActor(admin), "settings.goodsEnabled", { type: "Settings" }, null, { goodsEnabled: on });
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
 /** Bật / tắt tự dọn hằng tháng. */
 export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error?: string }> {
   try {

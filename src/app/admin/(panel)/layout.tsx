@@ -10,6 +10,7 @@ import AskAiPanel from "./AskAiPanel";
 import { aiAllowed, aiRemaining } from "@/lib/ai";
 import { can } from "@/lib/permissions";
 import { geminiConfigured } from "@/lib/ocr";
+import { goodsEnabled } from "@/lib/goods-server";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -37,7 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <p className="text-xs opacity-80">Quản lý chấm công</p>
           </div>
         </div>
-        <AdminNav owner={admin.kind === "OWNER"} perms={admin.perms} counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests }} />
+        <AdminNav owner={admin.kind === "OWNER"} perms={admin.perms} hide={(await goodsEnabled()) ? [] : ["/admin/goods"]} counts={{ approvals, devices, requests: adj + fb + covers, shiftRequests }} />
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">
