@@ -1,77 +1,32 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BadgeCheck,
-  CalendarClock,
-  CalendarDays,
-  CalendarHeart,
-  CalendarRange,
-  ClipboardList,
-  History,
-  FileSpreadsheet,
-  Gift,
-  Inbox,
-  Receipt,
-  Package,
-  Tags,
-  BarChart3,
-  LayoutDashboard,
-  PiggyBank,
-  Settings,
-  ShieldCheck,
-  Smartphone,
-  Store,
-  Users,
-  Wallet,
-} from "lucide-react";
 import { cn } from "@/lib/format";
-
-const items = [
-  { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/admin/work-schedule", label: "Lịch làm việc", icon: CalendarDays },
-  { href: "/admin/schedule", label: "Xếp ca tự động", icon: CalendarRange, badge: "shiftRequests" },
-  { href: "/admin/bonus-penalty", label: "Thưởng / Phạt", icon: Gift },
-  { href: "/admin/attendance", label: "Chấm công", icon: ClipboardList },
-  { href: "/admin/employees", label: "Nhân viên", icon: Users },
-  { href: "/admin/payroll", label: "Bảng lương", icon: Wallet, perm: ["payroll"] },
-  { href: "/admin/approvals", label: "Duyệt đăng ký", icon: BadgeCheck, badge: "approvals" },
-  { href: "/admin/requests", label: "Yêu cầu", icon: Inbox, badge: "requests" },
-  { href: "/admin/finance", label: "Tài chính", icon: PiggyBank, perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.settings"] },
-  { href: "/admin/closings", label: "Chốt ca", icon: Receipt },
-  { href: "/admin/goods", label: "Nhận hàng", icon: Package, perm: ["goods"] },
-  { href: "/admin/goods/items", label: "Nguyên liệu & giá nhập", icon: Tags, perm: ["goods"] },
-  { href: "/admin/goods/report", label: "Tổng hợp hàng nhập", icon: BarChart3, perm: ["goods"] },
-  { href: "/admin/shifts", label: "Ca làm việc", icon: CalendarClock },
-  { href: "/admin/holidays", label: "Ngày lễ", icon: CalendarHeart },
-  { href: "/admin/devices", label: "Thiết bị", icon: Smartphone, badge: "devices" },
-  { href: "/admin/export", label: "Xuất Excel", icon: FileSpreadsheet, perm: ["export"] },
-  { href: "/admin/stores", label: "Cơ sở", icon: Store, perm: ["stores"] },
-  { href: "/admin/activity", label: "Hoạt động admin", icon: History, perm: ["activity"] },
-  { href: "/admin/admins", label: "Quản lý admin", icon: ShieldCheck, owner: true },
-  { href: "/admin/settings", label: "Cài đặt", icon: Settings },
-] as const;
+import { activeLink, canSee, NAV } from "./nav-items";
 
 export default function AdminNav({ counts, owner = false, perms = [], hide = [] }: { counts: Record<string, number>; owner?: boolean; perms?: string[]; hide?: string[] }) {
   const path = usePathname();
+  const access = { owner, perms, hide };
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3">
-      {items.filter((it) => !hide.some((h) => it.href === h || it.href.startsWith(`${h}/`))).filter((it) => owner || (!("owner" in it) && (!("perm" in it) || it.perm.some((p) => perms.includes(p))))).map(({ href, label, icon: Icon, ...rest }) => {
-        // mục khớp đường dẫn dài nhất mới sáng (VD /admin/goods/items không sáng cả "Nhận hàng")
-        const match = (h: string) => (h === "/admin" ? path === "/admin" : path === h || path.startsWith(`${h}/`));
-        const active = match(href) && !items.some((o) => o.href.length > href.length && o.href.startsWith(href) && match(o.href));
-        const n = "badge" in rest ? counts[rest.badge] : 0;
+      {NAV.map((g) => {
+        const links = g.links.filter((l) => canSee(l, access));
+        if (!links.length) return null;
+        const active = !!activeLink(path, links);
+        // gộp số chờ xử lý của các trang con (VD Duyệt đăng ký + Thiết bị)
+        const n = links.reduce((s, l) => s + (l.badge ? counts[l.badge] ?? 0 : 0), 0);
+        const Icon = g.icon;
         return (
           <Link
-            key={href}
-            href={href}
+            key={g.label}
+            href={links[0].href}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm whitespace-nowrap",
               active ? "bg-primary font-bold text-ink" : "text-white/90 hover:bg-white/10",
             )}
           >
             <Icon size={17} />
-            <span className="flex-1">{label}</span>
+            <span className="flex-1">{g.label}</span>
             {n > 0 && <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">{n}</span>}
           </Link>
         );
