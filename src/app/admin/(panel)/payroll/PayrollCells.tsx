@@ -2,6 +2,41 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import Modal from "@/components/Modal";
+import { evalCalc } from "@/lib/calc-expr";
+
+/**
+ * Ô tiền phụ cấp / tạm ứng: gõ "155k", "1tr2", "31 × 5k" → rời ô hiện 155.000; bấm lại hiện đúng chữ đã gõ.
+ * Gửi đi qua input ẩn `name` (số nguyên) – gõ sai thì viền đỏ, giữ số cũ.
+ */
+export function MoneyField({ name, defaultValue, label, className }: { name: string; defaultValue: number; label: string; className?: string }) {
+  const [text, setText] = useState(defaultValue ? defaultValue.toLocaleString("vi-VN") : "0");
+  const [focus, setFocus] = useState(false);
+  const v = text.trim() === "" ? 0 : evalCalc(text);
+  const ok = v != null && v >= 0;
+  return (
+    <>
+      <input type="hidden" name={name} value={ok ? v : defaultValue} />
+      <input
+        type="text"
+        inputMode="text"
+        autoComplete="off"
+        aria-label={label}
+        title={ok ? label : `${label}: không hiểu số tiền (VD 155k, 1tr2, 31 × 5k)`}
+        value={focus || !ok ? text : v.toLocaleString("vi-VN")}
+        onFocus={(e) => {
+          setFocus(true);
+          requestAnimationFrame(() => e.target.select());
+        }}
+        onBlur={() => {
+          setFocus(false);
+          if (ok) setText(v.toLocaleString("vi-VN"));
+        }}
+        onChange={(e) => setText(e.target.value)}
+        className={`block w-full min-w-0 bg-white px-2 py-2 text-right text-sm tabular-nums outline-none ${ok ? "" : "text-danger"} ${className ?? ""}`}
+      />
+    </>
+  );
+}
 
 /** Số tài khoản + nút copy (chỉ copy số TK, không kèm tên ngân hàng). */
 export function CopyAccount({ account }: { account: string }) {

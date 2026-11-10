@@ -9,7 +9,7 @@ import { MonthPicker } from "@/components/MonthPicker";
 import { Alert, Badge, Card, Empty, Input, LinkButton, PageTitle } from "@/components/ui";
 import { payrollAction, payrollItemAction, savePayrollExtras } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
-import { BpAmount, CopyAccount } from "./PayrollCells";
+import { BpAmount, CopyAccount, MoneyField } from "./PayrollCells";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +117,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
               <thead>
                 <tr>
                   <th>Nhân viên</th><th className="text-right">Giờ công</th><th className="text-right">Lương giờ</th><th className="text-right">Lương CB</th>
-                  <th>Phụ cấp / Tạm ứng</th><th className="text-right">Thưởng</th><th className="text-right">Phạt</th><th className="text-right">Thực nhận</th><th>Chuyển khoản</th><th>Trả lương</th>
+                  <th className="text-secondary-dark">+ Phụ cấp</th><th className="text-danger">− Tạm ứng</th><th className="text-right">Thưởng</th><th className="text-right">Phạt</th><th className="text-right">Thực nhận</th><th>Chuyển khoản</th><th>Trả lương</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,26 +135,45 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
                       <td className="text-right">{vnd(i.hourlyWage)}</td>
                       <td className="text-right">{vnd(i.basePay)}</td>
-                      <td>
-                        {!paid && payroll.status !== "PAID" ? (
-                          <ActionForm action={savePayrollExtras} submitLabel="Lưu" variant="outline" successText="" className="flex items-center gap-1">
-                            <input type="hidden" name="itemId" value={String(i._id)} />
-                            <Input name="allowance" defaultValue={i.allowance} inputMode="numeric" className="w-24" title="Phụ cấp" />
-                            <Input name="advance" defaultValue={i.advance} inputMode="numeric" className="w-24" title="Tạm ứng" />
-                          </ActionForm>
-                        ) : (
-                          <span className="text-xs">PC {vnd(i.allowance)} · TƯ {vnd(i.advance)}</span>
-                        )}
-                        {!!i.extrasNotes?.length && (
-                          <ul className="mt-1 space-y-0.5 text-[11px] text-ink/70">
-                            {(i.extrasNotes as ExtrasNote[]).map((n, ni) => (
-                              <li key={ni} title={`${n.by ?? ""} · ${viDateTime(n.at)}`}>
-                                {n.field === "advance" ? "TƯ" : "PC"} +{k(n.amount ?? 0)}: {n.note}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
+                      {(["allowance", "advance"] as const).map((field) => {
+                        const plus = field === "allowance";
+                        const other = plus ? "advance" : "allowance";
+                        const notes = ((i.extrasNotes ?? []) as ExtrasNote[]).filter((n) => (n.field ?? "allowance") === field);
+                        // dấu đầu ô: + nền xanh = phụ cấp (cộng vào lương), − nền đỏ = tạm ứng (trừ vào lương)
+                        const sign = (
+                          <span className={`flex w-7 shrink-0 items-center justify-center rounded-l-xl text-base font-bold ${plus ? "bg-[#e3f4e8] text-secondary-dark" : "bg-[#fde4e4] text-danger"}`}>
+                            {plus ? "+" : "−"}
+                          </span>
+                        );
+                        return (
+                          <td key={field}>
+                            {!paid && payroll.status !== "PAID" ? (
+                              <ActionForm action={savePayrollExtras} submitLabel="Lưu" variant="outline" successText="" className="flex items-center gap-1">
+                                <input type="hidden" name="itemId" value={String(i._id)} />
+                                <input type="hidden" name={other} value={i[other]} />
+                                <span className={`flex w-32 overflow-hidden rounded-xl border ${plus ? "border-secondary/50" : "border-danger/40"}`}>
+                                  {sign}
+                                  <MoneyField name={field} defaultValue={i[field]} label={plus ? "Phụ cấp" : "Tạm ứng"} />
+                                </span>
+                              </ActionForm>
+                            ) : (
+                              <span className={`whitespace-nowrap font-semibold ${plus ? "text-secondary-dark" : "text-danger"}`}>
+                                {plus ? "+" : "−"}
+                                {vnd(i[field])}
+                              </span>
+                            )}
+                            {!!notes.length && (
+                              <ul className="mt-1 space-y-0.5 text-[11px] text-ink/70">
+                                {notes.map((n, ni) => (
+                                  <li key={ni} title={`${n.by ?? ""} · ${viDateTime(n.at)}`}>
+                                    +{k(n.amount ?? 0)}: {n.note}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className="text-right text-bonus">
                         <BpAmount amount={vnd(i.totalBonus)} tip={tipB} title={`Thưởng · ${name}`} className="text-bonus" />
                       </td>
@@ -188,7 +207,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                   );
                 })}
                 <tr>
-                  <td colSpan={7} className="text-right font-bold">TỔNG</td>
+                  <td colSpan={8} className="text-right font-bold">TỔNG</td>
                   <td className="text-right text-base font-bold text-secondary-dark">{vnd(total)}</td>
                   <td></td>
                   <td></td>

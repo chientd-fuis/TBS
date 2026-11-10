@@ -15,7 +15,7 @@ import type { AdminSession } from "./admin-session";
 import { loadWeek } from "./schedule-data";
 import { slotLevel, targetFor } from "./schedule";
 import { loadDayRevenue } from "./finance-data";
-import { amountOf, applyPick, calcInText, moneyInText, timesInText, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
+import { amountOf, applyPick, calcInText, extraKindInText, moneyInText, monthInText, timesInText, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
 import { foldVi } from "./finance";
 import { OFFTOPIC_QUIPS, pickQuip } from "./ai-quips";
 
@@ -322,6 +322,18 @@ ${q.replace(/<<<|>>>/g, "")}
       const m = calc ? null : moneyInText(q);
       if (calc) Object.assign(args, { calc, amount: null });
       else if (m) Object.assign(args, { amount: m, calc: null });
+    }
+    // tạm ứng / phụ cấp: tháng + loại khoản theo câu chữ (AI hay bỏ trống tháng → rơi về tháng hiện tại, nhầm phụ cấp thành tạm ứng)
+    if (act.key === "payroll_extra") {
+      const month = monthInText(q, ctx.today);
+      if (month && !isMonth(args.month)) args.month = month;
+      const kind = extraKindInText(q);
+      if (kind) args.kind = kind;
+    }
+    // đổi lương "từ tháng 11" mà AI bỏ trống ngày hiệu lực → ngày 01 tháng đó
+    if (act.key === "set_wage" && !/^\d{4}-\d{2}-\d{2}$/.test(String(args.date ?? ""))) {
+      const month = monthInText(q, ctx.today, false);
+      if (month) args.date = monthRange(month).first;
     }
     // chấm hộ: AI bỏ trống giờ → lấy giờ ghi trong câu ("vào 8h, ra 17h30")
     if (act.key === "manual_attendance" && !String(args.inTime ?? "").trim()) {

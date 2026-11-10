@@ -79,6 +79,24 @@ export function calcInText(text: string): string | null {
   const expr = `${m[1]} × ${m[3].replace(/\s*(đồng|đ)$/i, "").trim()}`;
   return (evalCalc(expr) ?? 0) > 0 ? expr : null;
 }
+/**
+ * Tháng ghi trong câu ("tháng 10", "tháng 10/2025", "T10") → "YYYY-MM". Không ghi năm: tháng lớn hơn tháng hiện tại = năm trước
+ * (tháng 1 nói "tháng 12" là tháng 12 năm ngoái) – trừ khi preferPast = false (VD lương mới "từ tháng 12"). today = "YYYY-MM-DD".
+ */
+export function monthInText(text: string, today: string, preferPast = true): string | null {
+  const m = /(?<![\p{L}])(?:tháng|t)\s*(\d{1,2})(?:\s*[/\-.]\s*(\d{4}))?(?![\p{L}\d])/iu.exec(text);
+  if (!m) return null;
+  const mm = Number(m[1]);
+  if (mm < 1 || mm > 12) return null;
+  const y = m[2] ? Number(m[2]) : Number(today.slice(0, 4)) - (preferPast && mm > Number(today.slice(5, 7)) ? 1 : 0);
+  return `${y}-${String(mm).padStart(2, "0")}`;
+}
+/** Phụ cấp hay tạm ứng theo từ trong câu; có cả hai / không có → null (để AI quyết). */
+export function extraKindInText(text: string): "allowance" | "advance" | null {
+  const allow = /phụ\s*cấp|trợ\s*cấp|hỗ\s*trợ/iu.test(text);
+  const adv = /(?<![\p{L}])ứng(?![\p{L}])/iu.test(text);
+  return allow === adv ? null : allow ? "allowance" : "advance";
+}
 /** Các giờ ghi trong câu theo thứ tự ("8h", "8h30", "8:30", "8 giờ") → ["08:00", "17:30"]. */
 export function timesInText(text: string): string[] {
   const out: string[] = [];
