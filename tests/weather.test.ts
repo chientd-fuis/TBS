@@ -12,6 +12,10 @@ test("Thời tiết: mưa > 60% cảnh báo, lạnh < 22°C giảm ca", () => {
   assert.equal(weatherAdvice(day(21, 10)).cold, true);
   assert.equal(weatherAdvice(day(21, 80)).factor, 0.65);
   assert.match(weatherAdvice(day(21, 80)).text, /mưa 80%.*lạnh.*nên giảm ca/);
+  // lạnh theo nhiệt độ TRUNG BÌNH ngày: 17–23° → TB 20° → lạnh; 20–25° → TB 22,5° → không lạnh (dù thấp nhất 20°)
+  assert.equal(weatherAdvice({ date: "2026-12-01", tMin: 17, tMax: 23, rainPct: 0, rainMm: 0, code: 2 }).cold, true);
+  assert.match(weatherAdvice({ date: "2026-12-01", tMin: 17, tMax: 23, rainPct: 0, rainMm: 0, code: 2 }).text, /TB 20°/);
+  assert.equal(weatherAdvice({ date: "2026-12-01", tMin: 20, tMax: 25, rainPct: 0, rainMm: 0, code: 2 }).cold, false);
   assert.equal(weatherIcon(63), "🌧️");
   assert.equal(weatherIcon(0), "☀️");
 });

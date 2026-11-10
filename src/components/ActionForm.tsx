@@ -1,10 +1,15 @@
 "use client";
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { Alert, Button } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type State = { ok?: boolean; error?: string } | null;
 
-/** Form gọi server action, hiển thị lỗi / thành công. */
+/**
+ * Form gọi server action, hiển thị lỗi / thành công.
+ * `confirm`: hỏi lại bằng hộp thoại của app (không dùng window.confirm – trình duyệt có thể đã chặn hộp thoại
+ * của trang → confirm() trả false ngay, form im lặng không làm gì).
+ */
 export function ActionForm({
   action,
   children,
@@ -23,12 +28,21 @@ export function ActionForm({
   confirm?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const confirmed = useRef(false);
+  const [asking, setAsking] = useState(false);
   return (
     <form
+      ref={formRef}
       action={formAction}
       className={className ?? "space-y-3"}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        if (confirm && !confirmed.current) {
+          e.preventDefault();
+          setAsking(true);
+          return;
+        }
+        confirmed.current = false;
       }}
     >
       {children}
@@ -37,6 +51,20 @@ export function ActionForm({
       <Button type="submit" variant={variant} disabled={pending}>
         {pending ? "Đang xử lý…" : submitLabel}
       </Button>
+      {confirm && (
+        <ConfirmDialog
+          open={asking}
+          title={confirm}
+          danger={variant === "danger"}
+          confirmLabel={typeof submitLabel === "string" ? submitLabel : "Xác nhận"}
+          onCancel={() => setAsking(false)}
+          onConfirm={() => {
+            setAsking(false);
+            confirmed.current = true;
+            formRef.current?.requestSubmit();
+          }}
+        />
+      )}
     </form>
   );
 }

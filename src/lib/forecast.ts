@@ -52,7 +52,7 @@ export function forecastStaff(input: {
   const cells: ForecastCell[] = [];
   for (const date of days)
     for (const t of templates) {
-      // cùng thứ trong tuần, ngày thường; ưu tiên 6 tuần gần nhất
+      // cùng thứ trong tuần, ngày thường (lịch sử chỉ HISTORY_WEEKS tuần → tối đa ~4 mẫu)
       let same = history
         .filter((h) => h.tplId === t.id && wd(h.date) === wd(date) && !input.pastHolidays.has(h.date) && h.rev > 0)
         .sort((a, b) => b.date.localeCompare(a.date));
@@ -96,12 +96,16 @@ export function learnWeatherImpact(history: ShiftRev[], pastKind: Map<string, We
   return { rain, cold, both };
 }
 
-/** Nạp lịch sử 12 tuần của cơ sở + dự báo tuần `weekStart`. */
-export async function loadForecast(storeId: string, weekStart: string) {
+/** Số tuần doanh thu chốt ca gần nhất dùng để dự báo (gần đây phản ánh đúng mùa / giá / lượng khách hơn). */
+export const HISTORY_WEEKS = 4;
+
+/** Nạp lịch sử HISTORY_WEEKS tuần của cơ sở + dự báo tuần `weekStart`. */
+/** opts.weather = false (tắt ở Cài đặt → AI → thời tiết / Xếp ca) → không điều chỉnh theo thời tiết. */
+export async function loadForecast(storeId: string, weekStart: string, opts: { weather?: boolean } = {}) {
   await connectDB();
   const sid = new Types.ObjectId(storeId);
   const today = localDate(new Date());
-  const from = addDays(today, -84);
+  const from = addDays(today, -7 * HISTORY_WEEKS);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const [tplDocs, closings, assigns, futureHol, pastHol] = await Promise.all([
     ShiftTemplate.find({ storeId: sid, active: { $ne: false } }).sort({ startTime: 1 }).lean(),
@@ -123,9 +127,9 @@ export async function loadForecast(storeId: string, weekStart: string) {
       const t = tplOf(closing);
       if (t) history.push({ date, tplId: t.id, rev: closingSum(own), staff: staffCount.get(`${date}|${t.id}`) ?? 0 });
     }
-  // thời tiết thực tế 12 tuần qua → học ảnh hưởng lên doanh thu; dự báo tuần này × hệ số đã học
+  // thời tiết thực tế HISTORY_WEEKS tuần qua (cùng khoảng với doanh thu) → học ảnh hưởng lên doanh thu; dự báo tuần này × hệ số đã học
   const store = await Store.findById(sid).select("lat lng").lean();
-  const allWeather = await loadWeather(null, store?.lat, store?.lng);
+  const allWeather = opts.weather === false ? new Map<string, DayWeather>() : await loadWeather(null, store?.lat, store?.lng);
   const pastKind = new Map([...allWeather].filter(([d]) => d < today).map(([d, w]) => [d, weatherKind(w, true)]));
   const impact = learnWeatherImpact(history, pastKind, new Set(pastHol.keys()));
   const factors: WeatherFactors = { rain: impact.rain.factor, cold: impact.cold.factor, both: impact.both.factor };
@@ -143,7 +147,7 @@ export type WeatherCut = { tplId: string; tplName: string; suggest: number; plan
 export type WeatherDayAlert = { date: string; warn: string; dropPct: number; cuts: WeatherCut[] };
 
 /**
- * Tổng quan: các ngày còn lại của tuần đang chạy (hôm nay → CN) có mưa > 60% / lạnh < 22°C
+ * Tổng quan: các ngày còn lại của tuần đang chạy (hôm nay → CN) có mưa > 60% / lạnh (TB ngày < 22°C)
  * → ca nào nên giảm người, còn bao nhiêu (so với số đang xếp; chưa xếp thì so định mức).
  * Thời tiết tốt cả tuần → không nạp dự báo doanh thu (nhẹ).
  */

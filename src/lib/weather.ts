@@ -2,7 +2,7 @@
  * Dự báo thời tiết cho xếp ca (Open-Meteo – miễn phí, không cần key, dự báo tối đa 16 ngày).
  * Quán kem chè: mưa / lạnh → vắng khách → nên giảm ca.
  *  - khả năng mưa > 60%  → cảnh báo mưa
- *  - nhiệt độ cao nhất < 22°C → lạnh
+ *  - nhiệt độ TRUNG BÌNH ngày ((thấp + cao) / 2) < 22°C → lạnh (VD 17–23° → TB 20° → lạnh)
  *  - mưa hoặc lạnh → gợi ý giảm ca (dự báo doanh thu nhân hệ số WEATHER_FACTOR)
  */
 
@@ -16,11 +16,14 @@ export const WEATHER_FACTOR = { rain: 0.8, cold: 0.8, both: 0.65 } as const;
 export type DayWeather = { date: string; tMax: number; tMin: number; rainPct: number; rainMm: number; code: number };
 export type WeatherAdvice = { rain: boolean; cold: boolean; reduce: boolean; factor: number; text: string };
 
+/** Nhiệt độ trung bình ngày = (thấp nhất + cao nhất) / 2 */
+export const avgTemp = (d: Pick<DayWeather, "tMin" | "tMax">) => (d.tMin + d.tMax) / 2;
+
 /** Loại ngày theo thời tiết. Ngày đã qua: mưa = lượng mưa thực ≥ 3mm (hoặc khả năng > 60%); ngày tới: khả năng mưa > 60%. */
 export type WeatherKind = "normal" | "rain" | "cold" | "both";
 export function weatherKind(d: DayWeather, past = false): WeatherKind {
   const rain = d.rainPct > RAIN_WARN_PCT || (past && d.rainMm >= 3);
-  const cold = d.tMax < COLD_MAX_C;
+  const cold = avgTemp(d) < COLD_MAX_C;
   return rain && cold ? "both" : rain ? "rain" : cold ? "cold" : "normal";
 }
 /** Hệ số doanh thu theo loại ngày – mặc định WEATHER_FACTOR, hoặc học từ dữ liệu quán (learnWeatherImpact). */
@@ -32,7 +35,7 @@ export function weatherAdvice(d: DayWeather, factors: WeatherFactors = WEATHER_F
   const rain = kind === "rain" || kind === "both";
   const cold = kind === "cold" || kind === "both";
   const factor = kind === "normal" ? 1 : factors[kind];
-  const why = [rain ? `mưa ${d.rainPct}%` : "", cold ? `lạnh ${Math.round(d.tMin)}–${Math.round(d.tMax)}°C` : ""].filter(Boolean).join(", ");
+  const why = [rain ? `mưa ${d.rainPct}%` : "", cold ? `lạnh ${Math.round(d.tMin)}–${Math.round(d.tMax)}°C (TB ${Math.round(avgTemp(d))}°)` : ""].filter(Boolean).join(", ");
   return { rain, cold, reduce: rain || cold, factor, text: why ? `${why} → nên giảm ca` : "" };
 }
 
@@ -75,4 +78,12 @@ export async function loadWeather(days: string[] | null, lat?: number | null, ln
     console.warn("[weather]", (e as Error).message);
   }
   return out;
+}
+
+/** Nhãn thời tiết gọn cho đầu cột ngày (Lịch làm việc …); warn chỉ cho ngày từ hôm nay trở đi. */
+export type WeatherBadge = { icon: string; tMin: number; tMax: number; rainPct: number; warn: string };
+export function weatherBadges(weather: Map<string, DayWeather>, today: string, factors?: WeatherFactors): Record<string, WeatherBadge> {
+  return Object.fromEntries(
+    [...weather.values()].map((w) => [w.date, { icon: weatherIcon(w.code), tMin: Math.round(w.tMin), tMax: Math.round(w.tMax), rainPct: w.rainPct, warn: w.date >= today ? weatherAdvice(w, factors).text : "" }]),
+  );
 }

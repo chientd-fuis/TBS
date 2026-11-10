@@ -15,7 +15,7 @@ export default function WeatherStrip({ days, weather, today }: { days: string[];
     <div className={`rounded-2xl border p-3 text-sm ${bad.length ? "border-[#f5c99b] bg-[#fff8ef]" : "border-[#f1e6c8] bg-white"}`}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
         <b>🌤️ Thời tiết tuần này</b>
-        <span className="text-[11px] text-ink/50">Open-Meteo · mưa &gt; {RAIN_WARN_PCT}% hoặc lạnh &lt; {COLD_MAX_C}°C → nên giảm ca (quán kem chè)</span>
+        <span className="text-[11px] text-ink/50">Open-Meteo · mưa &gt; {RAIN_WARN_PCT}% hoặc nhiệt độ TB ngày &lt; {COLD_MAX_C}°C → nên giảm ca (quán kem chè)</span>
       </div>
       <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
         {days.map((d) => {

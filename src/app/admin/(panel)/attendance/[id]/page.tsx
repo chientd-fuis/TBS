@@ -53,7 +53,7 @@ export default async function EditAttendance({ params }: { params: Promise<{ id:
           <Card title="Xoá lượt chấm công">
             <ActionForm action={deleteAttendance} submitLabel="Xoá" variant="danger" confirm="Xoá lượt chấm công này?">
               <input type="hidden" name="id" value={id} />
-              <Field label="Lý do xoá"><Textarea name="reason" rows={2} required /></Field>
+              <Field label="Lý do xoá" hint="Bắt buộc (ít nhất 3 ký tự) – lưu vào lịch sử chỉnh sửa"><Textarea name="reason" rows={2} /></Field>
             </ActionForm>
           </Card>
         </div>

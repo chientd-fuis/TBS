@@ -7,6 +7,8 @@ import { Card, PageTitle } from "@/components/ui";
 import { cn } from "@/lib/format";
 import MonthShiftBoard from "../attendance/MonthShiftBoard";
 import { loadMonthBoard } from "../attendance/month-board-data";
+import { getAiConfig } from "@/lib/ai";
+import { loadWeather, weatherBadges } from "@/lib/weather";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,9 @@ export default async function WorkSchedulePage({ searchParams }: { searchParams:
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : localMonth(new Date(), tz);
   const board = store ? await loadMonthBoard(String(store._id), month, tz, stores) : null;
+  const today = localDate(new Date(), tz);
+  // thời tiết (Open-Meteo, 92 ngày qua + 16 ngày tới) – tắt ở Cài đặt → AI → thời tiết → Lịch làm việc
+  const weather = store && board && (await getAiConfig()).weather.workSchedule ? weatherBadges(await loadWeather(board.days, store.lat, store.lng), today) : undefined;
 
   return (
     <>
@@ -47,7 +52,7 @@ export default async function WorkSchedulePage({ searchParams }: { searchParams:
         board && (
           <Card title={`${store.name} – tháng ${month.slice(5)}/${month.slice(0, 4)}`}>
             {board.templates.length ? (
-              <MonthShiftBoard month={month} today={localDate(new Date(), tz)} {...board} />
+              <MonthShiftBoard month={month} today={today} {...board} weather={weather} />
             ) : (
               <p className="text-sm text-ink/60">Cơ sở chưa có ca làm việc.</p>
             )}

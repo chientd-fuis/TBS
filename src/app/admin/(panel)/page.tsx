@@ -7,6 +7,7 @@ import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
 import { weekWeatherAlerts } from "@/lib/forecast";
+import { getAiConfig } from "@/lib/ai";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
@@ -46,6 +47,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   // bất thường chốt ca & két (có số tiền doanh thu từng ca → chỉ Admin Tổng)
   const anomaly = admin.kind === "OWNER" ? await latestAnomalyRun().catch(() => null) : null;
   const anomalyOpen = anomaly?.items.filter((i) => !i.resolved && i.sev >= 2) ?? [];
+  const wxOn = (await getAiConfig()).weather.overview; // Cài đặt → AI → thời tiết
   const blocks = await Promise.all(
     stores.map(async (s) => {
       const tz = s.timezone || "Asia/Ho_Chi_Minh";
@@ -71,7 +73,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         .limit(8)
         .lean();
       // mưa / lạnh các ngày còn lại trong tuần → ca nên giảm người (theo doanh thu + thời tiết quá khứ của quán)
-      const weatherAlerts = await weekWeatherAlerts(String(s._id), tz).catch(() => []);
+      const weatherAlerts = wxOn ? await weekWeatherAlerts(String(s._id), tz).catch(() => []) : [];
       return { s, tz, shifts, working, late, absent, name, missing, month, pay, staffActs, weatherAlerts, noCoords: s.lat == null || s.lng == null };
     }),
   );

@@ -129,6 +129,28 @@ export default async function AiSettingsPage() {
               </label>
             </div>
           </div>
+          <div className="rounded-xl bg-cream p-3">
+            <p className="text-sm font-semibold text-accent">🌧️ Dự báo thời tiết &amp; gợi ý giảm ca</p>
+            <p className="mb-2 text-xs text-ink/60">
+              Open-Meteo (miễn phí, không tốn token AI) · mưa &gt; 60% hoặc nhiệt độ TB ngày &lt; 22°C → nên giảm ca; mức giảm học từ doanh thu chốt ca + thời tiết thực tế 4 tuần gần nhất (chưa đủ ≥ 3 ngày mưa / lạnh thì dùng mức mặc định −20% / −35%).
+            </p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+              {(
+                [
+                  ["wx_overview", cfg.weather.overview, "Tổng quan", "cảnh báo ca nên giảm người các ngày còn lại trong tuần"],
+                  ["wx_schedule", cfg.weather.schedule, "Xếp ca", "dải thời tiết tuần + gợi ý số người tính theo thời tiết"],
+                  ["wx_workSchedule", cfg.weather.workSchedule, "Lịch làm việc", "thời tiết trên đầu từng ngày"],
+                ] as const
+              ).map(([name, on, label, hint]) => (
+                <label key={name} className="flex items-start gap-2">
+                  <input type="checkbox" name={name} defaultChecked={on} className="mt-0.5 h-4 w-4 accent-[#3c9c54]" />
+                  <span>
+                    <b>{label}</b> <span className="text-xs text-ink/60">– {hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
         </ActionForm>
       </Card>
 

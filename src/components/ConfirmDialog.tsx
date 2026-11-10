@@ -41,8 +41,9 @@ export function ConfirmDialog({
         </h3>
         {children && <div className="mt-3 space-y-2 text-sm">{children}</div>}
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" disabled={busy} onClick={onCancel}>{cancelLabel}</Button>
-          <Button variant={danger ? "danger" : "secondary"} disabled={busy} onClick={onConfirm}>
+          {/* type="button": hộp thoại có thể nằm trong <form> (ActionForm) – không được tự submit */}
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>{cancelLabel}</Button>
+          <Button type="button" variant={danger ? "danger" : "secondary"} disabled={busy} onClick={onConfirm}>
             {busy && <Loader2 size={16} className="animate-spin" />} {confirmLabel}
           </Button>
         </div>

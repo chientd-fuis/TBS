@@ -9,7 +9,7 @@ import { AI_FEATURES, AI_MODELS, AI_ROLES, getAiConfig, type AiConfig, aiRemaini
 import { errMsg, num, str, type FormState } from "./types";
 import { runAnomaly } from "@/lib/anomaly";
 import { Types } from "mongoose";
-import { loadForecast } from "@/lib/forecast";
+import { HISTORY_WEEKS, loadForecast } from "@/lib/forecast";
 import { geminiGenerate } from "@/lib/ocr";
 import { addDays } from "@/lib/time";
 import { askData, ASK_TOOL_LABEL, type AskPick } from "@/lib/ask-ai";
@@ -54,8 +54,9 @@ export async function saveAiSettings(_: FormState, fd: FormData): Promise<FormSt
         lateCloseMin: Math.max(10, Math.round(num(fd.get("an_lateCloseMin"), 60))),
         telegram: fd.get("an_telegram") === "on",
       },
+      weather: { overview: fd.get("wx_overview") === "on", schedule: fd.get("wx_schedule") === "on", workSchedule: fd.get("wx_workSchedule") === "on" },
     };
-    await Settings.updateOne({ key: "main" }, { $set: { "ai.enabled": next.enabled, "ai.monthlyTokens": next.monthlyTokens, "ai.warnPct": next.warnPct, "ai.features": next.features, "ai.anomaly": next.anomaly } });
+    await Settings.updateOne({ key: "main" }, { $set: { "ai.enabled": next.enabled, "ai.monthlyTokens": next.monthlyTokens, "ai.warnPct": next.warnPct, "ai.features": next.features, "ai.anomaly": next.anomaly, "ai.weather": next.weather } });
     await audit(adminActor(owner), "ai.settings", { type: "Settings", id: "ai" }, { enabled: before.enabled, monthlyTokens: before.monthlyTokens }, next);
     revalidatePath("/admin/settings/ai");
     return { ok: true };
@@ -122,7 +123,7 @@ export type ForecastView = {
   templates: { id: string; name: string; startTime: string; current: number }[];
   cells: { date: string; tplId: string; suggest: number; current: number; rev: number | null; samples: number }[];
   holidayNames: Record<string, string>;
-  /** thời tiết từng ngày (Open-Meteo); warn = cảnh báo mưa > 60% / lạnh < 22°C → nên giảm ca */
+  /** thời tiết từng ngày (Open-Meteo); warn = cảnh báo mưa > 60% / lạnh (TB ngày < 22°C) → nên giảm ca */
   weather: Record<string, { icon: string; tMin: number; tMax: number; rainPct: number; warn: string }>;
   /** ảnh hưởng thời tiết học từ dữ liệu quán, VD "ngày mưa −28% (9 ngày) · lạnh −15% (4 ngày)" */
   impact: string;
@@ -135,7 +136,7 @@ export async function getForecast(storeId: string, weekStart: string): Promise<{
   try {
     const admin = await assertAdmin();
     if (!Types.ObjectId.isValid(String(storeId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(weekStart))) return { error: "Tham số không hợp lệ" };
-    const f = await loadForecast(String(storeId), String(weekStart));
+    const f = await loadForecast(String(storeId), String(weekStart), { weather: (await getAiConfig()).weather.schedule });
     if (!f.templates.length) return { error: "Cơ sở chưa có ca mẫu" };
     const owner = admin.kind === "OWNER";
     const name = (id: string) => f.templates.find((t) => t.id === id)?.name ?? "?";
@@ -147,9 +148,9 @@ export async function getForecast(storeId: string, weekStart: string): Promise<{
         actor: `admin:${admin.accountId ?? "owner"}`,
         temperature: 0.2,
         timeoutMs: 40_000,
-        prompt: `Bạn là trợ lý xếp ca của quán trà sữa Tiệm Bơ Sầu. Hệ thống đã dự báo doanh thu từng ca tuần ${weekStart} (theo trung vị cùng thứ 6 tuần gần nhất, ngày lễ nhân hệ số ${f.holidayFactor.toFixed(1)}) và gợi ý số người = doanh thu dự báo / doanh thu mỗi người của ca.
+        prompt: `Bạn là trợ lý xếp ca của quán trà sữa Tiệm Bơ Sầu. Hệ thống đã dự báo doanh thu từng ca tuần ${weekStart} (theo trung vị cùng thứ ${HISTORY_WEEKS} tuần gần nhất, ngày lễ nhân hệ số ${f.holidayFactor.toFixed(1)}) và gợi ý số người = doanh thu dự báo / doanh thu mỗi người của ca.
 Viết 2–3 câu tiếng Việt cho admin giải thích VÌ SAO gợi ý tăng / giảm người ở đâu (so với định mức hiện tại "current"). CHỈ dựa vào dữ liệu, không bịa con số mới${owner ? "" : ", KHÔNG nêu số tiền doanh thu"}.
-Quán bán KEM, CHÈ: ngày mưa > 60% hoặc lạnh (cao nhất < 22°C) vắng khách. Từ dữ liệu quán: ${impactText(f.impact)}. Hệ thống đã giảm doanh thu dự báo những ngày đó theo mức này; nhắc rõ ngày nào nên giảm ca vì thời tiết.
+Quán bán KEM, CHÈ: ngày mưa > 60% hoặc lạnh (nhiệt độ trung bình ngày < 22°C) vắng khách. Từ dữ liệu quán: ${impactText(f.impact)}. Hệ thống đã giảm doanh thu dự báo những ngày đó theo mức này; nhắc rõ ngày nào nên giảm ca vì thời tiết.
 ${JSON.stringify({ holidays: f.holidayNames, weather: weatherWarn, cells: f.cells.filter((c) => c.suggest !== c.current).slice(0, 30).map((c) => ({ date: c.date, shift: name(c.tplId), suggest: c.suggest, current: c.current, revenue: owner ? c.rev : undefined, samples: c.samples })) })}`,
       });
       const s = String(t ?? "").trim();

@@ -73,7 +73,12 @@ export type AiConfig = {
   /** nội quy tóm tắt (AI tóm tắt từ assistant.rules, admin sửa được) – hiện ở nút "Nội quy" */
   rulesSummary: string;
   anomaly: AnomalyCfg;
+  /** Dự báo thời tiết (Open-Meteo, không tốn token): bật / tắt từng chỗ hiển thị */
+  weather: WeatherCfg;
 };
+/** overview = cảnh báo giảm ca trên Tổng quan · schedule = trang Xếp ca (dải thời tiết + gợi ý số người theo thời tiết) · workSchedule = Lịch làm việc */
+export type WeatherCfg = { overview: boolean; schedule: boolean; workSchedule: boolean };
+export const DEFAULT_WEATHER: WeatherCfg = { overview: true, schedule: true, workSchedule: true };
 
 export const DEFAULT_ASSISTANT: AssistantContent = {
   rules: RULES_TEMPLATE, // mẫu 10 điều – admin sửa lại
@@ -112,6 +117,7 @@ export function mergeAiConfig(raw: unknown): AiConfig {
     },
     rulesSummary: typeof r.rulesSummary === "string" ? r.rulesSummary : "",
     anomaly: { ...DEFAULT_ANOMALY, ...(r.anomaly ?? {}) },
+    weather: { ...DEFAULT_WEATHER, ...(r.weather ?? {}) },
   };
 }
 

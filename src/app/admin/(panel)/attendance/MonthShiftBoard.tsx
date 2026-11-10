@@ -4,6 +4,7 @@ import { ROW_COLORS } from "@/components/WeekGrid";
 import type { BoardChip, BoardTpl } from "@/lib/attendance-board";
 import { weekdayVi } from "@/lib/time";
 import ScrollToToday from "./ScrollToToday";
+import type { WeatherBadge } from "@/lib/weather";
 
 const WD_SHORT: Record<string, string> = { "Thứ 2": "T2", "Thứ 3": "T3", "Thứ 4": "T4", "Thứ 5": "T5", "Thứ 6": "T6", "Thứ 7": "T7", "Chủ Nhật": "CN" };
 
@@ -21,6 +22,7 @@ export default function MonthShiftBoard({
   linkable = true,
   holidays = {},
   meId,
+  weather,
 }: {
   month: string;
   days: string[];
@@ -39,6 +41,8 @@ export default function MonthShiftBoard({
   holidays?: Record<string, { name: string; multiplier: number }>;
   /** xem lịch cả cửa hàng: tô nổi tên của người đang xem */
   meId?: string;
+  /** dự báo thời tiết từng ngày (Cài đặt → AI → thời tiết → Lịch làm việc); warn = nên giảm ca */
+  weather?: Record<string, WeatherBadge>;
 }) {
   const border = "1px solid #9fb3cf";
   return (
@@ -62,18 +66,24 @@ export default function MonthShiftBoard({
               <th className="sticky left-0 z-20" style={{ width: 92, minWidth: 92, background: "#a9c4ea", border, padding: "6px 4px" }}>Ca</th>
               {days.map((d) => {
                 const h = holidays[d];
+                const w = weather?.[d];
                 return (
                   <th
                     key={d}
                     data-today={d === today ? "1" : undefined}
-                    title={h ? `Ngày lễ: ${h.name} – đi làm được ×${h.multiplier} lương` : undefined}
-                    style={{ width: 118, minWidth: 118, background: d === today ? "#fccc18" : h ? "#fecaca" : "#a9c4ea", border, padding: "4px 2px" }}
+                    title={[h ? `Ngày lễ: ${h.name} – đi làm được ×${h.multiplier} lương` : "", w?.warn ? `⚠ ${w.warn}` : ""].filter(Boolean).join(" · ") || undefined}
+                    style={{ width: 118, minWidth: 118, background: d === today ? "#fccc18" : h ? "#fecaca" : w?.warn ? "#fde4cf" : "#a9c4ea", border, padding: "4px 2px" }}
                   >
                     <div style={{ fontWeight: 700 }}>{WD_SHORT[weekdayVi(d)] ?? weekdayVi(d)}</div>
                     <div style={{ fontSize: 11, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
                     {h && (
                       <div className="truncate text-danger" style={{ fontSize: 10, fontWeight: 700 }}>
                         🎉 {h.name} ×{h.multiplier}
+                      </div>
+                    )}
+                    {w && (
+                      <div style={{ fontSize: 10, fontWeight: w.warn ? 700 : 400, color: w.warn ? "#b45309" : undefined }}>
+                        {w.icon} {w.tMin}–{w.tMax}° ☔{w.rainPct}%{w.warn ? " ⚠" : ""}
                       </div>
                     )}
                   </th>
