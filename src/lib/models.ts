@@ -65,6 +65,7 @@ const StoreSchema = new Schema(
     timezone: { type: String, default: "Asia/Ho_Chi_Minh" },
     driveFolderId: { type: String, default: "" },
     telegramChatId: { type: String, default: "" }, // nhóm Telegram nhận ảnh chốt ca (trống → dùng TELEGRAM_CHAT_ID)
+    telegramGoodsChatId: { type: String, default: "" }, // nhóm nhận hàng / tồn kho (trống → TELEGRAM_GOODS_CHAT_ID → nhóm chốt ca)
     telegramAttendanceChatId: { type: String, default: "" }, // nhóm chấm công: báo check-in/out (trống → TELEGRAM_ATTENDANCE_CHAT_ID)
     // Google Sheet doanh thu (template: Ngày | DT | Tài khoản | Tiền mặt | CP trong két | Shopee | Chênh lệch | DT thực tế | Ghi chú)
     revenueSheetId: { type: String, default: "" },
@@ -723,14 +724,16 @@ const AdminAccountSchema = new Schema(
 export type AdminAccountDoc = InferSchemaType<typeof AdminAccountSchema> & { _id: Types.ObjectId };
 export const AdminAccount = getModel("AdminAccount", AdminAccountSchema);
 
-/* ---------- Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (không đổi doanh thu) ---------- */
+/* ---------- Sổ quỹ: rút lãi / bổ sung vốn / chuyển giữa tiền mặt và tài khoản (xem lib/cashbook) ---------- */
 const CashTransferSchema = new Schema(
   {
-    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" }, // trống = chung cả chuỗi
     date: { type: String, required: true }, // YYYY-MM-DD
     month: { type: String, required: true, index: true },
     // DEPOSIT = nộp tiền mặt vào tài khoản (TM ↓, TK ↑) · WITHDRAW = rút tài khoản ra tiền mặt (TK ↓, TM ↑)
-    kind: { type: String, enum: ["DEPOSIT", "WITHDRAW"], required: true },
+    // TAKE = rút ra (rút lãi) · ADD = bổ sung vốn – theo account TK / TM
+    kind: { type: String, enum: ["DEPOSIT", "WITHDRAW", "TAKE", "ADD"], required: true },
+    account: { type: String, enum: ["TK", "TM"] },
     amount: { type: Number, required: true, min: 1 },
     note: String,
     createdBy: String,

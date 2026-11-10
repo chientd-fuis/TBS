@@ -11,7 +11,7 @@
     "seed": "tsx scripts/seed.ts",
     "set-admin-password": "tsx scripts/set-admin-password.ts",
     "check-gemini": "node scripts/check-gemini.mjs",
-    "test": "tsx --test tests/calc.test.ts tests/schedule.test.ts tests/telegram.test.ts tests/revenue.test.ts tests/sheets-key.test.ts tests/attendance-board.test.ts tests/finance.test.ts tests/cleanup.test.ts tests/attendance-import.test.ts tests/activity.test.ts tests/checkin-methods.test.ts tests/gemini-keys.test.ts tests/permissions.test.ts tests/anomaly.test.ts tests/ai.test.ts tests/forecast.test.ts tests/rules-format.test.ts tests/calc-expr.test.ts tests/ask-pick.test.ts tests/goods.test.ts tests/live-badges.test.ts tests/weather.test.ts"
+    "test": "tsx --test tests/calc.test.ts tests/schedule.test.ts tests/telegram.test.ts tests/revenue.test.ts tests/sheets-key.test.ts tests/attendance-board.test.ts tests/finance.test.ts tests/cleanup.test.ts tests/attendance-import.test.ts tests/activity.test.ts tests/checkin-methods.test.ts tests/gemini-keys.test.ts tests/permissions.test.ts tests/anomaly.test.ts tests/ai.test.ts tests/forecast.test.ts tests/rules-format.test.ts tests/calc-expr.test.ts tests/ask-pick.test.ts tests/goods.test.ts tests/cashbook.test.ts tests/live-badges.test.ts tests/weather.test.ts"
   },
   "dependencies": {
     "@googleapis/drive": "27.0.0",

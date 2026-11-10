@@ -17,9 +17,9 @@ export const APP_GUIDE = {
   closing:
     "Mỗi ca Sáng / Chiều / Tối đều phải chụp ảnh tờ chốt ca: trang chủ → nút “📷 Chốt ca” → chọn ca → chụp ảnh tờ chốt ca (AI tự điền số) → kiểm tra lại Tiền mặt / Tài khoản / Grab / Shopee / Chi phí két → bấm “Chốt ca & gửi nhóm”. Không chụp ảnh tờ chốt ca → ghi nhận 1 lỗi phạt.",
   goods:
-    "Nhận hàng: trang chủ → nút “📦 Nhận hàng” (ngay dưới Chốt ca) → chụp / chọn ảnh tin nhắn đã nhận hàng trong nhóm Facebook (bấm “Ảnh nhóm chat”), HOẶC copy nội dung tin đã nhận rồi dán vào ô gõ (VD “nhận 5mn, 2nl, 3 bột na”) → app tự đọc ra từng món + số lượng → kiểm tra, sửa số bằng nút − / +, thêm món còn thiếu ở “+ Thêm món” → bấm “Lưu nhận hàng”. Ngày luôn là hôm nay, app tự báo vào nhóm Telegram của cơ sở. App hiểu viết tắt: mn = Mini (hộp bánh mini), nl = Ngàn lớp, bột na = Bột năng, số dính liền chữ (5mn) cũng hiểu. Món không có trong danh sách → báo admin thêm vào danh mục. Ghi nhầm → xoá ở danh sách bên dưới trong 24 giờ rồi ghi lại.",
+    "Nhận hàng: trang chủ → nút “📦 Nhận hàng” (ngay dưới Chốt ca) → chụp / chọn ảnh tin nhắn đã nhận hàng trong nhóm Facebook (bấm “Chụp ảnh / phiếu”), HOẶC chụp tờ PHIẾU KIỂM KÊ NGUYÊN LIỆU (app lấy cột Nhập), HOẶC copy nội dung tin đã nhận rồi dán vào ô gõ (VD “nhận 5mn, 2nl, 3 bột na”) → app tự đọc ra từng món + số lượng → kiểm tra, sửa số bằng nút − / +, thêm món còn thiếu ở “+ Thêm món” → bấm “Lưu nhận hàng”. Ngày luôn là hôm nay, app tự báo vào nhóm Telegram của cơ sở. App hiểu viết tắt: mn = Mini (hộp bánh mini), nl = Ngàn lớp, bột na = Bột năng, số dính liền chữ (5mn) cũng hiểu. Món không có trong danh sách → báo admin thêm vào danh mục. Ghi nhầm → xoá ở danh sách bên dưới trong 24 giờ rồi ghi lại.",
   stock:
-    "Tồn kho: cuối ngày trang chủ → nút “📋 Tồn kho” → gõ số còn (VD “tồn 3mn, 1nl, hết sầu múi” – “hết” = còn 0) hoặc chụp tin báo tồn trong nhóm → kiểm tra → “Lưu tồn kho”.",
+    "Tồn kho: cuối ngày trang chủ → nút “📋 Tồn kho” → gõ số còn (VD “tồn 3mn, 1nl, hết sầu múi” – “hết” = còn 0) hoặc chụp tin báo tồn trong nhóm, hoặc chụp tờ PHIẾU KIỂM KÊ NGUYÊN LIỆU (app lấy cột Tồn, tự đổi g → kg) → kiểm tra → “Lưu tồn kho”.",
 };
 
 /** Quản lý từng cơ sở: nhân viên được cấp quyền quản lý (cơ sở gốc + cơ sở giao thêm) + admin (mọi cơ sở). */

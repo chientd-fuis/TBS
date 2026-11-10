@@ -3,12 +3,12 @@ import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { cleanInputs, getGoodsCatalog, GOODS_OFF, goodsEnabled, notifyGoods, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
+import { cleanInputs, cleanPhotos, getGoodsCatalog, GOODS_OFF, goodsEnabled, notifyGoodsSaved, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
 
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Nhân viên ghi đồ đã nhận ở cơ sở đang làm (ca hỗ trợ → cơ sở hỗ trợ) → báo nhóm Telegram cơ sở. */
-export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "STOCK" }): Promise<GoodsSaveResult> {
+export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "STOCK"; photos?: string[] }): Promise<GoodsSaveResult> {
   try {
     const user = await requireActiveUser();
     if (!(await goodsEnabled())) return { error: GOODS_OFF };
@@ -19,12 +19,12 @@ export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boo
     // nhân viên: ngày nhận luôn là hôm nay, luôn báo nhóm Telegram cơ sở
     const drafts = (Array.isArray(input?.drafts) ? input.drafts : []).map((d) => ({ ...d, date: ctx.today }));
     const rows = cleanInputs(drafts, await getGoodsCatalog(), { min: ctx.today, max: ctx.today }, kind);
-    const ids: string[] = [];
+    const saved: { id: string; source: string }[] = [];
     for (const d of rows) {
       const doc = await GoodsReceipt.create({ ...d, kind, storeId: ctx.store._id, month: d.date.slice(0, 7), byUserId: user._id, byName: user.name || user.email, telegram: { status: "PENDING" } });
-      ids.push(String(doc._id));
+      saved.push({ id: String(doc._id), source: d.source });
     }
-    for (const id of ids) await notifyGoods(id);
+    await notifyGoodsSaved(saved, cleanPhotos(input?.photos));
     revalidatePath(kind === "STOCK" ? "/stock" : "/receive");
     const what = kind === "STOCK" ? "tồn kho" : "nhận hàng";
     return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what} và báo nhóm ✔` };

@@ -48,7 +48,12 @@ test("cleanLines chỉ nhận món trong danh mục + số hợp lệ", () => {
 test("chữ nhận + tin Telegram", () => {
   assert.ok(hasReceiveWord("Nhạn 5mn") && hasReceiveWord("đã nhân 2 nl") && !hasReceiveWord("hết mini rồi"));
   const m = goodsMessage({ store: "TBS Cầu Giấy", date: "2026-11-10", by: "Lan", lines: [{ name: "Mini", qty: 5, unit: "hộp" }] });
-  assert.equal(m, "📦 NHẬN HÀNG · TBS Cầu Giấy · 10/11/2026\n👤 Lan\n• Mini: 5 hộp");
+  assert.equal(m, "📦 NHẬN HÀNG · TBS Cầu Giấy · 10/11 (Thứ 3)\n👤 Lan\n• Mini: 5 hộp");
+  // có nội dung gốc → chỉ gửi nội dung gốc
+  const g = goodsMessage({ store: "TBS Cầu Giấy", date: "2026-11-15", by: "Lan", raw: "em nhận 5,8kg mít", lines: [{ name: "Mít", qty: 5.8, unit: "kg" }] });
+  assert.equal(g, "📦 NHẬN HÀNG · TBS Cầu Giấy · 15/11 (CN)\n👤 Lan\nem nhận 5,8kg mít");
+  // admin sửa số → gửi danh sách món đã sửa
+  assert.match(goodsMessage({ store: "A", date: "2026-11-10", by: "Lan", raw: "nhận 5mn", edited: true, lines: [{ name: "Mini", qty: 4, unit: "hộp" }] }), /SỬA NHẬN HÀNG[\s\S]*• Mini: 4 hộp$/);
 });
 
 test("giá theo ngày áp dụng: từ 15/11 tăng 20k, trước đó 19k", () => {
@@ -77,7 +82,7 @@ test("tiêu thụ tháng: theo nhập (chưa kiểm kho) và theo tồn kho", ()
 });
 
 test("báo tồn kho: tồn 3mn, hết sầu múi → 0", () => {
-  assert.deepEqual(read("tồn 3mn, 1nl, hết sầu múi, kem dâu hết"), ["Mini: 3 hộp", "Ngàn lớp: 1 bánh", "Sầu múi: 0", "Kem dâu: 0"]);
+  assert.deepEqual(read("tồn 3mn, 1nl, hết sầu múi, kem dâu hết"), ["Mini: 3 hộp", "Ngàn lớp: 1 bánh", "Sầu múi: hết", "Kem dâu: hết"]);
   assert.deepEqual(cleanLines([{ name: "Mini", qty: 0 }], DEFAULT_GOODS), []);
   assert.deepEqual(cleanLines([{ name: "Mini", qty: 0 }], DEFAULT_GOODS, true), [{ name: "Mini", qty: 0, unit: "hộp" }]);
 });

@@ -78,7 +78,7 @@ export default async function HomePage() {
         >
           <span>
             <span className="block font-bold text-accent">📋 Tồn kho</span>
-            <span className="text-xs text-ink/70">Cuối ngày báo số còn: “tồn 3mn, 1nl, hết sầu múi…”</span>
+            <span className="text-xs text-ink/70">Cuối ngày chụp phiếu kiểm kê nguyên liệu hoặc gõ số còn: “tồn 3mn, 1nl, hết sầu múi…”</span>
           </span>
           <span className="text-xl text-accent">›</span>
         </Link>

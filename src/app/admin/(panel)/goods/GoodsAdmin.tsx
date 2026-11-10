@@ -5,10 +5,11 @@ import { can } from "@/lib/permissions";
 import { connectDB } from "@/lib/db";
 import { GoodsReceipt, Store } from "@/lib/models";
 import { getGoodsCatalog, GOODS_OFF, goodsEnabled, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
-import { lineVi, qtyVi, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { dayVi, qtyVi, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { GoodsEntry } from "@/components/GoodsEntry";
 import { geminiConfigured } from "@/lib/ocr";
 import { aiAllowed } from "@/lib/ai";
-import { isYmd, localDate, localMonth, localTime, viDate, weekdayVi } from "@/lib/time";
+import { isYmd, localDate, localMonth, localTime, viDate } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
@@ -21,7 +22,7 @@ import { deleteGoods, saveGoodsAdmin } from "../../actions/goods";
 export type GoodsSearch = { month?: string; store?: string; date?: string; edit?: string };
 
 const TG = { SENT: ["TG: đã báo", "green"], FAILED: ["TG: lỗi", "red"], PENDING: ["TG: đang gửi", "yellow"], DISABLED: ["TG: chưa cấu hình", "gray"], SKIPPED: ["TG: không báo", "gray"] } as const;
-const SRC = { PHOTO: "Ảnh nhóm chat", TEXT: "Gõ tin", MANUAL: "Chọn tay" } as const;
+const SRC = { PHOTO: "Ảnh (nhóm chat / phiếu)", TEXT: "Gõ tin", MANUAL: "Chọn tay" } as const;
 
 /** Nhận hàng / tồn kho các cơ sở theo ngày: nhập (gõ / ảnh nhóm chat), tổng hợp, danh sách. */
 export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: GoodsSearch }) {
@@ -84,25 +85,11 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
               {stock && goodsOn ? STOCK_OFF : GOODS_OFF} (mặc định {stock ? "tắt" : "bật"}). Nhân viên không thấy nút {stock ? "Tồn kho" : "Nhận hàng"}, không nhập mới được; dữ liệu cũ vẫn xem ở đây.{" "}
               {admin.kind === "OWNER" && <Link href="/admin/settings" className="underline">Bật ở Cài đặt →</Link>}
             </Alert>
-          ) : edit ? (
-            <Card title={stock ? "Sửa lần kiểm kho" : "Sửa lần nhận"} actions={<Link href={base} className="text-sm text-accent underline">Huỷ sửa</Link>}>
-              <GoodsForm
-                key={String(edit._id)}
-                mode="admin"
-                kind={kind}
-                catalog={catalog}
-                today={today}
-                ocrEnabled={false}
-                stores={stores}
-                initial={{ id: String(edit._id), storeId: String(edit.storeId), date: edit.date, lines: (edit.items ?? []) as GoodsLine[], note: edit.note ?? "" }}
-                save={saveGoodsAdmin}
-              />
-            </Card>
           ) : (
             <Card title={stock ? "Nhập tồn kho" : "Nhập nhận hàng"}>
               <GoodsForm mode="admin" kind={kind} catalog={catalog} today={today} ocrEnabled={ocr} stores={stores} storeId={store || (stores.length === 1 ? stores[0].id : "")} save={saveGoodsAdmin} />
               <p className="mt-2 text-xs text-ink/60">
-                Ảnh nhóm chat: chụp màn hình đoạn nhân viên báo “{stock ? "tồn" : "nhận"} …” (tối đa 4 ảnh) → AI tách từng tin, ngày, người báo. Tin trùng với lần đã ghi sẽ được đánh dấu ⚠.
+                Ảnh: chụp màn hình đoạn nhân viên báo “{stock ? "tồn" : "nhận"} …” trong nhóm chat, hoặc chụp <b>phiếu kiểm kê nguyên liệu</b> (AI lấy cột {stock ? "Tồn" : "Nhập"}) – tối đa 4 ảnh → AI tách từng tin / phiếu, ngày, người báo. Tin trùng với lần đã ghi sẽ được đánh dấu ⚠.
               </p>
             </Card>
           )}
@@ -133,7 +120,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
             </div>
           </Card>
 
-          <Card title={`${stock ? "Tồn mới nhất" : "Tổng nhận"} ${date ? `ngày ${viDate(date)}` : `tháng ${month.slice(5)}/${month.slice(0, 4)}`}`}>
+          <Card title={`${stock ? "Tồn mới nhất" : "Tổng nhận"} ${date ? `ngày ${dayVi(date)}` : `tháng ${month.slice(5)}/${month.slice(0, 4)}`}`}>
             {!rows.length ? (
               <Empty>Chưa có lần {what} nào.</Empty>
             ) : (
@@ -160,7 +147,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
             )}
           </Card>
 
-          <Card title={`Các lần ${what} (${list.length})`}>
+          <Card title={`${stock ? "Các lần báo tồn" : `Các lần ${what}`} (${list.length})`}>
             {!list.length ? (
               <Empty>Chưa có.</Empty>
             ) : (
@@ -168,7 +155,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                 {days.map((d) => (
                   <div key={d}>
                     <Link href={`${path}?date=${d}${store ? `&store=${store}` : ""}`} className="text-sm font-bold text-accent hover:underline">
-                      {weekdayVi(d)} · {viDate(d)}
+                      {dayVi(d)}
                     </Link>
                     <ul className="mt-1 divide-y divide-[#f1e6c8]">
                       {list
@@ -182,9 +169,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                                   <b className="text-ink">{storeName.get(String(r.storeId)) ?? "?"}</b> · {r.byName}
                                   {r.sender && r.sender !== r.byName ? ` (báo: ${r.sender})` : ""} · {r.createdAt ? localTime(new Date(r.createdAt)).slice(0, 5) : ""}
                                 </p>
-                                <p className="mt-0.5">{((r.items ?? []) as GoodsLine[]).map(lineVi).join(" · ")}</p>
-                                {r.note && <p className="text-xs text-ink/70">📝 {r.note}</p>}
-                                {r.raw && <p className="truncate text-xs italic text-ink/50" title={r.raw}>“{r.raw}”</p>}
+                                <GoodsEntry raw={r.raw} sender={r.sender && r.sender !== r.byName ? r.sender : null} items={(r.items ?? []) as GoodsLine[]} note={r.note} />
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   <Badge tone={r.byAdmin ? "yellow" : "blue"}>{r.byAdmin ? "Admin nhập" : "Nhân viên"}</Badge>
                                   <Badge tone="gray">{SRC[(r.source ?? "TEXT") as keyof typeof SRC]}</Badge>
@@ -192,7 +177,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
-                                <Link href={`${base}${date ? `&date=${date}` : ""}&edit=${r._id}`} className="text-xs text-accent underline">Sửa</Link>
+                                <Link href={`${base}${date ? `&date=${date}` : ""}&edit=${r._id}`} scroll={false} className="text-xs text-accent underline">Sửa</Link>
                                 <ActionForm action={deleteGoods} submitLabel="Xoá" variant="ghost" successText="" className="flex" confirm={`Xoá lần ${what} ngày ${viDate(r.date)} của ${storeName.get(String(r.storeId)) ?? "?"}?`}>
                                   <input type="hidden" name="id" value={String(r._id)} />
                                 </ActionForm>
@@ -208,6 +193,40 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
           </Card>
         </div>
       </div>
+      {on && edit && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+          <Link href={`${base}${date ? `&date=${date}` : ""}`} scroll={false} aria-label="Đóng" className="absolute inset-0" />
+          <div className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:rounded-3xl">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="font-bold text-accent">
+                {stock ? "Sửa lần kiểm kho" : "Sửa lần nhận"} · {dayVi(edit.date)}
+              </p>
+              <Link href={`${base}${date ? `&date=${date}` : ""}`} scroll={false} className="text-sm text-accent underline">Đóng</Link>
+            </div>
+            <GoodsForm
+              key={String(edit._id)}
+              mode="admin"
+              kind={kind}
+              catalog={catalog}
+              today={today}
+              ocrEnabled={false}
+              stores={stores}
+              initial={{
+                id: String(edit._id),
+                storeId: String(edit.storeId),
+                date: edit.date,
+                lines: (edit.items ?? []) as GoodsLine[],
+                note: edit.note ?? "",
+                raw: edit.raw ?? "",
+                sender: edit.sender ?? "",
+                source: edit.source ?? "TEXT",
+              }}
+              save={saveGoodsAdmin}
+              doneHref={`${base}${date ? `&date=${date}` : ""}`}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

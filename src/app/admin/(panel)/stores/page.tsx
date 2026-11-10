@@ -41,6 +41,12 @@ export default async function StoresPage() {
                   <input type="hidden" name="kind" value="attendance" />
                 </ActionForm>
               )}
+              {(s.telegramGoodsChatId || process.env.TELEGRAM_GOODS_CHAT_ID) && (
+                <ActionForm action={testTelegram} submitLabel="📨 Gửi thử nhóm nhận hàng" variant="outline" successText="Đã gửi tin nhắn thử vào nhóm nhận hàng" className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="storeId" value={String(s._id)} />
+                  <input type="hidden" name="kind" value="goods" />
+                </ActionForm>
+              )}
               {s.revenueSheetId && (
                 <ActionForm action={testRevenueSheet} submitLabel="📊 Kiểm tra Google Sheet" variant="outline" successText="Ghi được Google Sheet, có tab tháng này" className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="storeId" value={String(s._id)} />
@@ -59,6 +65,7 @@ export default async function StoresPage() {
                 timezone: s.timezone || "Asia/Ho_Chi_Minh",
                 telegramChatId: s.telegramChatId || "",
                 telegramAttendanceChatId: s.telegramAttendanceChatId || "",
+                telegramGoodsChatId: s.telegramGoodsChatId || "",
                 revenueSheetId: s.revenueSheetId || "",
                 revenueTabPattern: s.revenueTabPattern || "T{m}",
                 revenueFirstRow: s.revenueFirstRow || 3,

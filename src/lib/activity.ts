@@ -84,7 +84,7 @@ const A: Record<string, [ActivityGroup, string]> = {
   "user.staffPerms": ["people", "Cấp quyền quản lý cho nhân viên"],
   "user.createOffline": ["people", "Thêm nhân viên không có tài khoản"],
   "user.transfer": ["people", "Chuyển tài khoản Gmail nhân viên"],
-  "cash.transfer.create": ["revenue", "Ghi sổ quỹ TM / TK"],
+  "cash.transfer.create": ["revenue", "Ghi phiếu sổ quỹ (rút lãi / bổ sung vốn / nộp – rút TM, TK)"],
   "cash.transfer.delete": ["revenue", "Xoá phiếu sổ quỹ"],
   "holiday.create": ["payroll", "Thêm ngày lễ"],
   "holiday.update": ["payroll", "Sửa ngày lễ"],

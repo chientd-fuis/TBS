@@ -1,4 +1,5 @@
 "use server";
+import { goodsChatId } from "@/lib/goods-server";
 import { revalidatePath } from "next/cache";
 import { Store } from "@/lib/models";
 import { assertAdmin, assertOwner, assertPerm } from "@/lib/guards";
@@ -27,11 +28,15 @@ export async function testTelegram(_: FormState, fd: FormData): Promise<FormStat
   try {
     await assertPerm("stores");
     const store = await Store.findById(str(fd.get("storeId"))).lean();
-    const attendance = str(fd.get("kind")) === "attendance";
-    const chatId = attendance
-      ? store?.telegramAttendanceChatId || process.env.TELEGRAM_ATTENDANCE_CHAT_ID || ""
-      : str(fd.get("chatId")) || store?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "";
-    await sendTelegramText(chatId, `✅ Tiệm Bơ Sầu – kết nối nhóm ${attendance ? "chấm công" : "chốt ca"} cho ${store?.name ?? "cơ sở"} thành công.`);
+    const kind = str(fd.get("kind"));
+    const chatId =
+      kind === "attendance"
+        ? store?.telegramAttendanceChatId || process.env.TELEGRAM_ATTENDANCE_CHAT_ID || ""
+        : kind === "goods"
+          ? goodsChatId(store)
+          : str(fd.get("chatId")) || store?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "";
+    const what = kind === "attendance" ? "chấm công" : kind === "goods" ? "nhận hàng" : "chốt ca";
+    await sendTelegramText(chatId, `✅ Tiệm Bơ Sầu – kết nối nhóm ${what} cho ${store?.name ?? "cơ sở"} thành công.`);
     return { ok: true };
   } catch (e) {
     return errMsg(e);

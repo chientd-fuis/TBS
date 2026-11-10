@@ -6,7 +6,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
 import { GoodsItemModel, GoodsReceipt, Store } from "@/lib/models";
-import { cleanInputs, getGoodsCatalog, getGoodsItems, GOODS_OFF, goodsEnabled, notifyGoods, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
+import { cleanInputs, getGoodsCatalog, getGoodsItems, GOODS_OFF, goodsEnabled, notifyGoods, notifyGoodsSaved, cleanPhotos, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
 import { foldGoods } from "@/lib/goods";
 import { isYmd, localDate } from "@/lib/time";
 import { errMsg, str, type FormState } from "./types";
@@ -14,7 +14,7 @@ import { errMsg, str, type FormState } from "./types";
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Admin nhập / sửa nhận hàng cho 1 cơ sở → (tuỳ chọn) báo nhóm Telegram cơ sở. id có → sửa bản ghi đó. */
-export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "STOCK" }): Promise<GoodsSaveResult> {
+export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "STOCK"; photos?: string[] }): Promise<GoodsSaveResult> {
   try {
     const admin = await assertPerm("goods");
     await connectDB();
@@ -35,13 +35,13 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
       revalidateGoods();
       return { ok: true, message: "Đã sửa ✔" };
     }
-    const ids: string[] = [];
+    const saved: { id: string; source: string }[] = [];
     for (const d of rows) {
       const doc = await GoodsReceipt.create({ ...d, kind, storeId: input.storeId, month: d.date.slice(0, 7), byName, byAdmin: true, telegram: tg });
-      ids.push(String(doc._id));
+      saved.push({ id: String(doc._id), source: d.source });
     }
-    await audit(adminActor(admin), "goods.create", { type: "GoodsReceipt", id: ids.join(",") }, null, rows);
-    if (input.telegram) for (const id of ids) await notifyGoods(id);
+    await audit(adminActor(admin), "goods.create", { type: "GoodsReceipt", id: saved.map((x) => x.id).join(",") }, null, rows);
+    if (input.telegram) await notifyGoodsSaved(saved, cleanPhotos(input.photos));
     revalidateGoods();
     const what = kind === "STOCK" ? "tồn kho" : "nhận hàng";
     return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what}${input.telegram ? " và báo nhóm cơ sở" : ""} ✔` };

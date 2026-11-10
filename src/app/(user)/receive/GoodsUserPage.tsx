@@ -3,10 +3,11 @@ import { requireActiveUser } from "@/lib/guards";
 import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { getGoodsCatalog, GOODS_OFF, goodsEnabled, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
-import { lineVi, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { dayVi, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { GoodsEntry } from "@/components/GoodsEntry";
 import { geminiConfigured } from "@/lib/ocr";
 import { aiAllowed } from "@/lib/ai";
-import { addDays, localTime, viDate } from "@/lib/time";
+import { addDays, localTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card } from "@/components/ui";
 import GoodsForm from "@/components/GoodsForm";
@@ -46,7 +47,8 @@ export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
               return (
                 <li key={String(r._id)} className="py-2">
                   <div className="flex flex-wrap items-center gap-x-2 text-xs text-ink/60">
-                    <span>{viDate(r.date).slice(0, 5)} {r.createdAt ? localTime(new Date(r.createdAt), tz).slice(0, 5) : ""}</span>
+                    <span className="font-semibold text-ink/80">{dayVi(r.date)}</span>
+                    <span>{r.createdAt ? localTime(new Date(r.createdAt), tz).slice(0, 5) : ""}</span>
                     <span>· {r.byName}</span>
                     <Badge tone={tg[1]}>{tg[0]}</Badge>
                     {mine && (
@@ -57,8 +59,7 @@ export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5">{((r.items ?? []) as GoodsLine[]).map(lineVi).join(" · ")}</p>
-                  {r.note && <p className="text-xs text-ink/60">📝 {r.note}</p>}
+                  <GoodsEntry raw={r.raw} sender={r.sender && r.sender !== r.byName ? r.sender : null} items={(r.items ?? []) as GoodsLine[]} note={r.note} />
                 </li>
               );
             })}

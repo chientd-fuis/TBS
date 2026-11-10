@@ -42,7 +42,7 @@ export const NAV: NavGroup[] = [
     ],
   },
   { label: "Yêu cầu", icon: Inbox, links: [{ href: "/admin/requests", label: "Yêu cầu", badge: "requests" }] },
-  { label: "Tài chính", icon: PiggyBank, links: [{ href: "/admin/finance", label: "Tài chính", perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.settings"] }] },
+  { label: "Tài chính", icon: PiggyBank, links: [{ href: "/admin/finance", label: "Tài chính", perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.revenue", "finance.cashbook", "finance.settings"] }] },
   { label: "Chốt ca", icon: Receipt, links: [{ href: "/admin/closings", label: "Chốt ca" }] },
   {
     // các trang này đã có thanh tab riêng (GoodsTabs – kèm trạng thái Tồn kho tắt / bật)

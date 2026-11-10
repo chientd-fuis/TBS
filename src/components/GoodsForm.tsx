@@ -8,7 +8,7 @@ import { mergeLines, parseGoodsText, qtyVi, type GoodsItem, type GoodsLine } fro
 import type { GoodsInput } from "@/lib/goods-server";
 
 type Draft = { key: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; time?: string; source: "TEXT" | "PHOTO" | "MANUAL"; dup?: string; unknown?: string[] };
-type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: "RECEIVE" | "STOCK" };
+type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: "RECEIVE" | "STOCK"; photos?: string[] };
 type Result = { ok?: boolean; error?: string; message?: string };
 
 let seq = 0;
@@ -79,6 +79,7 @@ export default function GoodsForm({
   storeName,
   initial,
   save,
+  doneHref,
 }: {
   mode: "user" | "admin";
   /** RECEIVE = nhận hàng · STOCK = kiểm kho (số còn) */
@@ -92,12 +93,27 @@ export default function GoodsForm({
   storeId?: string;
   storeName?: string;
   /** admin sửa 1 lần nhận */
-  initial?: { id: string; storeId: string; date: string; lines: GoodsLine[]; note: string };
+  initial?: { id: string; storeId: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; source?: string };
+  /** sửa xong → chuyển về trang này (đóng popup sửa) */
+  doneHref?: string;
   save: (input: SaveInput) => Promise<Result>;
 }) {
   const router = useRouter();
   const [storeId, setStoreId] = useState(initial?.storeId ?? storeId0);
-  const [drafts, setDrafts] = useState<Draft[]>(() => [initial ? { ...blank(initial.date), lines: initial.lines, note: initial.note, source: "MANUAL" } : blank(today)]);
+  const [drafts, setDrafts] = useState<Draft[]>(() => [
+    initial
+      ? {
+          ...blank(initial.date),
+          lines: initial.lines,
+          note: initial.note,
+          raw: initial.raw || undefined,
+          sender: initial.sender || undefined,
+          source: initial.source === "PHOTO" ? "PHOTO" : initial.source === "TEXT" ? "TEXT" : "MANUAL",
+        }
+      : blank(today),
+  ]);
+  // ảnh nhóm chat vừa đọc → gửi kèm khi lưu để báo nhóm bằng chính ảnh chụp
+  const [photos, setPhotos] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [telegram, setTelegram] = useState(!initial);
   const [busy, setBusy] = useState<"" | "ai" | "save">("");
@@ -158,6 +174,7 @@ export default function GoodsForm({
     if (!list.length) return;
     try {
       const photos = await Promise.all(list.map((f) => fileToJpeg(f)));
+      setPhotos(photos);
       await askAi({ photos });
     } catch (e) {
       setMsg({ tone: "red", text: (e as Error).message });
@@ -184,6 +201,8 @@ export default function GoodsForm({
       telegram: isUser || telegram,
       id: initial?.id,
       drafts: used.map((d) => ({ date: d.date, lines: d.lines, note: d.note, raw: d.raw, sender: d.sender, source: d.source })),
+      // ảnh quá nặng (giới hạn gửi lên ~4MB) → bỏ ảnh, nhóm vẫn nhận nội dung gốc từng tin
+      photos: !initial && used.some((d) => d.source === "PHOTO") && photos.join("").length < 3_200_000 ? photos : undefined,
     }).catch(() => ({ error: "Mất kết nối – thử lại" }) as Result);
     setBusy("");
     if (r.error) return setMsg({ tone: "red", text: r.error });
@@ -191,7 +210,9 @@ export default function GoodsForm({
     if (!initial) {
       setDrafts([blank(today)]);
       setTelegram(true);
+      setPhotos([]);
     }
+    if (initial && doneHref) return router.replace(doneHref, { scroll: false });
     router.refresh();
   }
 
@@ -242,7 +263,7 @@ export default function GoodsForm({
           {ocrEnabled && (
             <>
               <Button type="button" variant="outline" disabled={!!busy} onClick={() => fileRef.current?.click()} className="flex-1 basis-40 whitespace-nowrap">
-                {busy === "ai" ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {busy === "ai" ? "AI đang đọc…" : "Ảnh nhóm chat"}
+                {busy === "ai" ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {busy === "ai" ? "AI đang đọc…" : "Chụp ảnh / phiếu"}
               </Button>
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPhotos(e.target.files)} />
             </>
@@ -270,7 +291,11 @@ export default function GoodsForm({
             )}
           </div>
           {d.dup && <p className="mb-2 text-xs font-semibold text-warn">⚠ {d.dup}</p>}
-          {d.raw && d.source === "PHOTO" && <p className="mb-2 rounded-lg bg-cream px-2 py-1 text-xs italic text-ink/70">“{d.raw}”</p>}
+          {d.raw && (
+            <p className="mb-2 rounded-lg border-l-4 border-primary bg-cream px-2.5 py-1.5 text-sm whitespace-pre-line text-ink/80 italic">
+              <span className="block text-[11px] font-semibold not-italic text-ink/50">Nội dung gốc{d.sender ? ` – ${d.sender}` : ""}</span>“{d.raw}”
+            </p>
+          )}
           {!!d.unknown?.length && <p className="mb-2 text-xs text-warn">Không có trong danh mục: {d.unknown.join(", ")}</p>}
 
           {d.lines.length === 0 ? (

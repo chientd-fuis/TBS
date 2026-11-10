@@ -218,17 +218,31 @@ export function mergeLines(lines: GoodsLine[]): GoodsLine[] {
 export const hasReceiveWord = (s: string) => /\bnhan\b/.test(foldGoods(s));
 
 export const qtyVi = (n: number) => n.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
-export const lineVi = (l: GoodsLine) => `${l.name}: ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`;
+/** "Mini: 5 hộp" · tồn kho 0 → "Mini: hết" */
+export const lineVi = (l: GoodsLine) => (l.qty === 0 ? `${l.name}: hết` : `${l.name}: ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`);
 
 export type GoodsKind = "RECEIVE" | "STOCK";
 
 /** Tin nhắn gửi nhóm Telegram cơ sở */
-export function goodsMessage(r: { store: string; date: string; by: string; lines: GoodsLine[]; note?: string; edited?: boolean; kind?: GoodsKind }) {
-  const d = `${r.date.slice(8, 10)}/${r.date.slice(5, 7)}/${r.date.slice(0, 4)}`;
+/** "2026-11-10" → "10/11 (Thứ 3)" – không cần năm */
+export function dayVi(date: string) {
+  const w = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return `${date.slice(8, 10)}/${date.slice(5, 7)} (${w === 0 ? "CN" : `Thứ ${w + 1}`})`;
+}
+
+/** Dòng đầu tin Telegram: 📦 NHẬN HÀNG · cơ sở · 10/11 (Thứ 3) */
+export const goodsHeader = (r: { store: string; date: string; edited?: boolean; kind?: GoodsKind }) =>
+  `${r.kind === "STOCK" ? "📋" : "📦"} ${r.edited ? "SỬA " : ""}${r.kind === "STOCK" ? "TỒN KHO" : "NHẬN HÀNG"} · ${r.store} · ${dayVi(r.date)}`;
+
+/**
+ * Tin Telegram: chỉ cần NỘI DUNG GỐC (chữ nhân viên gõ). Không có nội dung gốc (chọn tay) hoặc admin sửa số → liệt kê món.
+ */
+export function goodsMessage(r: { store: string; date: string; by: string; lines: GoodsLine[]; note?: string; raw?: string; sender?: string; edited?: boolean; kind?: GoodsKind }) {
+  const raw = r.raw?.trim();
   return [
-    `${r.kind === "STOCK" ? "📋" : "📦"} ${r.edited ? "SỬA " : ""}${r.kind === "STOCK" ? "TỒN KHO" : "NHẬN HÀNG"} · ${r.store} · ${d}`,
-    `👤 ${r.by}`,
-    ...r.lines.map((l) => `• ${lineVi(l)}`),
+    goodsHeader(r),
+    `👤 ${r.by}${r.sender && r.sender !== r.by ? ` (báo: ${r.sender})` : ""}`,
+    ...(raw && !r.edited ? [raw] : r.lines.map((l) => `• ${lineVi(l)}`)),
     ...(r.note ? [`📝 ${r.note}`] : []),
   ].join("\n");
 }

@@ -23,7 +23,8 @@ const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
 const signed = (n: number | null) => (n == null ? "—" : n ? `${n > 0 ? "+" : ""}${vnd(n)}` : "0");
 const SHEET = { SENT: ["Đã ghi", "green"], FAILED: ["Lỗi", "red"], PENDING: ["Chờ ghi", "yellow"], DISABLED: ["Chưa cấu hình", "gray"] } as const;
 
-export default function DailyRevenueTable({ rows, today }: { rows: DayRow[]; today: string }) {
+/** canEdit = Admin Tổng (ghi lại Google Sheet); admin được cấp quyền chỉ xem */
+export default function DailyRevenueTable({ rows, today, canEdit = false }: { rows: DayRow[]; today: string; canEdit?: boolean }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setOpen((s) => (s.has(k) ? new Set([...s].filter((x) => x !== k)) : new Set([...s, k])));
   const tot = rows.reduce(
@@ -139,10 +140,12 @@ export default function DailyRevenueTable({ rows, today }: { rows: DayRow[]; tod
                           <span>Google Sheet:</span>
                           {r.sheet ? <Badge tone={SHEET[r.sheet.status as keyof typeof SHEET]?.[1] ?? "gray"}>{SHEET[r.sheet.status as keyof typeof SHEET]?.[0] ?? r.sheet.status}</Badge> : <Badge tone="gray">–</Badge>}
                           {r.sheet?.error && r.sheet.status !== "SENT" && <span className="max-w-60 text-danger">{r.sheet.error}</span>}
+                          {canEdit && (
                           <ActionForm action={syncDayRevenue} submitLabel={r.sheet?.status === "SENT" ? "Ghi lại" : "Ghi sheet"} variant="outline" successText="Đã ghi" className="flex">
                             <input type="hidden" name="storeId" value={r.storeId} />
                             <input type="hidden" name="date" value={r.date} />
                           </ActionForm>
+                          )}
                         </div>
                       </div>
                     </td>

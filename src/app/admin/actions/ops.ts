@@ -55,6 +55,7 @@ export async function saveStore(_: FormState, fd: FormData): Promise<FormState> 
       timezone: str(fd.get("timezone")) || "Asia/Ho_Chi_Minh",
       telegramChatId: str(fd.get("telegramChatId")),
       telegramAttendanceChatId: str(fd.get("telegramAttendanceChatId")),
+      telegramGoodsChatId: str(fd.get("telegramGoodsChatId")),
       revenueSheetId: extractSheetId(str(fd.get("revenueSheetId"))),
       revenueTabPattern: str(fd.get("revenueTabPattern")) || "T{m}",
       revenueFirstRow: Math.max(1, num(fd.get("revenueFirstRow"), 3) || 3),

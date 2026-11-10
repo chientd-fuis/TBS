@@ -1,4 +1,5 @@
 "use server";
+import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { Expense, FixedCost, Settings, Store } from "@/lib/models";
 import { assertAdmin, assertPerm } from "@/lib/guards";
@@ -10,6 +11,7 @@ import { financeChatId, sendDailyReport, sendMonthlyReport, sendWeeklyReport } f
 import { sendTelegramText, telegramConfigured } from "@/lib/telegram";
 import { isYmd, weekStartOf, weekdayVi } from "@/lib/time";
 import { evalMoneyExpr } from "@/lib/revenue";
+import { CASH_KINDS } from "@/lib/cashbook";
 import { dec, errMsg, str, type FormState } from "./types";
 
 async function assertOwner() {
@@ -175,13 +177,23 @@ export async function saveCashTransfer(_: FormState, fd: FormData): Promise<Form
     const { CashTransfer } = await import("@/lib/models");
     const storeId = str(fd.get("storeId"));
     const date = str(fd.get("date"));
-    const kind = str(fd.get("kind"));
+    const k = CASH_KINDS.find((x) => x.value === str(fd.get("kind")));
     const amt = evalMoneyExpr(str(fd.get("amount")));
-    if (!(await Store.exists({ _id: storeId }))) return { error: "Chọn cơ sở" };
+    if (storeId && !(isValidObjectId(storeId) && (await Store.exists({ _id: storeId })))) return { error: "Chọn cơ sở" };
     if (!isYmd(date)) return { error: "Chọn ngày" };
-    if (kind !== "DEPOSIT" && kind !== "WITHDRAW") return { error: "Chọn loại: nộp tiền mặt vào TK hoặc rút TK ra tiền mặt" };
+    if (!k) return { error: "Chọn loại phiếu" };
+    if ((k.kind === "DEPOSIT" || k.kind === "WITHDRAW") && !storeId) return { error: "Nộp / rút giữa TM và TK cần chọn cơ sở" };
     if (!amt.ok || amt.value <= 0) return { error: "Số tiền không hợp lệ" };
-    const doc = { storeId, date, month: date.slice(0, 7), kind, amount: Math.round(amt.value), note: str(fd.get("note")).slice(0, 200), createdBy: adminActor(admin).name };
+    const doc = {
+      ...(storeId ? { storeId } : {}),
+      date,
+      month: date.slice(0, 7),
+      kind: k.kind,
+      ...(k.account ? { account: k.account } : {}),
+      amount: Math.round(amt.value),
+      note: str(fd.get("note")).slice(0, 200),
+      createdBy: adminActor(admin).name,
+    };
     const c = await CashTransfer.create(doc);
     await audit(adminActor(admin), "cash.transfer.create", { type: "CashTransfer", id: String(c._id) }, null, doc);
     revalidatePath("/admin/finance", "layout");

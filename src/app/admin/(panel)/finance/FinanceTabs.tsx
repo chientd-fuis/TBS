@@ -6,10 +6,11 @@ import { cn } from "@/lib/format";
 // owner = chỉ Admin Tổng; perm = quyền Admin Tổng cấp cho admin (lib/permissions.ts)
 const TABS: { href: string; label: string; owner?: boolean; perm?: string }[] = [
   { href: "/admin/finance", label: "Lãi lỗ", owner: true },
-  { href: "/admin/finance/revenue", label: "Doanh thu theo ngày", owner: true },
+  { href: "/admin/finance/revenue", label: "Doanh thu theo ngày", perm: "finance.revenue" },
   { href: "/admin/finance/shift-expenses", label: "Chi phí trong ca", perm: "finance.shiftExpenses" },
   { href: "/admin/finance/expenses", label: "Bill / chuyển khoản", perm: "finance.bills" },
   { href: "/admin/finance/fixed", label: "Tiền thuê nhà", perm: "finance.rent" },
+  { href: "/admin/finance/cashbook", label: "Sổ quỹ", perm: "finance.cashbook" },
   { href: "/admin/finance/settings", label: "Cài đặt", perm: "finance.settings" },
 ];
 

@@ -5,7 +5,7 @@ import { Crosshair, MapPinned, Wifi } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { currentPublicIp, saveStore } from "../../actions/ops";
 
-type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
+type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramGoodsChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
 
 export default function StoreForm({ store }: { store: S | null }) {
   const [state, action, pending] = useActionState(saveStore, null);
@@ -106,6 +106,9 @@ export default function StoreForm({ store }: { store: S | null }) {
       </fieldset>
       <Field label="Telegram chat ID nhóm chốt ca" hint="VD: -1001234567890. Để trống = dùng nhóm mặc định (TELEGRAM_CHAT_ID). Bấm 'Lưu' rồi 'Gửi thử' để kiểm tra.">
         <Input name="telegramChatId" defaultValue={store?.telegramChatId ?? ""} placeholder="-100…" />
+      </Field>
+      <Field label="Telegram chat ID nhóm nhận hàng" hint="Nhận tin 📦 Nhận hàng / 📋 Tồn kho. Để trống = dùng TELEGRAM_GOODS_CHAT_ID; không có thì gửi vào nhóm chốt ca như trước.">
+        <Input name="telegramGoodsChatId" defaultValue={store?.telegramGoodsChatId ?? ""} placeholder="-100…" />
       </Field>
       <Field label="Telegram chat ID nhóm chấm công" hint="Nhận thông báo check-in / check-out (ảnh, giờ vào/ra, đi muộn, về sớm). Để trống = dùng TELEGRAM_ATTENDANCE_CHAT_ID; không có thì không gửi.">
         <Input name="telegramAttendanceChatId" defaultValue={store?.telegramAttendanceChatId ?? ""} placeholder="-100…" />

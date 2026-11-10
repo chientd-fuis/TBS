@@ -15,9 +15,11 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     // Lãi lỗ chỉ Admin Tổng – admin vào tab tài chính đầu tiên được cấp
     const first = (
       [
+        ["finance.revenue", "/admin/finance/revenue"],
         ["finance.shiftExpenses", "/admin/finance/shift-expenses"],
         ["finance.bills", "/admin/finance/expenses"],
         ["finance.rent", "/admin/finance/fixed"],
+        ["finance.cashbook", "/admin/finance/cashbook"],
         ["finance.settings", "/admin/finance/settings"],
       ] as const
     ).find(([p]) => can(admin, p));

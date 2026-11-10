@@ -2,7 +2,7 @@
  * Phân quyền.
  *  - Admin Tổng (Google): toàn quyền.
  *  - Admin (đăng nhập Gmail được Admin Tổng thêm / duyệt): mặc định KHÔNG có các quyền dưới đây – Admin Tổng cấp thêm từng quyền.
- *    Lãi lỗ, Doanh thu theo ngày (+ sổ quỹ tiền mặt / tài khoản) và Quản lý admin: CHỈ Admin Tổng, không cấp được.
+ *    Lãi lỗ và Quản lý admin: CHỈ Admin Tổng. Doanh thu theo ngày / Sổ quỹ: cấp được quyền XEM (sửa / ghi phiếu chỉ Admin Tổng).
  *  - Nhân viên: admin cấp quyền quản lý (xếp ca / thưởng-phạt / duyệt đổi ca-làm hộ) trong các cơ sở được giao.
  */
 export const ADMIN_PERMS = [
@@ -10,6 +10,8 @@ export const ADMIN_PERMS = [
   { key: "finance.shiftExpenses", label: "Tài chính – Chi phí trong ca", group: "Tài chính" },
   { key: "finance.bills", label: "Tài chính – Bill / chuyển khoản", group: "Tài chính" },
   { key: "finance.rent", label: "Tài chính – Tiền thuê nhà", group: "Tài chính" },
+  { key: "finance.revenue", label: "Tài chính – Xem doanh thu theo ngày (không sửa)", group: "Tài chính" },
+  { key: "finance.cashbook", label: "Tài chính – Xem sổ quỹ (không ghi phiếu)", group: "Tài chính" },
   { key: "finance.settings", label: "Tài chính – Cài đặt", group: "Tài chính" },
   { key: "payroll", label: "Bảng lương", group: "Lương" },
   { key: "payEstimate", label: "Lương tạm tính ở Tổng quan", group: "Lương" },
@@ -22,7 +24,7 @@ export const ADMIN_PERMS = [
 ] as const;
 export type AdminPerm = (typeof ADMIN_PERMS)[number]["key"];
 export const ADMIN_PERM_KEYS = ADMIN_PERMS.map((p) => p.key) as AdminPerm[];
-export const FINANCE_PERMS: AdminPerm[] = ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.settings"];
+export const FINANCE_PERMS: AdminPerm[] = ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.revenue", "finance.cashbook", "finance.settings"];
 export const isAdminPerm = (v: unknown): v is AdminPerm => typeof v === "string" && (ADMIN_PERM_KEYS as string[]).includes(v);
 
 type WithPerms = { kind: "OWNER" | "ADMIN"; perms?: readonly string[] };

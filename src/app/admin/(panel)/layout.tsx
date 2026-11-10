@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { AdjustmentRequest, CoverRequest, Device, PayrollFeedback, ShiftAssignment, User } from "@/lib/models";
 import { localDate } from "@/lib/time";
@@ -38,13 +39,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen lg:flex">
       <aside className="bg-secondary-dark lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
-        <div className="flex items-center gap-2 p-3">
+        <Link href="/admin" className="flex items-center gap-2 p-3" title="Về Tổng quan">
           <Logo size={36} />
           <div className="text-white">
             <p className="text-sm font-bold leading-tight">Tiệm Bơ Sầu</p>
-            <p className="text-xs opacity-80">Quản lý chấm công</p>
+            <p className="text-xs opacity-80">Quản lý cửa hàng</p>
           </div>
-        </div>
+        </Link>
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">

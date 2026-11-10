@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireOwner } from "@/lib/guards";
+import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { CashTransfer, DayRevenue, ShiftClosing, Store } from "@/lib/models";
 import { closingSum, dayRevenueFromClosings, revenueDiff, shiftDeltas, type Revenue } from "@/lib/revenue";
@@ -19,7 +19,7 @@ const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
  * Chưa chốt Tối → tạm tính theo ca chốt gần nhất. Bấm dòng → chi tiết 3 ca.
  */
 export default async function DailyRevenuePage({ searchParams }: { searchParams: Promise<{ month?: string; store?: string }> }) {
-  await requireOwner(); // doanh thu: chỉ Admin Tổng
+  const admin = await requirePerm("finance.revenue"); // Admin Tổng hoặc admin được cấp quyền XEM
   await connectDB();
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());
@@ -27,12 +27,14 @@ export default async function DailyRevenuePage({ searchParams }: { searchParams:
   const stores = await Store.find({ active: { $ne: false } }).sort({ createdAt: 1 }).lean();
   const shown = sp.store ? stores.filter((s) => String(s._id) === sp.store) : stores;
   const ids = shown.map((s) => s._id);
+  const owner = admin.kind === "OWNER";
   const [closings, days, transfers] = await Promise.all([
     ShiftClosing.find({ workDate: { $gte: first, $lte: last }, storeId: { $in: ids }, "revenue.tm": { $ne: null } })
       .select("storeId workDate shiftName employeeName createdAt revenue staffTotal")
       .lean(),
     DayRevenue.find({ date: { $gte: first, $lte: last }, storeId: { $in: ids } }).select("storeId date sheet").lean(),
-    CashTransfer.find({ month, storeId: { $in: ids } }).sort({ date: -1, createdAt: -1 }).lean(),
+    // phiếu nộp TM → TK / rút TK → TM của cơ sở trong tháng (phiếu rút lãi / bổ sung vốn ở trang Sổ quỹ không tính ở đây)
+    CashTransfer.find({ month, storeId: { $in: ids }, kind: { $in: ["DEPOSIT", "WITHDRAW"] } }).sort({ date: -1, createdAt: -1 }).lean(),
   ]);
   const tzOf = new Map(stores.map((s) => [String(s._id), s.timezone || "Asia/Ho_Chi_Minh"]));
   const nameOf = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]));
@@ -88,6 +90,19 @@ export default async function DailyRevenuePage({ searchParams }: { searchParams:
   });
   rows.sort((a, b) => b.date.localeCompare(a.date) || a.storeName.localeCompare(b.storeName));
 
+  // Admin khác (quyền xem) chỉ thấy số SAU CÙNG: phiếu nộp / rút cộng thẳng vào TK / TM của ngày ghi phiếu.
+  // Admin Tổng thấy số ban đầu theo chốt ca + dòng "sau chuyển" ở thẻ tổng.
+  const net = (t: { kind: string; amount: number }) => (t.kind === "DEPOSIT" ? t.amount : -t.amount); // TK tăng bao nhiêu
+  if (!owner) {
+    for (const t of transfers) {
+      const r = rows.find((x) => x.date === t.date && x.storeId === String(t.storeId));
+      if (r) {
+        r.tk += net(t);
+        r.tm -= net(t);
+      }
+    }
+  }
+
   // tổng hợp theo cơ sở
   const sumOf = (rs: DayRow[]) => ({
     thu: rs.reduce((s, r) => s + r.thu, 0),
@@ -100,17 +115,23 @@ export default async function DailyRevenuePage({ searchParams }: { searchParams:
     days: rs.length,
     open: rs.filter((r) => !r.final).length,
   });
-  // sổ quỹ: nộp tiền mặt vào TK (TM ↓ TK ↑) / rút TK ra tiền mặt (TK ↓ TM ↑) – tổng doanh thu không đổi
+  // phiếu chưa có dòng ngày (ngày đó chưa chốt ca) → vẫn cộng vào thẻ tổng cho admin xem
   const moves = (sid?: string) => {
     const list = transfers.filter((t) => !sid || String(t.storeId) === sid);
+    const unplaced = owner ? [] : list.filter((t) => !rows.some((x) => x.date === t.date && x.storeId === String(t.storeId)));
     return {
       deposit: list.filter((t) => t.kind === "DEPOSIT").reduce((s, t) => s + t.amount, 0),
       withdraw: list.filter((t) => t.kind === "WITHDRAW").reduce((s, t) => s + t.amount, 0),
+      extra: unplaced.reduce((s, t) => s + net(t), 0),
     };
   };
+  const card = (name: string, rs: DayRow[], m: ReturnType<typeof moves>) => {
+    const x = sumOf(rs);
+    return { name, ...x, tk: x.tk + m.extra, tm: x.tm - m.extra, deposit: m.deposit, withdraw: m.withdraw };
+  };
   const cards = [
-    ...shown.map((s) => ({ name: s.name, ...sumOf(rows.filter((r) => r.storeId === String(s._id))), ...moves(String(s._id)) })),
-    ...(shown.length > 1 ? [{ name: "Cả chuỗi", ...sumOf(rows), ...moves() }] : []),
+    ...shown.map((s) => card(s.name, rows.filter((r) => r.storeId === String(s._id)), moves(String(s._id)))),
+    ...(shown.length > 1 ? [card("Cả chuỗi", rows, moves())] : []),
   ];
   const today = localDate(new Date());
 
@@ -140,7 +161,7 @@ export default async function DailyRevenuePage({ searchParams }: { searchParams:
             <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-sm">
               <dt className="text-ink/60">Tài khoản</dt><dd className="text-right tabular-nums">{vnd(c.tk)}</dd>
               <dt className="text-ink/60">Tiền mặt</dt><dd className="text-right tabular-nums">{vnd(c.tm)}</dd>
-              {(c.deposit > 0 || c.withdraw > 0) && (
+              {owner && (c.deposit > 0 || c.withdraw > 0) && (
                 <>
                   <dt className="pl-2 text-xs text-ink/60">Nộp TM → TK / Rút TK → TM</dt>
                   <dd className="text-right text-xs tabular-nums text-ink/60">{vnd(c.deposit)} / {vnd(c.withdraw)}</dd>
@@ -161,51 +182,57 @@ export default async function DailyRevenuePage({ searchParams }: { searchParams:
         ))}
       </div>
 
-      <Card title={`Sổ quỹ tiền mặt / tài khoản – tháng ${month.slice(5)}/${month.slice(0, 4)}`}>
-        <p className="mb-2 text-xs text-ink/60">
-          Ghi khi <b>nộp tiền mặt vào tài khoản</b> hoặc <b>rút tài khoản ra tiền mặt</b>. Tổng doanh thu không đổi – chỉ chuyển giữa Tiền mặt và Tài khoản (xem dòng &quot;TM / TK sau chuyển&quot; ở trên).
-        </p>
-        <ActionForm action={saveCashTransfer} submitLabel="Ghi phiếu" successText="Đã ghi" className="flex flex-wrap items-end gap-2">
-          <Field label="Cơ sở">
-            <Select name="storeId" defaultValue={sp.store || String(stores[0]?._id ?? "")} className="!w-40">
-              {stores.map((s) => <option key={String(s._id)} value={String(s._id)}>{s.name.replace(/^TBS\s*/i, "")}</option>)}
-            </Select>
-          </Field>
-          <Field label="Loại">
-            <Select name="kind" defaultValue="DEPOSIT" className="!w-56">
-              <option value="DEPOSIT">Nộp tiền mặt vào tài khoản</option>
-              <option value="WITHDRAW">Rút tài khoản ra tiền mặt</option>
-            </Select>
-          </Field>
-          <Field label="Ngày"><Input type="date" name="date" defaultValue={today.startsWith(month) ? today : last} required className="!w-40" /></Field>
-          <Field label="Số tiền"><Input name="amount" inputMode="numeric" required placeholder="VD 5000000 hoặc 5tr" className="!w-36 text-right" /></Field>
-          <Field label="Ghi chú"><Input name="note" placeholder="Tuỳ chọn" className="!w-48" /></Field>
-        </ActionForm>
-        {transfers.length > 0 && (
-          <ul className="mt-3 divide-y divide-[#f1e6c8] text-sm">
-            {transfers.map((t) => (
-              <li key={String(t._id)} className="flex flex-wrap items-center gap-2 py-1.5">
-                <span className="w-24 tabular-nums">{t.date.slice(8)}/{t.date.slice(5, 7)}</span>
-                <span className="w-20 text-xs text-ink/60">{nameOf.get(String(t.storeId))}</span>
-                <Badge tone={t.kind === "DEPOSIT" ? "blue" : "yellow"}>{t.kind === "DEPOSIT" ? "TM → TK" : "TK → TM"}</Badge>
-                <b className="tabular-nums">{vnd(t.amount)}</b>
-                <span className="min-w-0 flex-1 truncate text-xs text-ink/60">{t.note}</span>
-                <ActionForm action={deleteCashTransfer} submitLabel="Xoá" variant="ghost" successText="" confirm={`Xoá phiếu ${vnd(t.amount)} ngày ${t.date.slice(8)}/${t.date.slice(5, 7)}?`}>
-                  <input type="hidden" name="id" value={String(t._id)} />
-                </ActionForm>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {owner && (
+        <Card title={`Sổ quỹ tiền mặt / tài khoản – tháng ${month.slice(5)}/${month.slice(0, 4)}`}>
+          <p className="mb-2 text-xs text-ink/60">
+            Chỉ Admin Tổng thấy. Ghi khi <b>nộp tiền mặt vào tài khoản</b> hoặc <b>rút tài khoản ra tiền mặt</b> – tổng doanh thu không đổi, chỉ chuyển giữa TM và TK.
+            Admin khác (quyền xem) chỉ thấy số sau cùng (đã cộng phiếu); Admin Tổng thấy số ban đầu + dòng &quot;TM / TK sau chuyển&quot; ở trên.
+          </p>
+          <ActionForm action={saveCashTransfer} submitLabel="Ghi phiếu" successText="Đã ghi" className="grid gap-2 sm:grid-cols-[1fr_1.4fr_10rem_9rem] sm:items-end">
+            <Field label="Cơ sở">
+              <Select name="storeId" defaultValue={sp.store || String(stores[0]?._id ?? "")}>
+                {stores.map((s) => (
+                  <option key={String(s._id)} value={String(s._id)}>{s.name.replace(/^TBS\s*/i, "")}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Loại">
+              <Select name="kind" defaultValue="DEPOSIT">
+                <option value="DEPOSIT">Nộp tiền mặt vào tài khoản</option>
+                <option value="WITHDRAW">Rút tài khoản ra tiền mặt</option>
+              </Select>
+            </Field>
+            <Field label="Ngày"><Input type="date" name="date" defaultValue={today.startsWith(month) ? today : last} required /></Field>
+            <Field label="Số tiền"><Input name="amount" inputMode="numeric" required placeholder="5tr / 5000000" className="text-right" /></Field>
+            <div className="sm:col-span-4"><Input name="note" placeholder="Ghi chú (tuỳ chọn)" /></div>
+          </ActionForm>
+          {transfers.length > 0 && (
+            <ul className="mt-3 divide-y divide-[#f1e6c8] text-sm">
+              {transfers.map((t) => (
+                <li key={String(t._id)} className="flex flex-wrap items-center gap-2 py-1.5">
+                  <span className="w-16 tabular-nums">{t.date.slice(8)}/{t.date.slice(5, 7)}</span>
+                  <span className="w-20 text-xs text-ink/60">{nameOf.get(String(t.storeId))}</span>
+                  <Badge tone={t.kind === "DEPOSIT" ? "blue" : "yellow"}>{t.kind === "DEPOSIT" ? "TM → TK" : "TK → TM"}</Badge>
+                  <b className="tabular-nums">{vnd(t.amount)}</b>
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink/60">{t.note}</span>
+                  <ActionForm action={deleteCashTransfer} submitLabel="Xoá" variant="ghost" successText="" confirm={`Xoá phiếu ${vnd(t.amount)} ngày ${t.date.slice(8)}/${t.date.slice(5, 7)}?`}>
+                    <input type="hidden" name="id" value={String(t._id)} />
+                  </ActionForm>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Card>
         <p className="mb-3 text-xs text-ink/60">
           Chốt ca là số <b>luỹ kế</b>: ca Chiều đã gồm ca Sáng, ca Tối = cả ngày. Doanh thu thật = TK + TM + Shopee/Grab + Két; Âm/Dương = DT máy − DT thật. Doanh thu ngày = số chốt ca <b>Tối</b> (chưa chốt Tối → tạm tính theo ca chốt gần nhất).
-          Bấm vào dòng để xem 3 ca.
+          Bấm vào dòng để xem 3 ca.{owner ? " Bảng là số ban đầu theo chốt ca (chưa tính phiếu nộp / rút)." : ""}
         </p>
-        <DailyRevenueTable rows={rows} today={today} />
+        <DailyRevenueTable rows={rows} today={today} canEdit={admin.kind === "OWNER"} />
       </Card>
     </div>
   );
 }
+
