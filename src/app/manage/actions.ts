@@ -36,7 +36,7 @@ export async function staffCreateBonus(_: FormState, fd: FormData): Promise<Form
     const { user, actor } = await staffManager("bonus", String(target.storeId));
     if (String(target._id) === String(user._id)) return { error: "Không tự tạo thưởng / phạt cho chính mình" };
     const v = readBp(fd);
-    await assertNotLocked(target.storeId, v.month);
+    await assertNotLocked(target.storeId, v.month, target._id);
     const bp = await BonusPenalty.create({ userId: target._id, storeId: target.storeId, ...v, createdBy: actor.name, createdByUserId: user._id });
     await audit(actor, "bonusPenalty.create", { type: "BonusPenalty", id: String(bp._id) }, null, { userId: String(target._id), storeId: String(target.storeId), ...v });
     return done();
@@ -58,8 +58,8 @@ export async function staffUpdateBonus(_: FormState, fd: FormData): Promise<Form
   try {
     const { bp, actor } = await ownBp(fd);
     const v = readBp(fd);
-    await assertNotLocked(bp.storeId, bp.month);
-    await assertNotLocked(bp.storeId, v.month);
+    await assertNotLocked(bp.storeId, bp.month, bp.userId);
+    await assertNotLocked(bp.storeId, v.month, bp.userId);
     const before = bp.toObject();
     bp.set(v);
     await bp.save();
@@ -73,7 +73,7 @@ export async function staffUpdateBonus(_: FormState, fd: FormData): Promise<Form
 export async function staffDeleteBonus(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const { bp, actor } = await ownBp(fd);
-    await assertNotLocked(bp.storeId, bp.month);
+    await assertNotLocked(bp.storeId, bp.month, bp.userId);
     await audit(actor, "bonusPenalty.delete", { type: "BonusPenalty", id: String(bp._id) }, bp.toObject(), null);
     await bp.deleteOne();
     return done();

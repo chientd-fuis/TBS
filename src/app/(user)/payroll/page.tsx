@@ -70,6 +70,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <dt className="border-t border-[#f1e6c8] pt-2 text-base font-bold">Thực nhận</dt>
               <dd className="border-t border-[#f1e6c8] pt-2 text-right text-lg font-bold text-secondary-dark">{vnd(item.netPay)}</dd>
             </dl>
+            <p className="mt-2 text-xs text-ink/60">
+              {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu tự cập nhật theo chấm công, thưởng phạt cho tới khi quán trả lương."}
+            </p>
           </Card>
           {/* AI giải thích lương – chỉ hiện khi Admin Tổng bật ở Cài đặt → AI */}
           {explain.enabled && geminiConfigured() && (

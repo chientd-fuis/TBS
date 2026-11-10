@@ -7,7 +7,8 @@ import { SignOutButton } from "@/components/user/AuthButtons";
 import { adminLogout } from "../actions/auth";
 import AdminNav from "./AdminNav";
 import AskAiPanel from "./AskAiPanel";
-import { aiRemaining } from "@/lib/ai";
+import { aiAllowed, aiRemaining } from "@/lib/ai";
+import { can } from "@/lib/permissions";
 import { geminiConfigured } from "@/lib/ocr";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
@@ -24,6 +25,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     CoverRequest.countDocuments({ status: "PENDING" }),
   ]);
   const ask = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`).catch(() => ({ enabled: false, left: 0, limit: 0 }));
+  // nút 📷 trong Hỏi AI: kiểm tra / nhập bill – cần quyền Bill + được dùng "Đọc bill"
+  const billOk = can(admin, "finance.bills") && (await aiAllowed("billOcr", `admin:${admin.accountId ?? "owner"}`).catch(() => false));
   return (
     <div className="min-h-screen lg:flex">
       <aside className="bg-secondary-dark lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
@@ -38,7 +41,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">
-          {ask.enabled && geminiConfigured() && <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} />}
+          {ask.enabled && geminiConfigured() && <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />}
           <span className="text-ink/70">
             {admin.kind === "OWNER" ? "👑 Admin Tổng" : "Admin"}: <b>{admin.kind === "OWNER" ? admin.email : `${admin.name} (${admin.email})`}</b>
           </span>

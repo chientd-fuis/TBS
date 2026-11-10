@@ -581,6 +581,9 @@ const PayrollItemSchema = new Schema(
     holidayHours: { type: Number, default: 0 }, // trong tổng giờ: số giờ làm ngày lễ
     holidayExtra: { type: Number, default: 0 }, // tiền cộng thêm do làm ngày lễ (đã gồm trong lương cơ bản)
     holidayNote: String, // VD "Quốc khánh 02/09 8h ×2"
+    // đã trả lương cho nhân viên này → dòng lương + chấm công / thưởng phạt tháng này của họ bị KHOÁ (mở khoá cần lý do)
+    paidAt: Date,
+    paidBy: String,
   },
   { timestamps: true },
 );

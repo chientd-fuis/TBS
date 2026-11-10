@@ -23,7 +23,7 @@ export default async function EditAttendance({ params }: { params: Promise<{ id:
     AttendanceAdjustment.find({ attendanceId: a._id }).sort({ createdAt: -1 }).lean(),
   ]);
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
-  const locked = await isMonthLocked(payStoreOf(a), a.month);
+  const locked = await isMonthLocked(payStoreOf(a), a.month, a.userId);
   const back = `/admin/attendance?store=${a.storeId}&user=${a.userId}&month=${a.month}`;
   return (
     <>

@@ -15,12 +15,15 @@ function wageAt(history: { hourlyWage: number; effectiveFrom: string }[], date: 
   return w ?? fallback;
 }
 
-/** Tạo (nếu chưa có) + tính lại bảng lương nháp. Giữ nguyên phụ cấp / tạm ứng admin đã nhập. */
+/**
+ * Tạo (nếu chưa có) + tính lại bảng lương. Tính lại cả khi đã công bố (nhân viên luôn thấy số mới nhất);
+ * KHÔNG tính lại dòng đã trả (paidAt) và bảng lương "Đã trả". Giữ nguyên phụ cấp / tạm ứng admin đã nhập.
+ */
 export async function generatePayroll(storeId: string, month: string) {
   await connectDB();
   let payroll = await Payroll.findOne({ storeId, month });
   if (!payroll) payroll = await Payroll.create({ storeId, month, status: "DRAFT" });
-  if (payroll.status !== "DRAFT") return payroll;
+  if (payroll.status === "PAID") return payroll;
 
   const atts = await Attendance.find({ month, status: "COMPLETED", ...payStoreFilter(storeId) }).lean();
   const bps = await BonusPenalty.find({ storeId, month }).lean();
@@ -60,6 +63,7 @@ export async function generatePayroll(storeId: string, month: string) {
     const totalBonus = myBps.filter((b) => b.kind === "BONUS").reduce((s, b) => s + b.amountVnd, 0);
     const totalPenalty = myBps.filter((b) => b.kind === "PENALTY").reduce((s, b) => s + b.amountVnd, 0);
     const prev = keep.get(uid);
+    if (prev?.paidAt) continue; // đã trả → giữ nguyên số đã trả
     const allowance = prev?.allowance ?? 0;
     const advance = prev?.advance ?? 0;
     const { totalHours, basePay, netPay, holidayHours, holidayExtra } = computePay({ hoursByWage, allowance, totalBonus, totalPenalty, advance });
@@ -98,7 +102,7 @@ export async function updateItemExtras(itemId: string, allowance: number, advanc
   const item = await PayrollItem.findById(itemId);
   if (!item) throw new Error("Không tìm thấy dòng lương");
   const p = await Payroll.findById(item.payrollId).lean();
-  if (p?.status !== "DRAFT") throw new Error("Bảng lương đã công bố – không sửa được");
+  if (p?.status === "PAID" || item.paidAt) throw new Error("Đã trả lương – mở khoá (nhập lý do) trước khi sửa");
   item.allowance = Math.max(0, Math.round(allowance));
   item.advance = Math.max(0, Math.round(advance));
   item.netPay = item.basePay + item.allowance + item.totalBonus - item.totalPenalty - item.advance;

@@ -13,6 +13,11 @@ import { loadForecast } from "@/lib/forecast";
 import { geminiGenerate } from "@/lib/ocr";
 import { addDays } from "@/lib/time";
 import { askData, ASK_TOOL_LABEL } from "@/lib/ask-ai";
+import type { AskCard, AskProposal } from "@/lib/ask-actions";
+import { setWage } from "./people";
+import { createBonusPenalty, manualAttendance, savePayrollExtras } from "./ops";
+import { PayrollItem } from "@/lib/models";
+import { can } from "@/lib/permissions";
 import { summarizeRules } from "@/lib/rules-summary";
 
 /** Lưu Cài đặt AI: bật/tắt + giới hạn + model từng chức năng, ngân sách token, ngưỡng bất thường. Chỉ Admin Tổng. */
@@ -179,12 +184,12 @@ export async function applyForecast(storeId: string, weekStart: string, targets:
 }
 
 /* ===== Hỏi AI (admin) ===== */
-export async function askDataAction(question: string): Promise<{ answer?: string; source?: string; denied?: boolean; error?: string; left?: number }> {
+export async function askDataAction(question: string): Promise<{ answer?: string; source?: string; denied?: boolean; card?: AskCard; error?: string; left?: number }> {
   try {
     const admin = await assertAdmin();
     const r = await askData(admin, String(question ?? ""));
     const left = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`);
-    return { answer: r.answer, source: r.tool ? ASK_TOOL_LABEL[r.tool] : undefined, denied: r.denied, left: Number.isFinite(left.left) ? left.left : undefined };
+    return { answer: r.answer, source: r.tool ? ASK_TOOL_LABEL[r.tool] : undefined, denied: r.denied, card: r.card, left: Number.isFinite(left.left) ? left.left : undefined };
   } catch (e) {
     console.error("[ai] askDataAction", e);
     return { error: (e as Error).message || "AI đang bận, thử lại sau" };
@@ -230,5 +235,55 @@ export async function saveRulesSummary(_: FormState, fd: FormData): Promise<Form
     return { ok: true };
   } catch (e) {
     return errMsg(e);
+  }
+}
+
+/**
+ * Admin bấm "Xác nhận" trên phiếu Hỏi AI → thực hiện bằng ĐÚNG server action của màn hình tương ứng
+ * (cùng kiểm tra quyền, khoá bảng lương, nhật ký hoạt động). AI không tự ghi gì.
+ */
+export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean; message?: string; error?: string }> {
+  try {
+    const admin = await assertAdmin();
+    const fd = (o: Record<string, string | number>) => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries(o)) f.set(k, String(v));
+      return f;
+    };
+    const done = (r: FormState, msg: string) => (r?.error ? { error: r.error } : { ok: true, message: msg });
+    switch (p?.type) {
+      case "set_wage":
+        if (!can(admin, "payroll")) return { error: "Bạn chưa được cấp quyền Bảng lương" };
+        return done(await setWage(null, fd({ userId: p.userId, hourlyWage: p.hourlyWage, effectiveFrom: p.effectiveFrom })), `Đã đổi lương giờ của ${p.name}.`);
+      case "bonus_penalty": {
+        const errs: string[] = [];
+        let n = 0;
+        for (const u of (p.people ?? []).slice(0, 60)) {
+          const r = await createBonusPenalty(null, fd({ userId: u.id, kind: p.kind, date: p.date, amountVnd: p.amount, content: p.content }));
+          if (r?.error) errs.push(`${u.name}: ${r.error}`);
+          else n++;
+        }
+        const label = p.kind === "BONUS" ? "thưởng" : "phạt";
+        if (!n) return { error: errs.join(" · ") || "Không tạo được" };
+        return { ok: true, message: `Đã tạo ${label} cho ${n}/${p.people.length} người.${errs.length ? ` Lỗi: ${errs.join(" · ")}` : ""}` };
+      }
+      case "payroll_extra": {
+        // lấy số HIỆN TẠI lúc bấm xác nhận rồi cộng thêm (không dùng số cũ trên phiếu)
+        const item = await PayrollItem.findById(p.itemId).lean();
+        if (!item || String(item.userId) !== p.userId) return { error: "Không tìm thấy dòng lương – tính lại bảng lương rồi hỏi lại" };
+        const allowance = item.allowance + (p.field === "allowance" ? p.amount : 0);
+        const advance = item.advance + (p.field === "advance" ? p.amount : 0);
+        return done(await savePayrollExtras(null, fd({ itemId: p.itemId, allowance, advance })), `Đã cộng ${p.amount.toLocaleString("vi-VN")} ₫ ${p.field === "advance" ? "tạm ứng" : "phụ cấp"} cho ${p.name}.`);
+      }
+      case "manual_attendance": {
+        const r = await manualAttendance(null, fd({ userId: p.userId, date: p.date, inTime: p.inTime, outTime: p.outTime, reason: p.reason }));
+        return done(r, `Đã chấm công hộ ${p.name}.`);
+      }
+      default:
+        return { error: "Phiếu không hợp lệ" };
+    }
+  } catch (e) {
+    console.error("[ai] executeAskProposal", e);
+    return { error: (e as Error).message || "Lỗi hệ thống" };
   }
 }

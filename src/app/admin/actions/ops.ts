@@ -20,7 +20,7 @@ import {
 import { assertAdmin, assertPerm } from "@/lib/guards";
 import { adminActor, type AdminSession } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
-import { assertNotLocked, computeFields, findShiftFor, payStoreOf, storeTz } from "@/lib/attendance";
+import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf, storeTz } from "@/lib/attendance";
 import { addDays, localMonth, zonedToDate } from "@/lib/time";
 import { generatePayroll, publishPayroll, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
@@ -260,7 +260,7 @@ export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; d
         // nghi trùng giờ với lượt đã có / trong danh sách → vẫn ghi, chỉ cảnh báo để admin kiểm tra tay
         const dup = list.some(([x, y]) => a < y && b > x);
         if (input.dryRun) {
-          await assertNotLocked(u.storeId, localMonth(new Date(a), tz));
+          await assertNotLocked(u.storeId, localMonth(new Date(a), tz), u._id);
           list.push([a, b]);
           results.push(dup ? { k: r.k, status: "dup", dup, msg: "Nghi trùng giờ với lượt đã có – vẫn ghi, kiểm tra lại" } : { k: r.k, status: "ok" });
           continue;
@@ -324,7 +324,7 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
     if (reason.length < 3) return { error: "Nhập lý do xoá" };
     const a = await Attendance.findById(id);
     if (!a) return { error: "Không tìm thấy" };
-    await assertNotLocked(payStoreOf(a), a.month);
+    await assertNotLocked(payStoreOf(a), a.month, a.userId);
     await AttendanceAdjustment.create({ attendanceId: a._id, adminName: adminActor(admin).name, action: "DELETE", before: a.toObject(), reason });
     await audit(adminActor(admin), "attendance.delete", { type: "Attendance", id }, a.toObject(), { reason });
     await a.deleteOne();
@@ -339,9 +339,12 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
 export async function createBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
-    const userId = str(fd.get("userId"));
-    const user = await User.findById(userId).lean();
-    if (!user?.storeId) return { error: "Chọn nhân viên" };
+    // 1 người (userId) hoặc nhiều người cùng lúc (userIds – chọn nhiều)
+    const ids = [...new Set([...fd.getAll("userIds"), fd.get("userId")].map((v) => str(v)).filter((v) => /^[a-f\d]{24}$/i.test(v)))];
+    if (!ids.length) return { error: "Chọn nhân viên" };
+    if (ids.length > 60) return { error: "Tối đa 60 người / lần" };
+    const users = await User.find({ _id: { $in: ids } }).select("name storeId").lean();
+    if (users.length !== ids.length || users.some((u) => !u.storeId)) return { error: "Có nhân viên không hợp lệ / chưa thuộc cơ sở nào" };
     const kind = str(fd.get("kind")) === "BONUS" ? "BONUS" : "PENALTY";
     const date = str(fd.get("date"));
     const amountVnd = Math.round(num(fd.get("amountVnd")));
@@ -349,11 +352,17 @@ export async function createBonusPenalty(_: FormState, fd: FormData): Promise<Fo
     if (!DATE_RE.test(date)) return { error: "Chọn ngày áp dụng" };
     if (amountVnd <= 0) return { error: "Số tiền phải > 0" };
     if (content.length < 3) return { error: "Nhập nội dung" };
-    const attendanceId = str(fd.get("attendanceId")) || undefined;
+    const attendanceId = ids.length === 1 ? str(fd.get("attendanceId")) || undefined : undefined;
     const month = date.slice(0, 7);
-    await assertNotLocked(user.storeId, month);
-    const bp = await BonusPenalty.create({ userId, storeId: user.storeId, kind, date, month, amountVnd, content, attendanceId, createdBy: adminActor(admin).name });
-    await audit(adminActor(admin), "bonusPenalty.create", { type: "BonusPenalty", id: String(bp._id) }, null, { userId, kind, amountVnd, content, date });
+    // kiểm tra khoá TẤT CẢ trước → không tạo dở dang
+    const locked: string[] = [];
+    for (const u of users) if (await isMonthLocked(u.storeId!, month, u._id)) locked.push(u.name || "?");
+    if (locked.length) return { error: `Đã trả lương tháng ${month} cho: ${locked.join(", ")} – mở khoá ở Bảng lương trước` };
+    const actor = adminActor(admin);
+    for (const u of users) {
+      const bp = await BonusPenalty.create({ userId: u._id, storeId: u.storeId, kind, date, month, amountVnd, content, attendanceId, createdBy: actor.name });
+      await audit(actor, "bonusPenalty.create", { type: "BonusPenalty", id: String(bp._id) }, null, { userId: String(u._id), kind, amountVnd, content, date, batch: users.length > 1 ? users.length : undefined });
+    }
     revalidatePath("/admin/bonus-penalty");
     return { ok: true };
   } catch (e) {
@@ -373,8 +382,8 @@ export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<Fo
     if (!DATE_RE.test(date)) return { error: "Ngày không hợp lệ" };
     if (amountVnd <= 0) return { error: "Số tiền phải > 0" };
     if (content.length < 3) return { error: "Nhập nội dung" };
-    await assertNotLocked(bp.storeId, bp.month); // tháng cũ
-    await assertNotLocked(bp.storeId, date.slice(0, 7)); // tháng mới (nếu đổi ngày)
+    await assertNotLocked(bp.storeId, bp.month, bp.userId); // tháng cũ
+    await assertNotLocked(bp.storeId, date.slice(0, 7), bp.userId); // tháng mới (nếu đổi ngày)
     const before = bp.toObject();
     bp.set({ kind: str(fd.get("kind")) === "BONUS" ? "BONUS" : "PENALTY", date, month: date.slice(0, 7), amountVnd, content });
     await bp.save();
@@ -391,7 +400,7 @@ export async function deleteBonusPenalty(_: FormState, fd: FormData): Promise<Fo
     const admin = await assertAdmin();
     const bp = await BonusPenalty.findById(str(fd.get("id")));
     if (!bp) return { error: "Không tìm thấy" };
-    await assertNotLocked(bp.storeId, bp.month);
+    await assertNotLocked(bp.storeId, bp.month, bp.userId);
     await audit(adminActor(admin), "bonusPenalty.delete", { type: "BonusPenalty", id: String(bp._id) }, bp.toObject(), null);
     await bp.deleteOne();
     revalidatePath("/admin/bonus-penalty");
@@ -411,7 +420,7 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
     const month = str(fd.get("month"));
     if (op === "generate") {
       const p = await generatePayroll(storeId, month);
-      if (p.status !== "DRAFT") return { error: "Bảng lương đã công bố – mở khoá nếu cần tính lại" };
+      if (p.status === "PAID") return { error: "Bảng lương đã trả – mở khoá (nhập lý do) nếu cần tính lại" };
       await audit(actor, "payroll.generate", { type: "Payroll", id: String(p._id) });
     } else if (op === "publish") {
       const tz = await storeTz(storeId);
@@ -422,14 +431,62 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
       if (!r) return { error: "Bảng lương không ở trạng thái nháp" };
       await audit(actor, "payroll.publish", { type: "Payroll", id: String(p._id) });
     } else if (op === "paid") {
-      await Payroll.updateOne({ storeId, month, status: "PUBLISHED" }, { $set: { status: "PAID", paidAt: new Date() } });
+      // trả hết: tính lại lần cuối → khoá mọi dòng chưa trả + cả bảng
+      const p = await Payroll.findOne({ storeId, month });
+      if (!p || p.status === "PAID") return { error: "Bảng lương đã trả / chưa có" };
+      await generatePayroll(storeId, month);
+      const now = new Date();
+      await PayrollItem.updateMany({ payrollId: p._id, paidAt: null }, { $set: { paidAt: now, paidBy: actor.name } });
+      await Payroll.updateOne({ _id: p._id }, { $set: { status: "PAID", paidAt: now, ...(p.publishedAt ? {} : { publishedAt: now, publishedBy: actor.name }) } });
       await audit(actor, "payroll.paid", { type: "Payroll", id: `${storeId}:${month}` });
     } else if (op === "unlock") {
+      // mở khoá cả bảng: bỏ "đã trả" mọi dòng, bảng về "Đã công bố" (nhân viên vẫn xem được), tự tính lại
       const reason = str(fd.get("reason"));
       if (reason.length < 3) return { error: "Nhập lý do mở khoá" };
-      await Payroll.updateOne({ storeId, month }, { $set: { status: "DRAFT", unlockedAt: new Date() }, $unset: { publishedAt: 1, paidAt: 1 } });
+      const p = await Payroll.findOne({ storeId, month });
+      if (!p) return { error: "Chưa có bảng lương" };
+      await PayrollItem.updateMany({ payrollId: p._id }, { $unset: { paidAt: 1, paidBy: 1 } });
+      await Payroll.updateOne({ _id: p._id }, { $set: { status: "PUBLISHED", unlockedAt: new Date() }, $unset: { paidAt: 1 } });
       await audit(actor, "payroll.unlock", { type: "Payroll", id: `${storeId}:${month}` }, null, { reason });
+    } else if (op === "unpublish") {
+      // ẩn bảng lương khỏi nhân viên (không tự công bố lại ngày 5)
+      const reason = str(fd.get("reason"));
+      await Payroll.updateOne({ storeId, month, status: "PUBLISHED" }, { $set: { status: "DRAFT", unlockedAt: new Date() }, $unset: { publishedAt: 1 } });
+      await audit(actor, "payroll.unpublish", { type: "Payroll", id: `${storeId}:${month}` }, null, { reason });
     }
+    revalidatePath("/admin/payroll");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Từng nhân viên: "Đã trả" → khoá dòng lương của người đó; "Mở khoá" (bắt buộc lý do) → tính lại được. */
+export async function payrollItemAction(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertPerm("payroll");
+    const actor = adminActor(admin);
+    const item = await PayrollItem.findById(str(fd.get("itemId")));
+    if (!item) return { error: "Không tìm thấy dòng lương" };
+    const p = await Payroll.findById(item.payrollId);
+    if (!p) return { error: "Không tìm thấy bảng lương" };
+    const op = str(fd.get("op"));
+    if (op === "paid") {
+      if (item.paidAt) return { error: "Đã đánh dấu trả rồi" };
+      await generatePayroll(String(p.storeId), p.month); // chốt số mới nhất trước khi khoá
+      await PayrollItem.updateOne({ _id: item._id, paidAt: null }, { $set: { paidAt: new Date(), paidBy: actor.name } });
+      // trả đủ mọi người → cả bảng "Đã trả"
+      if (!(await PayrollItem.exists({ payrollId: p._id, paidAt: null })))
+        await Payroll.updateOne({ _id: p._id }, { $set: { status: "PAID", paidAt: new Date(), ...(p.publishedAt ? {} : { publishedAt: new Date(), publishedBy: actor.name }) } });
+      await audit(actor, "payroll.item.paid", { type: "PayrollItem", id: String(item._id) }, null, { userId: String(item.userId), month: p.month, netPay: item.netPay });
+    } else if (op === "unpaid") {
+      const reason = str(fd.get("reason"));
+      if (reason.length < 3) return { error: "Nhập lý do mở khoá" };
+      await PayrollItem.updateOne({ _id: item._id }, { $unset: { paidAt: 1, paidBy: 1 } });
+      if (p.status === "PAID") await Payroll.updateOne({ _id: p._id }, { $set: { status: "PUBLISHED", unlockedAt: new Date() }, $unset: { paidAt: 1 } });
+      await generatePayroll(String(p.storeId), p.month);
+      await audit(actor, "payroll.item.unlock", { type: "PayrollItem", id: String(item._id) }, null, { userId: String(item.userId), month: p.month, reason });
+    } else return { error: "Thao tác không hợp lệ" };
     revalidatePath("/admin/payroll");
     return { ok: true };
   } catch (e) {
@@ -536,7 +593,7 @@ export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<
     const lockedMonths = new Set<string>();
     for (const a of list) {
       try {
-        await assertNotLocked(payStoreOf(a), a.month);
+        await assertNotLocked(payStoreOf(a), a.month, a.userId);
       } catch {
         lockedMonths.add(a.month);
         continue;

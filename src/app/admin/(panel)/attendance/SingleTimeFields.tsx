@@ -46,7 +46,7 @@ export default function SingleTimeFields({ templates }: { templates: Tpl[] }) {
           {tpl && (
             <p className="text-xs text-ink/70">
               Ghi nhận: vào <b>{tpl.startTime}</b>
-              {onlyIn ? " · chưa check-out" : <> · ra <b>{tpl.endTime}</b></>}
+              {onlyIn ? " · chưa check-out" : <> · ra <b>{tpl.endTime}</b> (nếu ca chưa kết thúc → chỉ ghi check-in, nhân viên tự check-out khi về)</>}
             </p>
           )}
           <input type="hidden" name="inTime" value={tpl?.startTime ?? ""} />

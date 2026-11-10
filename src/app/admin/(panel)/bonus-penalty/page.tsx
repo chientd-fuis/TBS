@@ -8,6 +8,8 @@ import { MonthPicker } from "@/components/MonthPicker";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
 import { createBonusPenalty, deleteBonusPenalty, updateBonusPenalty } from "../../actions/ops";
 import KindTabs from "./KindTabs";
+import StaffMultiPick from "./StaffMultiPick";
+import Modal from "@/components/Modal";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 
 export const dynamic = "force-dynamic";
@@ -65,21 +67,20 @@ export default async function BonusPenaltyPage({
       </Card>
 
       <div id="form" className="grid gap-4 lg:grid-cols-3">
-        <Card title="Thêm thưởng / phạt">
+        <Card title="Thêm thưởng / phạt (1 hoặc nhiều người)">
           {locked ? (
-            <Alert tone="yellow">🔒 Tháng {month} đã chốt bảng lương.</Alert>
+            <Alert tone="yellow">🔒 Đã trả lương tháng {month} – mở khoá ở Bảng lương để thêm.</Alert>
           ) : (
             <ActionForm action={createBonusPenalty} submitLabel="Thêm" successText="Đã thêm">
               <input type="hidden" name="attendanceId" value={sp.att || ""} />
               <KindTabs defaultValue={sp.att ? "PENALTY" : "BONUS"} />
-              <Field label="Nhân viên">
-                <Select name="userId" defaultValue={sp.user || ""} required>
-                  <option value="">— Chọn —</option>
-                  {staff.map((u) => <option key={String(u._id)} value={String(u._id)}>{u.name}</option>)}
-                </Select>
-              </Field>
+              <StaffMultiPick
+                key={`${store?._id}|${sp.user ?? ""}`}
+                staff={staff.map((u) => ({ id: String(u._id), name: u.name || "?", inactive: u.status !== "ACTIVE" }))}
+                defaultIds={sp.user ? [sp.user] : []}
+              />
               <Field label="Ngày áp dụng"><Input type="date" name="date" defaultValue={sp.date || localDate(new Date(), tz)} required /></Field>
-              <Field label="Số tiền (VND)"><Input name="amountVnd" inputMode="numeric" placeholder="VD: 50000" required autoFocus={!!sp.att} /></Field>
+              <Field label="Số tiền (VND) – mỗi người"><Input name="amountVnd" inputMode="numeric" placeholder="VD: 50000" required autoFocus={!!sp.att} /></Field>
               <Field label="Nội dung">
                 <Input name="content" list="bp-suggest" defaultValue={sp.content || ""} required />
               </Field>
@@ -107,18 +108,15 @@ export default async function BonusPenaltyPage({
                       <td>
                         {!locked && (
                           <div className="flex items-start gap-1">
-                            <details className="text-xs">
-                              <summary className="cursor-pointer rounded-lg px-2 py-2 font-semibold text-accent hover:bg-primary-light">Sửa</summary>
-                              <div className="absolute z-10 mt-1 w-72 rounded-xl bg-white p-3 shadow-lg ring-1 ring-[#f1e6c8]">
-                                <ActionForm action={updateBonusPenalty} submitLabel="Lưu">
-                                  <input type="hidden" name="id" value={String(b._id)} />
-                                  <KindTabs defaultValue={b.kind as "BONUS" | "PENALTY"} size="sm" />
-                                  <Input type="date" name="date" defaultValue={b.date} />
-                                  <Input name="amountVnd" defaultValue={b.amountVnd} inputMode="numeric" />
-                                  <Input name="content" defaultValue={b.content} />
-                                </ActionForm>
-                              </div>
-                            </details>
+                            <Modal label="Sửa" title={`Sửa ${b.kind === "BONUS" ? "thưởng" : "phạt"} – ${name.get(String(b.userId)) ?? ""}`}>
+                              <ActionForm action={updateBonusPenalty} submitLabel="Lưu">
+                                <input type="hidden" name="id" value={String(b._id)} />
+                                <KindTabs defaultValue={b.kind as "BONUS" | "PENALTY"} size="sm" />
+                                <Field label="Ngày áp dụng"><Input type="date" name="date" defaultValue={b.date} /></Field>
+                                <Field label="Số tiền (VND)"><Input name="amountVnd" defaultValue={b.amountVnd} inputMode="numeric" /></Field>
+                                <Field label="Nội dung"><Input name="content" defaultValue={b.content} /></Field>
+                              </ActionForm>
+                            </Modal>
                             <ActionForm action={deleteBonusPenalty} submitLabel="Xoá" variant="ghost" successText="" confirm="Xoá khoản này?">
                               <input type="hidden" name="id" value={String(b._id)} />
                             </ActionForm>

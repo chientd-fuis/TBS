@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
-import { APPROVED_SHIFT, Attendance, Payroll, ShiftAssignment, Store, type AttendanceDoc } from "./models";
+import { APPROVED_SHIFT, Attendance, Payroll, ShiftAssignment, Store, type AttendanceDoc, PayrollItem } from "./models";
 import { getSettings } from "./settings";
 import { addDays, DEFAULT_TZ, localDate, localMonth, localTime, zonedToDate } from "./time";
 import { earlyMinutesInBlock, lateMinutes, mergeShiftBlock, roundedHours, totalHours, type Segment } from "./calc";
@@ -145,15 +145,22 @@ export function payStoreFilter(storeId: Id) {
 }
 
 /** Tháng đã khoá (bảng lương đã công bố / đã trả) → không cho sửa. */
-export async function isMonthLocked(storeId: Id, month: string) {
+/**
+ * Tháng bị khoá khi ĐÃ TRẢ LƯƠNG: cả bảng lương "Đã trả", hoặc (có userId) dòng lương của nhân viên đó đã bấm "Đã trả".
+ * Công bố KHÔNG khoá – bảng lương vẫn tự tính lại tới khi trả.
+ */
+export async function isMonthLocked(storeId: Id, month: string, userId?: Id | null) {
   await connectDB();
   const p = await Payroll.findOne({ storeId, month }).select("status").lean();
-  return !!p && p.status !== "DRAFT";
+  if (!p) return false;
+  if (p.status === "PAID") return true;
+  if (!userId) return false;
+  return !!(await PayrollItem.exists({ payrollId: p._id, userId, paidAt: { $ne: null } }));
 }
 
-export async function assertNotLocked(storeId: Id, month: string) {
-  if (await isMonthLocked(storeId, month))
-    throw new Error(`Tháng ${month} đã chốt bảng lương – cần mở khoá bảng lương trước khi sửa`);
+export async function assertNotLocked(storeId: Id, month: string, userId?: Id | null) {
+  if (await isMonthLocked(storeId, month, userId))
+    throw new Error(`Tháng ${month} đã trả lương${userId ? " cho nhân viên này" : ""} – cần mở khoá ở Bảng lương (nhập lý do) trước khi sửa`);
 }
 
 export async function openAttendance(userId: Id) {

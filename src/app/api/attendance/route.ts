@@ -161,7 +161,7 @@ export async function POST(req: Request) {
         throw new HttpError(400, `Bạn vừa check-in lúc ${localTime(open.checkInAt, tz)} – chưa thể check-out ngay.`, {
           code: "TOO_SOON",
         });
-      await assertNotLocked(payStoreOf(open), open.month);
+      await assertNotLocked(payStoreOf(open), open.month, open.userId);
       const photo = photoBuf
         ? await savePhoto(photoBuf, {
             storeId: String(store._id),
@@ -237,7 +237,7 @@ export async function POST(req: Request) {
     }
 
     // ---- CHECK-IN ----
-    await assertNotLocked(home._id, localMonth(now, tz)); // bảng lương ở cơ sở gốc
+    await assertNotLocked(home._id, localMonth(now, tz), user._id); // bảng lương ở cơ sở gốc
     const shift = await findShiftFor(user._id, now, tz, store._id);
     const id = new Types.ObjectId();
     const photo = photoBuf

@@ -61,10 +61,14 @@ export async function upsertAttendance(
   let checkOutAt: Date | null = opts.outTime ? zonedToDate(opts.date, opts.outTime, tz) : (existing?.checkOutAt ?? null);
   if (checkOutAt && checkOutAt <= checkInAt) checkOutAt = new Date(checkOutAt.getTime() + 24 * 3600_000); // qua đêm
   if (checkOutAt && checkOutAt.getTime() - checkInAt.getTime() > 24 * 3600_000) throw new Error("Lượt làm việc không quá 24 giờ");
+  // giờ ra chưa tới (VD 9h chấm hộ ca 8h–13h, lấy giờ theo ca) → nhân viên đang trong ca:
+  // chỉ ghi check-in lúc 8h, nhân viên tự bấm CHECK-OUT khi về (không ghi trước giờ ra 13h)
+  if (checkOutAt && checkOutAt.getTime() > Date.now() + 60_000) checkOutAt = null;
+  if (checkInAt.getTime() > Date.now() + 5 * 60_000 && !checkOutAt) throw new Error("Giờ vào chưa tới – chưa chấm hộ trước được");
 
   const month = localMonth(checkInAt, tz);
-  await assertNotLocked(homeStoreId, month); // khoá theo bảng lương cơ sở gốc
-  if (existing && existing.month !== month) await assertNotLocked(homeStoreId, existing.month);
+  await assertNotLocked(homeStoreId, month, opts.userId); // khoá theo bảng lương cơ sở gốc
+  if (existing && existing.month !== month) await assertNotLocked(homeStoreId, existing.month, opts.userId);
 
   // luôn tìm lại ca theo giờ vào mới (sửa ngày/giờ thì ca cũ có thể không còn đúng)
   const shift = await findShiftFor(opts.userId, checkInAt, tz, storeId);
