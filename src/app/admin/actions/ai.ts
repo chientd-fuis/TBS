@@ -7,6 +7,7 @@ import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
 import { AI_FEATURES, AI_MODELS, AI_ROLES, getAiConfig, type AiConfig, aiRemaining } from "@/lib/ai";
 import { errMsg, num, str, type FormState } from "./types";
+import { geminiModels } from "@/lib/ocr";
 import { runAnomaly } from "@/lib/anomaly";
 import { Types } from "mongoose";
 import { HISTORY_WEEKS, loadForecast } from "@/lib/forecast";
@@ -320,5 +321,21 @@ export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean
   } catch (e) {
     console.error("[ai] executeAskProposal", e);
     return { error: (e as Error).message || "Lỗi hệ thống" };
+  }
+}
+
+/** Hạn mức lượt miễn phí / ngày của từng model (Admin Tổng chép từ AI Studio → Rate limits). */
+export async function saveFreeLimits(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const owner = await assertOwner();
+    await connectDB();
+    const models = [...new Set([...geminiModels(), ...AI_MODELS.map((m) => m.key).filter(Boolean)])];
+    const freeRpd = Object.fromEntries(models.map((m) => [m, Math.max(0, Math.round(num(fd.get(`rpd_${m}`), 0)))]).filter(([, v]) => (v as number) > 0));
+    await Settings.updateOne({ key: "main" }, { $set: { "ai.freeRpd": freeRpd } });
+    await audit(adminActor(owner), "ai.settings", { type: "Settings", id: "ai.freeRpd" }, null, freeRpd);
+    revalidatePath("/admin/settings/ai");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
   }
 }

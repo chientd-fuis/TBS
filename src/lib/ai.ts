@@ -68,6 +68,8 @@ export type AssistantContent = { rules: string; storage: string; ingredient: str
 export type AnomalyCfg = { negDiff: number; negRepeat: number; ketFactor: number; lateCloseMin: number; telegram: boolean };
 export type AiConfig = {
   enabled: boolean;
+  /** lượt miễn phí / ngày / key của từng model (theo AI Studio → Rate limits). 0 / thiếu = chưa nhập */
+  freeRpd: Record<string, number>;
   monthlyTokens: number;
   warnPct: number;
   features: Record<AiFeatureKey, AiFeatureCfg>;
@@ -108,6 +110,11 @@ export function mergeAiConfig(raw: unknown): AiConfig {
   ) as Record<AiFeatureKey, AiFeatureCfg>;
   return {
     enabled: r.enabled !== false,
+    freeRpd: Object.fromEntries(
+      Object.entries((r.freeRpd && typeof r.freeRpd === "object" ? r.freeRpd : {}) as Record<string, unknown>)
+        .map(([m, v]) => [m, Math.max(0, Math.round(Number(v) || 0))])
+        .filter(([, v]) => (v as number) > 0),
+    ),
     monthlyTokens: Number.isFinite(r.monthlyTokens) ? Math.max(0, Number(r.monthlyTokens)) : 3_000_000,
     warnPct: Number.isFinite(r.warnPct) ? Number(r.warnPct) : 80,
     features,

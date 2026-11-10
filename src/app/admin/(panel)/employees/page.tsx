@@ -7,6 +7,7 @@ import { Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/component
 import { ActionForm } from "@/components/ActionForm";
 import { createOfflineStaff } from "../../actions/people";
 import EditEmployeeButton from "./EditEmployeeButton";
+import EmployeeColumns from "./EmployeeColumns";
 import { localDate } from "@/lib/time";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 
@@ -54,6 +55,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
         {users.length === 0 ? (
           <Empty>Không có nhân viên</Empty>
         ) : (
+          <EmployeeColumns>
           <div className="overflow-x-auto">
             <table className="tbs">
               <thead><tr><th>Họ tên</th><th>Email</th><th>SĐT</th><th>Cơ sở</th><th className="text-right">Lương giờ</th><th>Trạng thái</th><th></th></tr></thead>
@@ -75,6 +77,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
               </tbody>
             </table>
           </div>
+          </EmployeeColumns>
         )}
       </Card>
       <Card title="➕ Thêm nhân viên không có tài khoản (VD đã nghỉ việc)">

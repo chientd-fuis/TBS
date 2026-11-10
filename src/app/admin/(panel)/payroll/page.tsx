@@ -113,7 +113,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
       >
         {payroll?.status === "DRAFT" && (
           <Alert tone="yellow">
-            Chưa công bố – nhân viên chưa xem được. Tự công bố lúc <b>00:00 ngày 5</b> tháng sau{payroll.unlockedAt ? " (đã huỷ công bố thủ công → không tự công bố lại)" : ""}. Bảng lương tự tính theo chấm công, thưởng phạt mới nhất · cập nhật {viDateTime(payroll.calculatedAt)}.
+            Chưa công bố – nhân viên chưa xem được{items.some((x) => x.publishedAt) ? ` (trừ ${items.filter((x) => x.publishedAt).length} người đã công bố riêng)` : ""}. Cần cho riêng ai xem trước → bấm “👁 Công bố riêng” ở dòng người đó. Tự công bố lúc <b>00:00 ngày 5</b> tháng sau{payroll.unlockedAt ? " (đã huỷ công bố thủ công → không tự công bố lại)" : ""}. Bảng lương tự tính theo chấm công, thưởng phạt mới nhất · cập nhật {viDateTime(payroll.calculatedAt)}.
           </Alert>
         )}
         {payroll?.status === "PUBLISHED" && (
@@ -172,6 +172,24 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                       <td className="text-right text-base font-bold">{vnd(i.netPay)}</td>
                       <td className="text-xs">{bankName}<br /><CopyAccount account={bankAcc} /></td>
                       <td className="whitespace-nowrap text-xs">
+                        {payroll.status === "DRAFT" && !paid && (
+                          <div className="mb-1">
+                            {i.publishedAt ? (
+                              <div className="flex items-center gap-1">
+                                <span title={`Công bố riêng lúc ${viDateTime(i.publishedAt)}${i.publishedBy ? ` · ${i.publishedBy}` : ""}`}><Badge tone="green">👁 NV đã xem được</Badge></span>
+                                <ActionForm action={payrollItemAction} submitLabel="Ẩn" variant="ghost" successText="" className="inline-block" buttonClassName="!px-1.5 !py-0.5 text-xs">
+                                  <input type="hidden" name="itemId" value={String(i._id)} />
+                                  <input type="hidden" name="op" value="unpublish" />
+                                </ActionForm>
+                              </div>
+                            ) : (
+                              <ActionForm action={payrollItemAction} submitLabel="👁 Công bố riêng" variant="outline" successText="" className="inline-block" buttonClassName="!px-2 !py-1 text-xs" confirm={`Cho ${name} xem lương tháng ${viMonth(month)}? Sửa tiếp thì ${name} thấy luôn số mới.`}>
+                                <input type="hidden" name="itemId" value={String(i._id)} />
+                                <input type="hidden" name="op" value="publish" />
+                              </ActionForm>
+                            )}
+                          </div>
+                        )}
                         {paid ? (
                           <div className="space-y-1">
                             <Badge tone="green">🔒 Đã trả</Badge>

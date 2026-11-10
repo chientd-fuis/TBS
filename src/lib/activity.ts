@@ -51,6 +51,8 @@ const A: Record<string, [ActivityGroup, string]> = {
   "payroll.paid": ["payroll", "Đánh dấu đã trả lương"],
   "payroll.unlock": ["payroll", "Mở khoá bảng lương"],
   "payroll.item.extras": ["payroll", "Sửa phụ cấp / ghi chú lương"],
+  "payroll.item.publish": ["payroll", "Công bố lương riêng 1 nhân viên"],
+  "payroll.item.unpublish": ["payroll", "Ẩn lương riêng 1 nhân viên"],
   "feedback.reply": ["payroll", "Trả lời phản hồi lương"],
   "closing.revenue.edit": ["revenue", "Sửa doanh thu chốt ca"],
   "closing.delete": ["revenue", "Xoá lượt chốt ca"],

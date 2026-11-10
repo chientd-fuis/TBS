@@ -1,11 +1,12 @@
 import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
-import { CashTransfer, Expense, ShiftClosing, Store } from "@/lib/models";
+import { CashTransfer, Expense, Payroll, PayrollItem, ShiftClosing, Store, User } from "@/lib/models";
 import { dayRevenueFromClosings } from "@/lib/revenue";
 import {
   CASH_KINDS,
   cashBalance,
   cashKindOf,
+  payrollEntries,
   type CashSide,
 } from "@/lib/cashbook";
 import { localDate } from "@/lib/time";
@@ -28,17 +29,33 @@ export default async function CashbookPage() {
   const admin = await requirePerm("finance.cashbook");
   const owner = admin.kind === "OWNER";
   await connectDB();
-  const [stores, closings, bills, all] = await Promise.all([
+  const [stores, closings, bills, all, payrolls, payItems] = await Promise.all([
     Store.find().select("name").lean(),
     ShiftClosing.find({ "revenue.tm": { $ne: null } })
       .select("storeId workDate shiftName createdAt revenue")
       .lean(),
-    // bill Admin Tổng trả / chuyển khoản (bill lấy tiền két đã nằm trong tiền mặt chốt ca → không trừ lại)
-    Expense.find({ paidFrom: { $ne: "CASHBOX" } })
+    // bill Admin Tổng trả / chuyển khoản (bill lấy tiền két đã nằm trong tiền mặt chốt ca → không trừ lại).
+    // Bỏ bill mục "Lương" – lương đã trả lấy từ bảng lương (tránh trừ 2 lần)
+    Expense.find({ paidFrom: { $ne: "CASHBOX" }, category: { $ne: "LUONG" } })
       .select("amount")
       .lean(),
     CashTransfer.find().sort({ date: -1, createdAt: -1 }).lean(),
+    Payroll.find({ $or: [{ status: "PAID" }, { paidAt: { $ne: null } }] }).select("storeId month status paidAt").lean(),
+    PayrollItem.find({ paidAt: { $ne: null } }).select("payrollId userId userName netPay paidAt").lean(),
   ]);
+  // lương đã trả → phiếu "Thanh toán lương tháng xx" (tự sinh, trừ tài khoản)
+  const payUsers = new Map(
+    (await User.find({ _id: { $in: payItems.map((i) => i.userId) } }).select("name status").lean()).map((u) => [String(u._id), u]),
+  );
+  const storeShort = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]));
+  const pays = payrollEntries(
+    payrolls.map((p) => ({ id: String(p._id), month: p.month, store: storeShort.get(String(p.storeId)) ?? "", status: p.status, paidAt: p.paidAt })),
+    payItems.map((i) => {
+      const u = payUsers.get(String(i.userId));
+      return { payrollId: String(i.payrollId), netPay: i.netPay ?? 0, paidAt: i.paidAt, name: i.userName || u?.name || "", quit: u?.status === "INACTIVE" };
+    }),
+    (d) => localDate(d),
+  );
   // Phiếu nộp TM → TK / rút TK → TM (Admin Tổng ghi ở Doanh thu theo ngày) KHÔNG phải phiếu sổ quỹ:
   // chỉ đổi doanh thu tiền mặt / tài khoản → gộp vào dòng doanh thu, không liệt kê ở đây.
   const moves = all.filter((t) => t.kind === "TAKE" || t.kind === "ADD");
@@ -47,6 +64,7 @@ export default async function CashbookPage() {
     revenue: [...dayRevenueFromClosings(closings), ...shift.map((n) => ({ tk: n, tm: -n }))],
     bills,
     moves,
+    payroll: pays,
   });
   const nameOf = new Map(
     stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]),
@@ -63,6 +81,7 @@ export default async function CashbookPage() {
             rows={[
               ["Doanh thu tài khoản", fund.tk.revenue, 1],
               ["Bill chuyển khoản", fund.tk.bills, -1],
+              ["Thanh toán lương", fund.tk.payroll, -1],
               ["Rút lãi", fund.tk.take, -1],
               ["Bổ sung vốn", fund.tk.add, 1],
             ]}
@@ -132,6 +151,21 @@ export default async function CashbookPage() {
               </div>
             </div>
           </ActionForm>
+        )}
+        {pays.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-ink/60">Thanh toán lương – tự ghi khi bảng lương “Đã trả” (trừ tài khoản)</p>
+            <ul className="divide-y divide-[#f1e6c8] text-sm">
+              {pays.slice(0, 60).map((p, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2 py-1.5">
+                  <span className="w-20 tabular-nums">{p.date.slice(8)}/{p.date.slice(5, 7)}/{p.date.slice(2, 4)}</span>
+                  <Badge tone="red">Lương</Badge>
+                  <b className="tabular-nums">−{vnd(p.amount)}</b>
+                  <span className="min-w-0 flex-1 text-xs text-ink/60">{p.note}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {!moves.length ? (
           <p className="text-sm text-ink/50">Chưa có phiếu nào.</p>

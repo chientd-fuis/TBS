@@ -631,6 +631,9 @@ const PayrollItemSchema = new Schema(
     // đã trả lương cho nhân viên này → dòng lương + chấm công / thưởng phạt tháng này của họ bị KHOÁ (mở khoá cần lý do)
     paidAt: Date,
     paidBy: String,
+    // công bố RIÊNG cho nhân viên này (bảng còn nháp) – nhân viên xem được dòng lương của mình
+    publishedAt: Date,
+    publishedBy: String,
     // ghi chú từng lần cộng phụ cấp / tạm ứng (VD qua Trợ lý AI: "Hỗ trợ ship 31 đơn × 5k")
     extrasNotes: {
       type: [{ _id: false, field: { type: String, enum: ["allowance", "advance"] }, amount: Number, note: String, by: String, at: Date }],
@@ -766,6 +769,21 @@ const AiUsageSchema = new Schema({
 AiUsageSchema.index({ feature: 1, createdAt: -1 });
 AiUsageSchema.index({ createdAt: -1 });
 export const AiUsage = getModel("AiUsage", AiUsageSchema);
+
+/** Từng lần gọi API Gemini (để đếm lượt gói miễn phí theo key × model × ngày giờ Mỹ – xem lib/ai-free) */
+const AiCallSchema = new Schema({
+  day: { type: String, required: true }, // YYYY-MM-DD theo giờ Pacific (Google reset lượt ngày lúc 0h Pacific)
+  keyTag: String, // mã băm của API key (không lưu key)
+  model: String,
+  status: Number, // 200 OK · 429 hết lượt · 0 quá giờ · khác = lỗi
+  perDay: Boolean, // 429 do hết lượt NGÀY
+  tokens: { type: Number, default: 0 },
+  inTokens: { type: Number, default: 0 },
+  outTokens: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now, expires: 10 * 86_400 },
+});
+AiCallSchema.index({ day: 1, keyTag: 1, model: 1 });
+export const AiCall = getModel("AiCall", AiCallSchema);
 
 /** Trợ lý cửa hàng: câu hỏi của nhân viên (để admin biết câu nào chưa trả lời được). */
 const AssistantLogSchema = new Schema({

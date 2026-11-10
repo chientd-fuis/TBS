@@ -22,13 +22,14 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : prevMonth(localMonth(new Date(), tz));
   let item = await PayrollItem.findOne({ userId: user._id, month }).lean();
   let payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
-  if (payroll?.status === "PUBLISHED") {
+  if (payroll && payroll.status !== "PAID" && (payroll.status === "PUBLISHED" || item?.publishedAt)) {
     // công bố = cho xem; số luôn theo dữ liệu mới nhất (dòng đã trả giữ nguyên)
     await generatePayroll(String(payroll.storeId), month);
     item = await PayrollItem.findOne({ userId: user._id, month }).lean();
     payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
   }
-  const visible = payroll && payroll.status !== "DRAFT";
+  // cả bảng đã công bố, hoặc admin công bố riêng dòng của mình
+  const visible = payroll && (payroll.status !== "DRAFT" || !!item?.publishedAt);
   // chi tiết thưởng / phạt theo dòng lương (bảng cũ chưa có chi tiết → dữ liệu hiện tại)
   const bps: { key: string; kind?: string | null; date: string; content?: string | null; amountVnd: number; attendanceId?: unknown }[] = !visible
     ? []

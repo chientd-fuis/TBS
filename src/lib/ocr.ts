@@ -8,6 +8,7 @@ import { normalizeOcr, type Revenue } from "./revenue";
 
 import type { AiFeatureKey } from "./ai";
 import { aiGuard, recordAiUsage } from "./ai";
+import { recordAiCall } from "./ai-free";
 import { normalizeStatement } from "./finance";
 
 export type OcrResult = { values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean; provider: string };
@@ -229,8 +230,13 @@ export async function geminiGenerate(opts: {
           `${label}: đọc quá lâu`,
         );
       } catch (e) {
+        await recordAiCall(key, model, 0); // quá giờ: Google có thể vẫn tính lượt
         errors.push((e as Error).message);
         break; // quá lâu → thử model / key khác
+      }
+      {
+        const pd = !res.ok && res.status === 429 ? /PerDay/i.test(JSON.stringify(res.body)) : false;
+        await recordAiCall(key, model, res.ok ? 200 : res.status, res.body, pd);
       }
       if (res.ok) {
         await record(res.body, model);

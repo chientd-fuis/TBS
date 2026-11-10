@@ -2,12 +2,13 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/guards";
 import { AiUsage, AssistantLog, User } from "@/lib/models";
 import { AI_FEATURES, AI_MODELS, AI_ROLES, UNIT_LABEL, aiUsageStats, getAiConfig, monthTokens } from "@/lib/ai";
-import { geminiKeys } from "@/lib/ocr";
+import { geminiKeys, geminiModels } from "@/lib/ocr";
+import { freeUsageToday, keyTag, nextResetVi } from "@/lib/ai-free";
 import { storeManagers } from "@/lib/assistant";
 import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Field, Input, PageTitle, Select, Textarea } from "@/components/ui";
-import { regenRulesSummary, saveAiSettings, saveAssistantContent, saveRulesSummary } from "../../../actions/ai";
+import { regenRulesSummary, saveAiSettings, saveAssistantContent, saveFreeLimits, saveRulesSummary } from "../../../actions/ai";
 import RulesView from "@/components/RulesView";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ const FEATURE_LABEL = Object.fromEntries(AI_FEATURES.map((f) => [f.key, f.label]
 /** Cài đặt AI (Admin Tổng): bật/tắt + giới hạn từng chức năng, ngân sách token, nội dung Trợ lý cửa hàng, ngưỡng bất thường. */
 export default async function AiSettingsPage() {
   await requireOwner();
-  const [cfg, used, stats, recent, missing, managers] = await Promise.all([
+  const [cfg, used, stats, recent, missing, managers, free] = await Promise.all([
     getAiConfig(),
     monthTokens(),
     aiUsageStats(),
@@ -30,7 +31,14 @@ export default async function AiSettingsPage() {
       { $limit: 15 },
     ]),
     storeManagers(),
+    freeUsageToday(),
   ]);
+  // gói miễn phí: key (project) × model, theo ngày giờ Mỹ
+  const keyList = geminiKeys().map((k, i) => ({ tag: keyTag(k), label: `Key ${i + 1}` }));
+  const models = [...new Set([...geminiModels(), ...free.map((f) => f.model)])];
+  const freeRows = keyList.flatMap((k) =>
+    models.map((m) => ({ ...(free.find((f) => f.keyTag === k.tag && f.model === m) ?? { used: 0, errors: 0, tokens: 0, lastMin: 0, blockedToday: false }), key: k.label, model: m })),
+  );
   const pct = cfg.monthlyTokens ? Math.min(100, Math.round((used / cfg.monthlyTokens) * 100)) : 0;
   const userIds = recent.filter((r) => r.actor?.startsWith("user:")).map((r) => r.actor!.slice(5));
   const names = new Map((await User.find({ _id: { $in: userIds } }).select("name").lean()).map((u) => [`user:${u._id}`, u.name]));
@@ -63,6 +71,49 @@ export default async function AiSettingsPage() {
           <p className="mt-1 text-xs text-ink/60">Hết ngân sách / tắt AI: vẫn giữ “Đọc ảnh tờ chốt ca” để nhân viên chốt ca được.</p>
         </Card>
       </div>
+
+      <Card title={`Gói miễn phí Gemini hôm nay · reset ${nextResetVi()}`}>
+        <p className="mb-2 text-xs text-ink/60">
+          Google tính lượt miễn phí theo <b>từng key (project) × từng model × ngày giờ Mỹ</b> (reset 0h Pacific). Mỗi lần gọi đều tính 1 lượt – kể cả lần thử lại, chuyển model dự phòng, lỗi; chỉ lần bị từ chối vì hết lượt là không tính.
+          Hạn mức free Google đổi liên tục → mở <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="underline">AI Studio</a> (mục Usage / Rate limits của từng project) chép số “RPD” của từng model vào ô bên dưới.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="tbs text-sm">
+            <thead>
+              <tr><th>Key</th><th>Model</th><th className="text-right">Đã gọi</th><th className="text-right">Còn free</th><th className="text-right">1 phút qua</th><th className="text-right">Token</th><th></th></tr>
+            </thead>
+            <tbody>
+              {freeRows.map((r) => {
+                const lim = cfg.freeRpd[r.model] ?? 0;
+                const left = lim ? Math.max(0, lim - r.used) : null;
+                return (
+                  <tr key={`${r.key}|${r.model}`} className={r.used || r.blockedToday ? "" : "text-ink/50"}>
+                    <td>{r.key}</td>
+                    <td className="text-xs">{r.model}</td>
+                    <td className="text-right tabular-nums">{r.used}{lim ? ` / ${lim}` : ""}{r.errors ? <span className="block text-[11px] text-warn">{r.errors} lần lỗi</span> : null}</td>
+                    <td className="text-right font-semibold tabular-nums">{r.blockedToday ? <span className="text-danger">hết</span> : left == null ? <span className="font-normal text-ink/40">?</span> : <span className={left <= Math.ceil(lim * 0.1) ? "text-danger" : "text-secondary-dark"}>{left}</span>}</td>
+                    <td className="text-right tabular-nums">{r.lastMin}</td>
+                    <td className="text-right tabular-nums">{fmt(r.tokens)}</td>
+                    <td className="text-xs">{r.blockedToday && <Badge tone="red">Google báo hết lượt ngày</Badge>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <ActionForm action={saveFreeLimits} submitLabel="Lưu hạn mức" successText="Đã lưu" variant="outline" className="mt-3 space-y-2">
+          <div className="flex flex-wrap gap-3">
+            {models.map((m) => (
+              <Field key={m} label={`${m} – lượt free / ngày`}>
+                <Input name={`rpd_${m}`} defaultValue={cfg.freeRpd[m] || ""} inputMode="numeric" placeholder="theo AI Studio" className="!w-36 text-right" />
+              </Field>
+            ))}
+          </div>
+        </ActionForm>
+        <p className="mt-2 text-[11px] text-ink/50">
+          Số ở đây đếm từ lúc cập nhật bản này, chỉ gồm lượt app gọi (key dùng chung chỗ khác thì AI Studio sẽ cao hơn). “Token / tháng” ở trên là ngân sách app tự đặt để kiểm soát chi phí, không phải hạn mức free của Google.
+        </p>
+      </Card>
 
       <Card title="Chức năng & giới hạn">
         <ActionForm action={saveAiSettings} submitLabel="Lưu cài đặt AI" successText="Đã lưu" className="space-y-4">

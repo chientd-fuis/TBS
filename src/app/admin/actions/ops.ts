@@ -453,7 +453,9 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
     } else if (op === "unpublish") {
       // ẩn bảng lương khỏi nhân viên (không tự công bố lại ngày 5)
       const reason = str(fd.get("reason"));
-      await Payroll.updateOne({ storeId, month, status: "PUBLISHED" }, { $set: { status: "DRAFT", unlockedAt: new Date() }, $unset: { publishedAt: 1 } });
+      const pr = await Payroll.findOneAndUpdate({ storeId, month, status: "PUBLISHED" }, { $set: { status: "DRAFT", unlockedAt: new Date() }, $unset: { publishedAt: 1 } });
+      // huỷ công bố cả bảng → bỏ luôn các dòng công bố riêng
+      if (pr) await PayrollItem.updateMany({ payrollId: pr._id }, { $unset: { publishedAt: 1, publishedBy: 1 } });
       await audit(actor, "payroll.unpublish", { type: "Payroll", id: `${storeId}:${month}` }, null, { reason });
     }
     revalidatePath("/admin/payroll");
@@ -481,6 +483,11 @@ export async function payrollItemAction(_: FormState, fd: FormData): Promise<For
       if (!(await PayrollItem.exists({ payrollId: p._id, paidAt: null })))
         await Payroll.updateOne({ _id: p._id }, { $set: { status: "PAID", paidAt: new Date(), ...(p.publishedAt ? {} : { publishedAt: new Date(), publishedBy: actor.name }) } });
       await audit(actor, "payroll.item.paid", { type: "PayrollItem", id: String(item._id) }, null, { userId: String(item.userId), month: p.month, netPay: item.netPay });
+    } else if (op === "publish" || op === "unpublish") {
+      // công bố / ẩn lẻ từng nhân viên (bảng còn nháp)
+      if (op === "publish") await PayrollItem.updateOne({ _id: item._id }, { $set: { publishedAt: new Date(), publishedBy: actor.name } });
+      else await PayrollItem.updateOne({ _id: item._id }, { $unset: { publishedAt: 1, publishedBy: 1 } });
+      await audit(actor, op === "publish" ? "payroll.item.publish" : "payroll.item.unpublish", { type: "PayrollItem", id: String(item._id) }, null, { userId: String(item.userId), month: p.month });
     } else if (op === "unpaid") {
       const reason = str(fd.get("reason"));
       if (reason.length < 3) return { error: "Nhập lý do mở khoá" };

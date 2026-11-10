@@ -32,3 +32,28 @@ test("sổ quỹ: phiếu cũ (chỉ DEPOSIT / WITHDRAW) vẫn đọc được; 
   assert.equal(f.tk.balance, -10);
   assert.equal(f.tm.balance, 0);
 });
+
+test("sổ quỹ: lương đã trả → phiếu 'Thanh toán lương tháng xx', trả lẻ NV nghỉ việc ghi riêng, trừ tài khoản", async () => {
+  const { payrollEntries } = await import("../src/lib/cashbook");
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const pays = payrollEntries(
+    [
+      { id: "p10", month: "2026-10", store: "Văn Phú", status: "PAID", paidAt: new Date("2026-11-05T03:00:00Z") },
+      { id: "p11", month: "2026-11", store: "Văn Phú", status: "DRAFT", paidAt: null },
+    ],
+    [
+      { payrollId: "p10", netPay: 5_000_000, paidAt: new Date("2026-11-05T03:00:00Z"), name: "An", quit: false },
+      { payrollId: "p10", netPay: 4_000_000, paidAt: new Date("2026-11-05T03:00:00Z"), name: "Bình", quit: false },
+      { payrollId: "p11", netPay: 1_200_000, paidAt: new Date("2026-11-10T03:00:00Z"), name: "Lan", quit: true },
+      { payrollId: "p11", netPay: 2_000_000, paidAt: null, name: "Mai", quit: false },
+    ],
+    day,
+  );
+  assert.deepEqual(pays, [
+    { date: "2026-11-10", amount: 1_200_000, note: "Thanh toán lương tháng 11/2026 cho nhân viên nghỉ việc Lan · Văn Phú" },
+    { date: "2026-11-05", amount: 9_000_000, note: "Thanh toán lương tháng 10/2026 · Văn Phú" },
+  ]);
+  const f = cashBalance({ revenue: [{ tk: 20_000_000, tm: 0 }], bills: [], moves: [], payroll: pays });
+  assert.equal(f.tk.payroll, 10_200_000);
+  assert.equal(f.tk.balance, 9_800_000);
+});
