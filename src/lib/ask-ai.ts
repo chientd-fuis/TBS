@@ -8,14 +8,14 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { APPROVED_SHIFT, Attendance, PayrollItem, ShiftAssignment, Store, User } from "./models";
 import { can } from "./permissions";
-import { addDays, localDate, localMonth, monthRange, prevMonth, weekStartOf } from "./time";
+import { addDays, localDate, localMonth, monthRange, nextMonth, prevMonth, weekStartOf } from "./time";
 import { loadHolidays } from "./holiday";
 import { geminiGenerate } from "./ocr";
 import type { AdminSession } from "./admin-session";
 import { loadWeek } from "./schedule-data";
 import { slotLevel, targetFor } from "./schedule";
 import { loadDayRevenue } from "./finance-data";
-import { amountOf, applyPick, calcInText, extraKindInText, moneyInText, monthInText, timesInText, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
+import { amountOf, applyPick, calcInText, dateInText, extraKindInText, moneyInText, monthInText, timesInText, WRITE_TOOLS, type ActArgs, type AskCard, type PersonChoice } from "./ask-actions";
 import { foldVi } from "./finance";
 import { OFFTOPIC_QUIPS, pickQuip } from "./ai-quips";
 
@@ -238,7 +238,8 @@ export const TOOLS: Tool[] = [
 ];
 
 /** Tên chưa chắc → danh sách để admin bấm; bấm thì gửi lại `pick` (tool + args + tên cần thay) kèm id người đã chọn. */
-export type AskPick = { tool: string; args: Args; forName: string };
+/** kind "month": nút chọn là tháng (id = "YYYY-MM") thay vì nhân viên */
+export type AskPick = { tool: string; args: Args; forName: string; kind?: "month" };
 export type AskResult = { answer: string; tool?: string; denied?: boolean; card?: AskCard; choices?: PersonChoice[]; pick?: AskPick };
 
 /**
@@ -259,7 +260,11 @@ export async function askData(admin: AdminSession, question: string, picked?: As
   const actor = `admin:${admin.accountId ?? "owner"}`;
   const nonce = randomUUID().slice(0, 8);
   const plan = picked
-    ? { tool: picked.tool, args: applyPick(picked.args ?? {}, picked.forName, picked.userId) as Args, reply: null }
+    ? {
+        tool: picked.tool,
+        args: (picked.kind === "month" ? { ...picked.args, month: picked.userId } : applyPick(picked.args ?? {}, picked.forName, picked.userId)) as Args,
+        reply: null,
+      }
     : ((await geminiGenerate({
     feature: "ask",
     actor,
@@ -323,17 +328,37 @@ ${q.replace(/<<<|>>>/g, "")}
       if (calc) Object.assign(args, { calc, amount: null });
       else if (m) Object.assign(args, { amount: m, calc: null });
     }
-    // tạm ứng / phụ cấp: tháng + loại khoản theo câu chữ (AI hay bỏ trống tháng → rơi về tháng hiện tại, nhầm phụ cấp thành tạm ứng)
+    // THỜI GIAN theo câu chữ, không tin AI (AI hay tự điền tháng / ngày hiện tại dù câu ghi "tháng 10", "30/10").
+    // Câu không ghi thời gian → hỏi lại tháng (nút chọn), không tự rơi vào tháng hiện tại.
+    if (act.key === "payroll_extra" || act.key === "bonus_penalty" || act.key === "set_wage") {
+      const wage = act.key === "set_wage";
+      // bấm chọn người sau khi đã chọn tháng → dùng lại tháng / ngày đã chốt ở lượt trước (đã nằm trong args)
+      const prior = !!picked && picked.kind !== "month";
+      const date = dateInText(q, ctx.today) ?? (prior && act.key !== "payroll_extra" && /^\d{4}-\d{2}-\d{2}$/.test(String(args.date ?? "")) ? args.date! : null);
+      const month = picked?.kind === "month" ? String(args.month) : (monthInText(q, ctx.today, !wage) ?? (prior && isMonth(args.month) ? args.month! : null));
+      if (!date && !month) {
+        const cur = localMonth(new Date());
+        // lương mới: hiệu lực từ đầu tháng (tháng sau / này / trước); tạm ứng, phụ cấp, thưởng phạt: tháng này + 3 tháng trước
+        const months = wage ? [nextMonth(cur), cur, prevMonth(cur)] : [cur, prevMonth(cur), prevMonth(prevMonth(cur)), prevMonth(prevMonth(prevMonth(cur)))];
+        const tag = (mo: string) => (mo === cur ? "tháng này" : mo === prevMonth(cur) ? "tháng trước" : mo === nextMonth(cur) ? "tháng sau" : "");
+        const choices: PersonChoice[] = months.map((mo) => ({ id: mo, name: `${wage ? "Từ 01/" : "Tháng "}${mo.slice(5)}/${mo.slice(0, 4)}`, store: tag(mo) }));
+        const what = wage ? "Lương giờ mới áp dụng từ tháng nào?" : act.key === "bonus_penalty" ? "Thưởng / phạt này tính vào tháng nào?" : "Bạn muốn cập nhật vào bảng lương tháng nào?";
+        return { answer: what, tool: act.key, choices, pick: { tool: act.key, args, forName: "", kind: "month" } };
+      }
+      if (act.key === "payroll_extra") args.month = month ?? date!.slice(0, 7);
+      else if (date) args.date = date;
+      // thưởng / phạt chỉ ghi tháng: tháng này → hôm nay, tháng cũ → ngày cuối tháng đó; lương mới → ngày 01
+      else args.date = wage ? monthRange(month!).first : month === ctx.today.slice(0, 7) ? ctx.today : monthRange(month!).last;
+    }
+    // tạm ứng / phụ cấp: loại khoản theo câu chữ (AI hay nhầm phụ cấp thành tạm ứng)
     if (act.key === "payroll_extra") {
-      const month = monthInText(q, ctx.today);
-      if (month && !isMonth(args.month)) args.month = month;
       const kind = extraKindInText(q);
       if (kind) args.kind = kind;
     }
-    // đổi lương "từ tháng 11" mà AI bỏ trống ngày hiệu lực → ngày 01 tháng đó
-    if (act.key === "set_wage" && !/^\d{4}-\d{2}-\d{2}$/.test(String(args.date ?? ""))) {
-      const month = monthInText(q, ctx.today, false);
-      if (month) args.date = monthRange(month).first;
+    // chấm hộ: ngày theo câu chữ ("hôm qua", "30/10"), không có thì để AI / mặc định hôm nay
+    if (act.key === "manual_attendance") {
+      const date = dateInText(q, ctx.today);
+      if (date) args.date = date;
     }
     // chấm hộ: AI bỏ trống giờ → lấy giờ ghi trong câu ("vào 8h, ra 17h30")
     if (act.key === "manual_attendance" && !String(args.inTime ?? "").trim()) {

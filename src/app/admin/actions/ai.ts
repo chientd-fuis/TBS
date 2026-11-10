@@ -19,6 +19,14 @@ import { createBonusPenalty, manualAttendance, savePayrollExtras } from "./ops";
 import { PayrollItem } from "@/lib/models";
 import { can } from "@/lib/permissions";
 import { summarizeRules } from "@/lib/rules-summary";
+import { weatherAdvice, weatherIcon } from "@/lib/weather";
+import type { WeatherImpact } from "@/lib/forecast";
+
+/** "mưa −28% (9 ngày) · lạnh −15% (4 ngày, ước tính)" */
+function impactText(im: WeatherImpact) {
+  const one = (label: string, x: WeatherImpact["rain"]) => `${label} ${x.factor >= 1 ? "+" : "−"}${Math.abs(Math.round((1 - x.factor) * 100))}% (${x.learned ? `${x.samples} ngày` : "ước tính – chưa đủ dữ liệu"})`;
+  return [one("ngày mưa", im.rain), one("lạnh", im.cold), one("mưa + lạnh", im.both)].join(" · ");
+}
 
 /** Lưu Cài đặt AI: bật/tắt + giới hạn + model từng chức năng, ngân sách token, ngưỡng bất thường. Chỉ Admin Tổng. */
 export async function saveAiSettings(_: FormState, fd: FormData): Promise<FormState> {
@@ -114,6 +122,10 @@ export type ForecastView = {
   templates: { id: string; name: string; startTime: string; current: number }[];
   cells: { date: string; tplId: string; suggest: number; current: number; rev: number | null; samples: number }[];
   holidayNames: Record<string, string>;
+  /** thời tiết từng ngày (Open-Meteo); warn = cảnh báo mưa > 60% / lạnh < 22°C → nên giảm ca */
+  weather: Record<string, { icon: string; tMin: number; tMax: number; rainPct: number; warn: string }>;
+  /** ảnh hưởng thời tiết học từ dữ liệu quán, VD "ngày mưa −28% (9 ngày) · lạnh −15% (4 ngày)" */
+  impact: string;
   explanation: string;
   weeks: number;
 };
@@ -127,6 +139,7 @@ export async function getForecast(storeId: string, weekStart: string): Promise<{
     if (!f.templates.length) return { error: "Cơ sở chưa có ca mẫu" };
     const owner = admin.kind === "OWNER";
     const name = (id: string) => f.templates.find((t) => t.id === id)?.name ?? "?";
+    const weatherWarn = Object.fromEntries(Object.values(f.weather).flatMap((w) => (weatherAdvice(w, f.factors).reduce && w.date >= f.today ? [[w.date, weatherAdvice(w, f.factors).text]] : [])));
     let explanation = f.weeks < 3 ? `Mới có khoảng ${f.weeks} tuần dữ liệu chốt ca – gợi ý còn thô, nên xem lại.` : "";
     try {
       const t = await geminiGenerate({
@@ -136,7 +149,8 @@ export async function getForecast(storeId: string, weekStart: string): Promise<{
         timeoutMs: 40_000,
         prompt: `Bạn là trợ lý xếp ca của quán trà sữa Tiệm Bơ Sầu. Hệ thống đã dự báo doanh thu từng ca tuần ${weekStart} (theo trung vị cùng thứ 6 tuần gần nhất, ngày lễ nhân hệ số ${f.holidayFactor.toFixed(1)}) và gợi ý số người = doanh thu dự báo / doanh thu mỗi người của ca.
 Viết 2–3 câu tiếng Việt cho admin giải thích VÌ SAO gợi ý tăng / giảm người ở đâu (so với định mức hiện tại "current"). CHỈ dựa vào dữ liệu, không bịa con số mới${owner ? "" : ", KHÔNG nêu số tiền doanh thu"}.
-${JSON.stringify({ holidays: f.holidayNames, cells: f.cells.filter((c) => c.suggest !== c.current).slice(0, 30).map((c) => ({ date: c.date, shift: name(c.tplId), suggest: c.suggest, current: c.current, revenue: owner ? c.rev : undefined, samples: c.samples })) })}`,
+Quán bán KEM, CHÈ: ngày mưa > 60% hoặc lạnh (cao nhất < 22°C) vắng khách. Từ dữ liệu quán: ${impactText(f.impact)}. Hệ thống đã giảm doanh thu dự báo những ngày đó theo mức này; nhắc rõ ngày nào nên giảm ca vì thời tiết.
+${JSON.stringify({ holidays: f.holidayNames, weather: weatherWarn, cells: f.cells.filter((c) => c.suggest !== c.current).slice(0, 30).map((c) => ({ date: c.date, shift: name(c.tplId), suggest: c.suggest, current: c.current, revenue: owner ? c.rev : undefined, samples: c.samples })) })}`,
       });
       const s = String(t ?? "").trim();
       if (s) explanation = [explanation, s.slice(0, 1200)].filter(Boolean).join(" ");
@@ -149,6 +163,10 @@ ${JSON.stringify({ holidays: f.holidayNames, cells: f.cells.filter((c) => c.sugg
         templates: f.templates.map((t) => ({ id: t.id, name: t.name, startTime: t.startTime, current: Math.max(t.targetStaff, t.minStaff) })),
         cells: f.cells.map((c) => ({ ...c, rev: owner ? c.rev : null })),
         holidayNames: f.holidayNames,
+        impact: impactText(f.impact),
+        weather: Object.fromEntries(
+          Object.values(f.weather).map((w) => [w.date, { icon: weatherIcon(w.code), tMin: Math.round(w.tMin), tMax: Math.round(w.tMax), rainPct: w.rainPct, warn: w.date >= f.today ? weatherAdvice(w, f.factors).text : "" }]),
+        ),
         explanation,
         weeks: f.weeks,
       },
@@ -190,8 +208,9 @@ export async function askDataAction(
 ): Promise<{ answer?: string; source?: string; denied?: boolean; card?: AskCard; choices?: PersonChoice[]; pick?: AskPick; error?: string; left?: number }> {
   try {
     const admin = await assertAdmin();
-    // picked: admin bấm chọn 1 nhân viên trong danh sách gợi ý → soạn lại cho người đó (vẫn theo quyền của admin)
-    const r = await askData(admin, String(question ?? ""), picked && /^[a-f\d]{24}$/i.test(String(picked.userId)) ? picked : undefined);
+    // picked: admin bấm chọn 1 nhân viên (id) hoặc 1 tháng (YYYY-MM) trong danh sách gợi ý → soạn lại (vẫn theo quyền của admin)
+    const okPick = picked && (picked.kind === "month" ? /^\d{4}-\d{2}$/.test(String(picked.userId)) : /^[a-f\d]{24}$/i.test(String(picked.userId)));
+    const r = await askData(admin, String(question ?? ""), okPick ? picked : undefined);
     const left = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`);
     return {
       answer: r.answer,
@@ -287,10 +306,7 @@ export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean
         const advance = item.advance + (p.field === "advance" ? p.amount : 0);
         const r = await savePayrollExtras(null, fd({ itemId: p.itemId, allowance, advance }));
         if (r?.error) return { error: r.error };
-        await PayrollItem.updateOne(
-          { _id: p.itemId },
-          { $push: { extrasNotes: { field: p.field, amount: p.amount, note: String(p.note ?? "").slice(0, 200) || "Trợ lý AI", by: adminActor(admin).name, at: new Date() } } },
-        );
+        // không lưu ghi chú "Trợ lý AI" vào dòng lương (admin thấy là rác; lịch sử đã có ở Hoạt động admin)
         return { ok: true, message: `Đã cộng ${p.amount.toLocaleString("vi-VN")} ₫ ${p.field === "advance" ? "tạm ứng" : "phụ cấp"} cho ${p.name}.` };
       }
       case "manual_attendance": {

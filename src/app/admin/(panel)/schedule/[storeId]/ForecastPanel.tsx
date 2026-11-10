@@ -54,16 +54,22 @@ export default function ForecastPanel({ storeId, weekStart }: { storeId: string;
         </button>
       }
     >
-      <p className="mb-2 text-xs text-ink/60">Dựa trên doanh thu chốt ca ~{data.weeks} tuần gần nhất (cùng thứ trong tuần, ngày lễ nhân hệ số). ↑ / ↓ = so với định mức hiện tại.</p>
+      <p className="mb-2 text-xs text-ink/60">Dựa trên doanh thu chốt ca ~{data.weeks} tuần gần nhất (cùng thứ trong tuần, ngày lễ nhân hệ số) + dự báo thời tiết. ↑ / ↓ = so với định mức hiện tại.</p>
+      {data.impact && <p className="mb-2 rounded-xl bg-[#fff8ef] px-2.5 py-1.5 text-xs">🌧️ Ảnh hưởng thời tiết lên doanh thu quán (học từ thời tiết thực tế + chốt ca): <b>{data.impact}</b></p>}
       <div className="overflow-x-auto">
         <table className="tbs text-center text-sm">
           <thead>
             <tr>
               <th className="text-left">Ca</th>
               {data.days.map((d) => (
-                <th key={d} className={data.holidayNames[d] ? "bg-[#fde8e8]" : ""}>
+                <th key={d} className={data.holidayNames[d] ? "bg-[#fde8e8]" : data.weather?.[d]?.warn ? "bg-[#fde4cf]" : ""} title={data.weather?.[d]?.warn || undefined}>
                   {weekdayVi(d).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} {d.slice(8)}/{d.slice(5, 7)}
                   {data.holidayNames[d] && <div className="text-[10px] font-normal text-danger">{data.holidayNames[d]}</div>}
+                  {data.weather?.[d] && (
+                    <div className={`text-[10px] font-normal ${data.weather[d].warn ? "font-semibold text-[#b45309]" : "text-ink/60"}`}>
+                      {data.weather[d].icon} {data.weather[d].tMin}–{data.weather[d].tMax}° ☔{data.weather[d].rainPct}%
+                    </div>
+                  )}
                 </th>
               ))}
             </tr>

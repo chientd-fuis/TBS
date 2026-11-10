@@ -22,7 +22,7 @@ import { adminActor, type AdminSession } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf, storeTz } from "@/lib/attendance";
 import { addDays, localMonth, zonedToDate } from "@/lib/time";
-import { generatePayroll, publishPayroll, updateItemExtras } from "@/lib/payroll";
+import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
 import { errMsg, num, str, type FormState } from "./types";
 import { extractSheetId } from "@/lib/revenue";
@@ -501,6 +501,35 @@ export async function savePayrollExtras(_: FormState, fd: FormData): Promise<For
     const itemId = str(fd.get("itemId"));
     await updateItemExtras(itemId, num(fd.get("allowance")), num(fd.get("advance")));
     await audit(adminActor(admin), "payroll.item.extras", { type: "PayrollItem", id: itemId }, null, { allowance: num(fd.get("allowance")), advance: num(fd.get("advance")) });
+    revalidatePath("/admin/payroll");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Popup Phụ cấp / Tạm ứng: thêm 1 hoặc nhiều khoản (số tiền + nội dung). */
+export async function addPayrollExtras(itemId: string, field: string, rows: { amount: number; note: string }[]): Promise<FormState> {
+  try {
+    const admin = await assertPerm("payroll");
+    if (field !== "allowance" && field !== "advance") return { error: "Sai loại khoản" };
+    const list = (Array.isArray(rows) ? rows : []).slice(0, 30).map((r) => ({ amount: Number(r?.amount) || 0, note: String(r?.note ?? "") }));
+    const sum = await addItemExtras(String(itemId), field, list, adminActor(admin).name);
+    await audit(adminActor(admin), "payroll.item.extras.add", { type: "PayrollItem", id: String(itemId) }, null, { field, sum, rows: list });
+    revalidatePath("/admin/payroll");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Popup Phụ cấp / Tạm ứng: xoá 1 khoản (index trong ghi chú, -1 = phần nhập tay). */
+export async function removePayrollExtra(itemId: string, field: string, index: number): Promise<FormState> {
+  try {
+    const admin = await assertPerm("payroll");
+    if (field !== "allowance" && field !== "advance") return { error: "Sai loại khoản" };
+    const amount = await removeItemExtra(String(itemId), field, Math.trunc(Number(index)));
+    await audit(adminActor(admin), "payroll.item.extras.remove", { type: "PayrollItem", id: String(itemId) }, null, { field, index, amount });
     revalidatePath("/admin/payroll");
     return { ok: true };
   } catch (e) {

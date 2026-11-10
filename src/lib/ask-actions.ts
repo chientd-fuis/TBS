@@ -8,7 +8,7 @@ import { Types } from "mongoose";
 import { Payroll, PayrollItem, User } from "./models";
 import { can } from "./permissions";
 import { generatePayroll } from "./payroll";
-import { localMonth, viDate } from "./time";
+import { addDays, localMonth, nextMonth, prevMonth, viDate } from "./time";
 import { evalCalc } from "./calc-expr";
 import type { AdminSession } from "./admin-session";
 
@@ -84,12 +84,32 @@ export function calcInText(text: string): string | null {
  * (tháng 1 nói "tháng 12" là tháng 12 năm ngoái) – trừ khi preferPast = false (VD lương mới "từ tháng 12"). today = "YYYY-MM-DD".
  */
 export function monthInText(text: string, today: string, preferPast = true): string | null {
+  if (/tháng\s*(này|nay)(?![\p{L}])/iu.test(text)) return today.slice(0, 7);
+  if (/tháng\s*trước(?![\p{L}])/iu.test(text)) return prevMonth(today.slice(0, 7));
+  if (/tháng\s*(sau|tới)(?![\p{L}])/iu.test(text)) return nextMonth(today.slice(0, 7));
   const m = /(?<![\p{L}])(?:tháng|t)\s*(\d{1,2})(?:\s*[/\-.]\s*(\d{4}))?(?![\p{L}\d])/iu.exec(text);
   if (!m) return null;
   const mm = Number(m[1]);
   if (mm < 1 || mm > 12) return null;
   const y = m[2] ? Number(m[2]) : Number(today.slice(0, 4)) - (preferPast && mm > Number(today.slice(5, 7)) ? 1 : 0);
   return `${y}-${String(mm).padStart(2, "0")}`;
+}
+/**
+ * Ngày ghi trong câu: "30/10", "30/10/2025", "hôm nay" / "sáng nay"…, "hôm qua" → "YYYY-MM-DD".
+ * "30/10" không ghi năm mà sau hôm nay → năm trước. Không có → null.
+ */
+export function dateInText(text: string, today: string): string | null {
+  const m = /(?<![\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{4}))?(?![\d/])/.exec(text);
+  if (m) {
+    const [d, mo] = [Number(m[1]), Number(m[2])];
+    if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+    const md = `${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const y = m[3] ? Number(m[3]) : Number(today.slice(0, 4)) - (md > today.slice(5) ? 1 : 0);
+    return `${y}-${md}`;
+  }
+  if (/hôm\s*qua(?![\p{L}])/iu.test(text)) return addDays(today, -1);
+  if (/(?<![\p{L}])nay(?![\p{L}])/iu.test(text)) return today; // hôm nay, sáng nay, ca tối nay…
+  return null;
 }
 /** Phụ cấp hay tạm ứng theo từ trong câu; có cả hai / không có → null (để AI quyết). */
 export function extraKindInText(text: string): "allowance" | "advance" | null {
@@ -165,7 +185,7 @@ export const WRITE_TOOLS: WriteTool[] = [
   },
   {
     key: "bonus_penalty",
-    desc: "THÊM khoản thưởng hoặc phạt cho 1 hoặc nhiều nhân viên (args: kind = BONUS | PENALTY, amount = số tiền MỖI người, calc = phép tính nếu có, content = lý do, people = danh sách tên, hoặc everyone = true + store?, date = ngày áp dụng, mặc định hôm nay)",
+    desc: "THÊM khoản thưởng hoặc phạt cho 1 hoặc nhiều nhân viên (args: kind = BONUS | PENALTY, amount = số tiền MỖI người, calc = phép tính nếu có, content = lý do, people = danh sách tên, hoặc everyone = true + store?, date = ngày ghi trong câu – '30/10' = YYYY-10-30)",
     allowed: () => true,
     plan: async (a, ctx, find) => {
       const kind = String(a.kind ?? "").toUpperCase().startsWith("B") || /thưởng/i.test(String(a.kind)) ? "BONUS" : "PENALTY";
@@ -209,7 +229,7 @@ export const WRITE_TOOLS: WriteTool[] = [
   },
   {
     key: "payroll_extra",
-    desc: "CỘNG THÊM tiền tạm ứng (kind = advance, trừ vào lương) hoặc phụ cấp / trợ cấp / hỗ trợ (kind = allowance, cộng vào lương – VD hỗ trợ ship X đơn × Y đ) cho 1 nhân viên vào bảng lương 1 tháng (args: person, kind, amount = số DƯƠNG kể cả tạm ứng, calc = phép tính nếu có VD '31 × 5000', content = ghi chú ngắn VD 'Hỗ trợ ship 31 đơn × 5k', month mặc định tháng này). Cần quyền Bảng lương",
+    desc: "CỘNG THÊM tiền tạm ứng (kind = advance, trừ vào lương) hoặc phụ cấp / trợ cấp / hỗ trợ (kind = allowance, cộng vào lương – VD hỗ trợ ship X đơn × Y đ) cho 1 nhân viên vào bảng lương 1 tháng (args: person, kind, amount = số DƯƠNG kể cả tạm ứng, calc = phép tính nếu có VD '31 × 5000', content = ghi chú ngắn VD 'Hỗ trợ ship 31 đơn × 5k', month = tháng ghi trong câu – 'tháng 10' = YYYY-10, câu KHÔNG ghi tháng mới dùng tháng này). Cần quyền Bảng lương",
     allowed: (a) => can(a, "payroll"),
     plan: async (a, ctx, find) => {
       const r = await one(a, ctx, find);

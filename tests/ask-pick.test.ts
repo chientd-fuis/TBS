@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { nameScore } from "../src/lib/ask-ai";
-import { amountOf, applyPick, calcInText, extraKindInText, moneyInText, monthInText, timesInText } from "../src/lib/ask-actions";
+import { amountOf, applyPick, calcInText, dateInText, extraKindInText, moneyInText, monthInText, timesInText } from "../src/lib/ask-actions";
 
 test("Trợ lý AI: gợi ý tên gần giống (bỏ dấu, đảo thứ tự từ)", () => {
   assert.ok(nameScore("Khánh nguyễn", "Nam Khánh") > 0);
@@ -44,6 +44,15 @@ test("Trợ lý AI: số tiền lấy từ câu hỏi khi AI bỏ trống", () =
   assert.equal(monthInText("tạm ứng T10/2025 cho Đức", "2026-11-10"), "2025-10");
   assert.equal(monthInText("lương 23k/h từ tháng 12", "2026-11-10", false), "2026-12");
   assert.equal(monthInText("Đức ứng 300k", "2026-11-10"), null);
+  assert.equal(monthInText("phụ cấp 200k tháng này cho Đức", "2026-11-10"), "2026-11");
+  assert.equal(monthInText("phạt 50k tháng trước", "2026-01-10"), "2025-12");
+  assert.equal(dateInText("30/10 Thưởng 50k cho Đức và Đức vì làm tốt,", "2026-11-10"), "2026-10-30");
+  assert.equal(dateInText("thưởng 20/12 cho Lan", "2026-11-10"), "2025-12-20"); // sau hôm nay → năm trước
+  assert.equal(dateInText("chấm công hộ Chiến ca sáng nay", "2026-11-10"), "2026-11-10");
+  assert.equal(dateInText("chấm hộ Lan hôm qua vào 8h", "2026-11-10"), "2026-11-09");
+  assert.equal(dateInText("tạm ứng T10/2025 cho Đức", "2026-11-10"), null);
+  assert.equal(dateInText("Thưởng 50k cho Lan vì làm tốt", "2026-11-10"), null);
+  assert.equal(dateInText("lương 23k/h", "2026-11-10"), null);
   assert.equal(applyPick({ person: "Khánh nguyễn" }, "Khánh nguyễn", "a".repeat(24)).person, `#id:${"a".repeat(24)}`);
   assert.deepEqual(applyPick({ people: ["Lan", "Khánh"] }, "khánh", "b".repeat(24)).people, ["Lan", `#id:${"b".repeat(24)}`]);
 });

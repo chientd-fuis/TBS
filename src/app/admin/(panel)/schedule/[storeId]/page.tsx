@@ -11,6 +11,8 @@ import { addDays, isYmd, localDate, viDate, weekStartOf } from "@/lib/time";
 import { Alert, LinkButton, PageTitle } from "@/components/ui";
 import ScheduleBoard from "./ScheduleBoard";
 import ForecastPanel from "./ForecastPanel";
+import WeatherStrip from "./WeatherStrip";
+import { loadWeather } from "@/lib/weather";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +56,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           {can(admin, "export") && <LinkButton variant="outline" href={`/api/admin/export?type=lichca&store=${storeId}&from=${ws.slice(0, 7)}&to=${addDays(ws, 6).slice(0, 7)}`}>Xuất Excel</LinkButton>}
         </div>
       </div>
+      <WeatherStrip days={data.days} weather={await loadWeather(data.days, store.lat, store.lng)} today={today} />
       {data.templates.length > 0 && (await aiAllowed("forecast", `admin:${admin.accountId ?? "owner"}`)) && <ForecastPanel key={ws} storeId={storeId} weekStart={ws} />}
       {data.templates.length === 0 && weekNav}
       {data.templates.length === 0 ? (

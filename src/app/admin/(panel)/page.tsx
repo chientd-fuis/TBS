@@ -4,8 +4,9 @@ import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
 import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, StaffActivity, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
-import { localDate, localMonth, localTime, viMonth } from "@/lib/time";
+import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
 import { estimateStorePay } from "@/lib/payroll";
+import { weekWeatherAlerts } from "@/lib/forecast";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
@@ -69,7 +70,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         .sort({ createdAt: -1 })
         .limit(8)
         .lean();
-      return { s, tz, shifts, working, late, absent, name, missing, month, pay, staffActs, noCoords: s.lat == null || s.lng == null };
+      // mưa / lạnh các ngày còn lại trong tuần → ca nên giảm người (theo doanh thu + thời tiết quá khứ của quán)
+      const weatherAlerts = await weekWeatherAlerts(String(s._id), tz).catch(() => []);
+      return { s, tz, shifts, working, late, absent, name, missing, month, pay, staffActs, weatherAlerts, noCoords: s.lat == null || s.lng == null };
     }),
   );
 
@@ -155,6 +158,35 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               <div className="rounded-xl bg-[#ffe8d9] p-2"><p className="text-xs">Đi muộn</p><p className="text-xl font-bold text-warn">{b.late.length}</p></div>
               <div className="rounded-xl bg-[#fde2e2] p-2"><p className="text-xs">Chưa đến</p><p className="text-xl font-bold text-danger">{b.absent.length}</p></div>
             </div>
+            {b.weatherAlerts.length > 0 && (
+              <div className="mt-2 rounded-xl border border-[#f5c99b] bg-[#fff8ef] p-3 text-sm">
+                <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                  <b className="text-[#b45309]">🌧️ Thời tiết xấu tuần này – nên giảm ca</b>
+                  <Link className="text-xs text-accent underline" href={`/admin/schedule/${b.s._id}`}>Xem lịch xếp ca</Link>
+                </div>
+                <ul className="space-y-1">
+                  {b.weatherAlerts.map((w) => (
+                    <li key={w.date}>
+                      <b>
+                        {weekdayVi(w.date).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} {w.date.slice(8)}/{w.date.slice(5, 7)}
+                      </b>{" "}
+                      · {w.warn} <span className="text-ink/60">(doanh thu thường giảm ~{w.dropPct}%)</span>
+                      {w.cuts.length ? (
+                        <ul className="mt-0.5 pl-3 text-[13px]">
+                          {w.cuts.map((c) => (
+                            <li key={c.tplId}>
+                              → Ca <b>{c.tplName}</b>: nên <b className="text-[#b45309]">{c.suggest} người</b> (đang xếp {c.planned}, giảm {c.planned - c.suggest})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-[13px] text-ink/60"> – số người đang xếp đã hợp lý</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {b.pay && (
             <div className="mt-2 rounded-xl bg-cream p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">

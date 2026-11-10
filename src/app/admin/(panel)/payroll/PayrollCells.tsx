@@ -1,39 +1,166 @@
 "use client";
-import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
+import { Check, Copy, Loader2, Plus, Trash2, X } from "lucide-react";
 import Modal from "@/components/Modal";
 import { evalCalc } from "@/lib/calc-expr";
+import { addPayrollExtras, removePayrollExtra } from "../../actions/ops";
+
+const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} ₫`;
+
+/** 1 khoản phụ cấp / tạm ứng đã lưu; index = vị trí trong extrasNotes, -1 = phần nhập tay không ghi chú */
+export type ExtraEntry = { index: number; amount: number; note: string; meta?: string };
+type Row = { text: string; note: string };
 
 /**
- * Ô tiền phụ cấp / tạm ứng: gõ "155k", "1tr2", "31 × 5k" → rời ô hiện 155.000; bấm lại hiện đúng chữ đã gõ.
- * Gửi đi qua input ẩn `name` (số nguyên) – gõ sai thì viền đỏ, giữ số cũ.
+ * Ô Phụ cấp / Tạm ứng (giống ô Thưởng / Phạt): 0 đ → nút "+"; có tiền → bấm số tiền xem chi tiết.
+ * Popup: danh sách từng khoản (xoá được) + các dòng nhập "số tiền + nội dung" (Thêm dòng) → Lưu → đóng popup.
+ * Số tiền gõ được "155k", "1tr2", "31 × 5k".
  */
-export function MoneyField({ name, defaultValue, label, className }: { name: string; defaultValue: number; label: string; className?: string }) {
-  const [text, setText] = useState(defaultValue ? defaultValue.toLocaleString("vi-VN") : "0");
-  const [focus, setFocus] = useState(false);
-  const v = text.trim() === "" ? 0 : evalCalc(text);
-  const ok = v != null && v >= 0;
+export function ExtrasCell({ itemId, field, total, entries, name, locked }: { itemId: string; field: "allowance" | "advance"; total: number; entries: ExtraEntry[]; name: string; locked: boolean }) {
+  const plus = field === "allowance";
+  const label = plus ? "Phụ cấp" : "Tạm ứng";
+  const tone = plus ? "text-secondary-dark" : "text-danger";
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [error, setError] = useState("");
+  const [pending, start] = useTransition();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const show = () => {
+    setRows(total || locked ? [] : [{ text: "", note: "" }]);
+    setError("");
+    setOpen(true);
+  };
+  const parsed = rows.map((r) => ({ amount: r.text.trim() ? evalCalc(r.text) : null, note: r.note.trim() }));
+  const rowsOk = parsed.length > 0 && parsed.every((r) => r.amount != null && r.amount > 0);
+  const save = () =>
+    start(async () => {
+      const r = await addPayrollExtras(itemId, field, parsed.map((p) => ({ amount: p.amount ?? 0, note: p.note })));
+      if (r?.error) setError(r.error);
+      else setOpen(false);
+    });
+  const remove = (e: ExtraEntry) => {
+    if (!confirm(`Xoá khoản ${label.toLowerCase()} ${vnd(e.amount)}${e.note ? ` – ${e.note}` : ""}?`)) return;
+    start(async () => {
+      const r = await removePayrollExtra(itemId, field, e.index);
+      setError(r?.error ?? "");
+    });
+  };
+
+  if (!total && locked) return <span className="text-ink/40">0 ₫</span>;
   return (
     <>
-      <input type="hidden" name={name} value={ok ? v : defaultValue} />
-      <input
-        type="text"
-        inputMode="text"
-        autoComplete="off"
-        aria-label={label}
-        title={ok ? label : `${label}: không hiểu số tiền (VD 155k, 1tr2, 31 × 5k)`}
-        value={focus || !ok ? text : v.toLocaleString("vi-VN")}
-        onFocus={(e) => {
-          setFocus(true);
-          requestAnimationFrame(() => e.target.select());
-        }}
-        onBlur={() => {
-          setFocus(false);
-          if (ok) setText(v.toLocaleString("vi-VN"));
-        }}
-        onChange={(e) => setText(e.target.value)}
-        className={`block w-full min-w-0 bg-white px-2 py-2 text-right text-sm tabular-nums outline-none ${ok ? "" : "text-danger"} ${className ?? ""}`}
-      />
+      {total ? (
+        <button type="button" onClick={show} className={`cursor-pointer font-semibold whitespace-nowrap underline decoration-dotted underline-offset-2 ${tone}`}>
+          {plus ? "+" : "−"}
+          {vnd(total)}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={show}
+          aria-label={`Thêm ${label.toLowerCase()} cho ${name}`}
+          title={`Thêm ${label.toLowerCase()}`}
+          className={`flex h-8 w-8 items-center justify-center rounded-full ${plus ? "bg-[#e3f4e8] text-secondary-dark" : "bg-[#fde4e4] text-danger"}`}
+        >
+          <Plus size={16} />
+        </button>
+      )}
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label={`${label} · ${name}`}>
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 text-sm shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <b className={tone}>
+                  {plus ? "+ " : "− "}
+                  {label} · {name}
+                </b>
+                <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-cream">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {!!entries.length && (
+                <ul className="mb-3 space-y-1.5">
+                  {entries.map((e) => (
+                    <li key={e.index} className="flex items-start gap-2 rounded-xl bg-cream px-2.5 py-1.5">
+                      <span className="min-w-0 flex-1">
+                        <b className={tone}>{vnd(e.amount)}</b> · {e.note || <i className="text-ink/50">không ghi chú</i>}
+                        {e.meta && <span className="block text-[11px] text-ink/50">{e.meta}</span>}
+                      </span>
+                      {!locked && (
+                        <button type="button" disabled={pending} onClick={() => remove(e)} aria-label="Xoá khoản này" className="rounded p-1 text-ink/40 hover:bg-white hover:text-danger">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                  <li className="flex justify-between border-t border-dashed border-[#f1e6c8] px-2.5 pt-1.5 font-bold">
+                    <span>Tổng</span>
+                    <span className={tone}>{vnd(total)}</span>
+                  </li>
+                </ul>
+              )}
+              {locked && <p className="text-xs text-ink/60">🔒 Đã trả lương – mở khoá dòng lương để sửa.</p>}
+
+              {!locked && (
+                <div className="space-y-2">
+                  {rows.map((r, k) => {
+                    const p = parsed[k];
+                    const bad = !!r.text.trim() && (p.amount == null || p.amount <= 0);
+                    return (
+                      <div key={k} className="flex items-start gap-1.5">
+                        <div className="w-32 shrink-0">
+                          <input
+                            autoFocus={k === rows.length - 1}
+                            value={r.text}
+                            onChange={(e) => setRows(rows.map((x, z) => (z === k ? { ...x, text: e.target.value } : x)))}
+                            placeholder="Số tiền"
+                            aria-label="Số tiền"
+                            className={`block w-full rounded-xl border px-2.5 py-2 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40 ${bad ? "border-danger text-danger" : "border-[#e9d9a8]"}`}
+                          />
+                          {p.amount != null && p.amount > 0 && /[^\d.,\s]/.test(r.text) && <span className="block pr-1 text-right text-[11px] text-ink/60">= {vnd(p.amount)}</span>}
+                        </div>
+                        <input
+                          value={r.note}
+                          onChange={(e) => setRows(rows.map((x, z) => (z === k ? { ...x, note: e.target.value } : x)))}
+                          placeholder={plus ? "Nội dung (VD hỗ trợ ship 31 đơn)" : "Nội dung (VD ứng giữa tháng)"}
+                          aria-label="Nội dung"
+                          maxLength={200}
+                          className="block min-w-0 flex-1 rounded-xl border border-[#e9d9a8] px-2.5 py-2 outline-none focus:ring-2 focus:ring-primary/40"
+                        />
+                        <button type="button" onClick={() => setRows(rows.filter((_, z) => z !== k))} aria-label="Bỏ dòng" className="mt-1.5 rounded p-1 text-ink/40 hover:text-danger">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button type="button" onClick={() => setRows([...rows, { text: "", note: "" }])} className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold text-accent hover:bg-primary-light">
+                    <Plus size={14} /> Thêm dòng
+                  </button>
+                  {error && <p className="text-xs text-danger">{error}</p>}
+                  {!!rows.length && (
+                    <button
+                      type="button"
+                      disabled={!rowsOk || pending}
+                      onClick={save}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 font-semibold disabled:opacity-50"
+                    >
+                      {pending && <Loader2 size={16} className="animate-spin" />} Lưu {parsed.length > 1 && rowsOk ? `(${vnd(parsed.reduce((s, p) => s + (p.amount ?? 0), 0))})` : ""}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

@@ -7,9 +7,9 @@ import { decrypt } from "@/lib/crypto";
 import { ActionForm } from "@/components/ActionForm";
 import { MonthPicker } from "@/components/MonthPicker";
 import { Alert, Badge, Card, Empty, Input, LinkButton, PageTitle } from "@/components/ui";
-import { payrollAction, payrollItemAction, savePayrollExtras } from "../../actions/ops";
+import { payrollAction, payrollItemAction } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
-import { BpAmount, CopyAccount, MoneyField } from "./PayrollCells";
+import { BpAmount, CopyAccount, ExtrasCell, type ExtraEntry } from "./PayrollCells";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ const k = (n: number) => (n % 1000 === 0 ? `${n / 1000}k` : n.toLocaleString("vi
  * Bảng lương tháng: luôn tự tính sẵn (theo chấm công / thưởng phạt mới nhất) → "Công bố" = nhân viên xem được
  * → "Đã trả" (từng người hoặc cả bảng) = khoá → "Mở khoá" bắt buộc lý do.
  */
-export default async function PayrollAdmin({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
+export default async function PayrollAdmin({ searchParams }: { searchParams: Promise<{ store?: string; month?: string; hide?: string }> }) {
   await requirePerm("payroll");
   const sp = await searchParams;
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
@@ -40,6 +40,12 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
   items.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   const total = items.reduce((s, i) => s + i.netPay, 0);
   const paidCount = items.filter((i) => i.paidAt).length;
+  // bộ lọc "Ẩn NV 0đ / đã nghỉ": lương 0đ, hoặc đã nghỉ việc mà không còn lương chưa trả (người nghỉ còn nợ lương vẫn hiện)
+  const hide = sp.hide === "1";
+  const quiet = (i: (typeof items)[number]) => i.netPay === 0 || (users.get(String(i.userId))?.status === "INACTIVE" && !!i.paidAt);
+  const rows = hide ? items.filter((i) => !quiet(i)) : items;
+  const quietCount = items.filter(quiet).length;
+  const qs = (o: Record<string, string>) => `/admin/payroll?${new URLSearchParams({ store: String(store._id), month, ...(hide ? { hide: "1" } : {}), ...o })}`;
   // chi tiết thưởng / phạt từng người (tooltip khi rê chuột)
   const bps = payroll ? await BonusPenalty.find({ storeId: store._id, month }).sort({ date: 1, createdAt: 1 }).lean() : [];
   const bpTip = (i: (typeof items)[number], kind: "BONUS" | "PENALTY") =>
@@ -61,11 +67,20 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
       <PageTitle sub="Thực nhận = Giờ công × Lương giờ + Phụ cấp + Thưởng − Phạt − Tạm ứng (VND, không thuế)">Bảng lương</PageTitle>
       <div className="flex flex-wrap items-center gap-2">
         {stores.map((s) => (
-          <Link key={String(s._id)} href={`/admin/payroll?store=${s._id}&month=${month}`} className={`rounded-xl px-3 py-1.5 text-sm ${String(s._id) === String(store._id) ? "bg-primary font-bold" : "bg-white ring-1 ring-[#f1e6c8]"}`}>
+          <Link key={String(s._id)} href={qs({ store: String(s._id) })} className={`rounded-xl px-3 py-1.5 text-sm ${String(s._id) === String(store._id) ? "bg-primary font-bold" : "bg-white ring-1 ring-[#f1e6c8]"}`}>
             {s.name}
           </Link>
         ))}
-        <div className="ml-auto"><MonthPicker month={month} base="/admin/payroll" params={{ store: String(store._id) }} /></div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Link
+            href={hide ? `/admin/payroll?${new URLSearchParams({ store: String(store._id), month })}` : qs({ hide: "1" })}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm ${hide ? "bg-secondary font-semibold text-white" : "bg-white ring-1 ring-[#f1e6c8]"}`}
+            title="Ẩn nhân viên lương 0đ và nhân viên đã nghỉ việc đã trả hết lương"
+          >
+            <span aria-hidden>{hide ? "☑" : "☐"}</span> Ẩn NV 0đ / đã nghỉ{hide && quietCount ? ` (${quietCount})` : ""}
+          </Link>
+          <MonthPicker month={month} base="/admin/payroll" params={{ store: String(store._id), hide: hide ? "1" : undefined }} />
+        </div>
       </div>
 
       <Card
@@ -117,11 +132,11 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
               <thead>
                 <tr>
                   <th>Nhân viên</th><th className="text-right">Giờ công</th><th className="text-right">Lương giờ</th><th className="text-right">Lương CB</th>
-                  <th className="text-secondary-dark">+ Phụ cấp</th><th className="text-danger">− Tạm ứng</th><th className="text-right">Thưởng</th><th className="text-right">Phạt</th><th className="text-right">Thực nhận</th><th>Chuyển khoản</th><th>Trả lương</th>
+                  <th className="text-right text-secondary-dark">+ Phụ cấp</th><th className="text-right text-danger">− Tạm ứng</th><th className="text-right">Thưởng</th><th className="text-right">Phạt</th><th className="text-right">Thực nhận</th><th>Chuyển khoản</th><th>Trả lương</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((i) => {
+                {rows.map((i) => {
                   const u = users.get(String(i.userId));
                   const paid = !!i.paidAt;
                   const tipB = bpTip(i, "BONUS");
@@ -136,41 +151,16 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                       <td className="text-right">{vnd(i.hourlyWage)}</td>
                       <td className="text-right">{vnd(i.basePay)}</td>
                       {(["allowance", "advance"] as const).map((field) => {
-                        const plus = field === "allowance";
-                        const other = plus ? "advance" : "allowance";
-                        const notes = ((i.extrasNotes ?? []) as ExtrasNote[]).filter((n) => (n.field ?? "allowance") === field);
-                        // dấu đầu ô: + nền xanh = phụ cấp (cộng vào lương), − nền đỏ = tạm ứng (trừ vào lương)
-                        const sign = (
-                          <span className={`flex w-7 shrink-0 items-center justify-center rounded-l-xl text-base font-bold ${plus ? "bg-[#e3f4e8] text-secondary-dark" : "bg-[#fde4e4] text-danger"}`}>
-                            {plus ? "+" : "−"}
-                          </span>
+                        // từng khoản có ghi chú (index = vị trí trong extrasNotes) + phần nhập tay cũ không ghi chú (index -1)
+                        const all = (i.extrasNotes ?? []) as ExtrasNote[];
+                        const entries: ExtraEntry[] = all.flatMap((n, idx) =>
+                          (n.field ?? "allowance") === field ? [{ index: idx, amount: n.amount ?? 0, note: n.note ?? "", meta: [n.by, n.at ? viDateTime(n.at) : ""].filter(Boolean).join(" · ") }] : [],
                         );
+                        const rest = i[field] - entries.reduce((s, e) => s + e.amount, 0);
+                        if (rest > 0) entries.unshift({ index: -1, amount: rest, note: "", meta: "nhập tay trước đây" });
                         return (
-                          <td key={field}>
-                            {!paid && payroll.status !== "PAID" ? (
-                              <ActionForm action={savePayrollExtras} submitLabel="Lưu" variant="outline" successText="" className="flex items-center gap-1">
-                                <input type="hidden" name="itemId" value={String(i._id)} />
-                                <input type="hidden" name={other} value={i[other]} />
-                                <span className={`flex w-32 overflow-hidden rounded-xl border ${plus ? "border-secondary/50" : "border-danger/40"}`}>
-                                  {sign}
-                                  <MoneyField name={field} defaultValue={i[field]} label={plus ? "Phụ cấp" : "Tạm ứng"} />
-                                </span>
-                              </ActionForm>
-                            ) : (
-                              <span className={`whitespace-nowrap font-semibold ${plus ? "text-secondary-dark" : "text-danger"}`}>
-                                {plus ? "+" : "−"}
-                                {vnd(i[field])}
-                              </span>
-                            )}
-                            {!!notes.length && (
-                              <ul className="mt-1 space-y-0.5 text-[11px] text-ink/70">
-                                {notes.map((n, ni) => (
-                                  <li key={ni} title={`${n.by ?? ""} · ${viDateTime(n.at)}`}>
-                                    +{k(n.amount ?? 0)}: {n.note}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
+                          <td key={field} className="text-right">
+                            <ExtrasCell itemId={String(i._id)} field={field} total={i[field]} entries={entries} name={name} locked={paid || payroll.status === "PAID"} />
                           </td>
                         );
                       })}
@@ -206,6 +196,16 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                     </tr>
                   );
                 })}
+                {hide && quietCount > 0 && (
+                  <tr>
+                    <td colSpan={12} className="text-center text-xs text-ink/60">
+                      Đang ẩn {quietCount} nhân viên (lương 0đ / đã nghỉ, đã trả) – TỔNG vẫn tính đủ.{" "}
+                      <Link href={`/admin/payroll?${new URLSearchParams({ store: String(store._id), month })}`} className="font-semibold text-accent underline">
+                        Hiện tất cả
+                      </Link>
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td colSpan={8} className="text-right font-bold">TỔNG</td>
                   <td className="text-right text-base font-bold text-secondary-dark">{vnd(total)}</td>

@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
-import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, WageHistory } from "./models";
+import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, WageHistory, type ExtrasNote } from "./models";
 import { computePay } from "./calc";
 import { holidayNote, loadHolidays } from "./holiday";
 import { payStoreFilter } from "./attendance";
@@ -115,6 +115,51 @@ export async function updateItemExtras(itemId: string, allowance: number, advanc
   item.advance = Math.max(0, Math.round(advance));
   item.netPay = item.basePay + item.allowance + item.totalBonus - item.totalPenalty - item.advance;
   await item.save();
+}
+
+type ExtraField = "allowance" | "advance";
+async function editableItem(itemId: string) {
+  const item = await PayrollItem.findById(itemId);
+  if (!item) throw new Error("Không tìm thấy dòng lương");
+  const p = await Payroll.findById(item.payrollId).lean();
+  if (p?.status === "PAID" || item.paidAt) throw new Error("Đã trả lương – mở khoá (nhập lý do) trước khi sửa");
+  return item;
+}
+
+/** Cộng thêm các khoản phụ cấp / tạm ứng (mỗi khoản có số tiền + nội dung) vào 1 dòng lương. */
+export async function addItemExtras(itemId: string, field: ExtraField, rows: { amount: number; note: string }[], by: string) {
+  const item = await editableItem(itemId);
+  const list = rows.map((r) => ({ amount: Math.round(r.amount), note: r.note.trim().slice(0, 200) })).filter((r) => r.amount > 0);
+  if (!list.length) throw new Error("Nhập số tiền");
+  if (list.some((r) => r.amount > 100_000_000)) throw new Error("Số tiền quá lớn");
+  const sum = list.reduce((s, r) => s + r.amount, 0);
+  item[field] = (item[field] || 0) + sum;
+  item.netPay = item.basePay + item.allowance + item.totalBonus - item.totalPenalty - item.advance;
+  item.extrasNotes.push(...list.map((r) => ({ field, amount: r.amount, note: r.note, by, at: new Date() })));
+  await item.save();
+  return sum;
+}
+
+/**
+ * Xoá 1 khoản phụ cấp / tạm ứng: index = vị trí trong extrasNotes; -1 = phần nhập tay không có ghi chú
+ * (tổng cột − Σ các khoản có ghi chú). Trừ đúng số tiền khoản đó khỏi cột.
+ */
+export async function removeItemExtra(itemId: string, field: ExtraField, index: number) {
+  const item = await editableItem(itemId);
+  const notes = item.extrasNotes ?? [];
+  let amount: number;
+  if (index === -1) {
+    amount = (item[field] || 0) - (notes as ExtrasNote[]).filter((n) => n.field === field).reduce((s, n) => s + (n.amount ?? 0), 0);
+  } else {
+    const n = notes[index];
+    if (!n || n.field !== field) throw new Error("Khoản này đã thay đổi – tải lại trang");
+    amount = n.amount ?? 0;
+    notes.splice(index, 1);
+  }
+  item[field] = Math.max(0, (item[field] || 0) - Math.max(0, amount));
+  item.netPay = item.basePay + item.allowance + item.totalBonus - item.totalPenalty - item.advance;
+  await item.save();
+  return amount;
 }
 
 export async function publishPayroll(payrollId: Types.ObjectId | string, by: string) {
