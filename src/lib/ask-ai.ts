@@ -210,7 +210,7 @@ export async function askData(admin: AdminSession, question: string): Promise<As
     feature: "ask",
     actor,
     temperature: 0,
-    timeoutMs: 20_000,
+    timeoutMs: 30_000,
     schema: {
       type: "OBJECT",
       properties: {

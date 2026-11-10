@@ -49,7 +49,7 @@ export async function explainMyPay(user: { _id: unknown; name?: string | null },
     feature: "payExplain",
     actor: `user:${user._id}`,
     temperature: 0.2,
-    timeoutMs: 25_000,
+    timeoutMs: 45_000,
     prompt: `Bạn giải thích BẢNG LƯƠNG tháng ${month} cho nhân viên quán trà sữa Tiệm Bơ Sầu (xưng "mình", gọi "bạn"), tiếng Việt, dễ hiểu.
 Công thức: Thực nhận = Lương cơ bản + Phụ cấp + Thưởng − Phạt − Tạm ứng. Lương cơ bản = giờ tính công × lương giờ (giờ làm ngày lễ được nhân hệ số, đã gồm trong lương cơ bản).
 Viết danh sách đánh số 3–6 dòng: giờ công (nêu các ngày được cộng thêm giờ nếu có), lương cơ bản, phụ cấp / thưởng / phạt (kèm lý do từng khoản), tạm ứng, thực nhận.

@@ -14,7 +14,10 @@ export default function AssistantChat({ enabled, left: left0, limit }: { enabled
   const [left, setLeft] = useState(left0);
   const [pending, start] = useTransition();
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs, pending]);
+  // braces: newer browsers make scrollIntoView return a Promise, which React would call as the effect cleanup
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, pending]);
 
   const ask = (text: string) => {
     const t = text.trim();

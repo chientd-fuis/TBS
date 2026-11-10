@@ -60,7 +60,10 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
   const [reading, setReading] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs, pending, reading]);
+  // braces: newer browsers make scrollIntoView return a Promise, which React would call as the effect cleanup
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, pending, reading]);
 
   const patch = (i: number, p: Partial<Msg>) => setMsgs((m) => m.map((x, k) => (k === i ? ({ ...x, ...p } as Msg) : x)));
 

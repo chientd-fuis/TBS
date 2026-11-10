@@ -95,6 +95,16 @@ const skipKey = (key: string, model: string) => (exhausted.get(`${key}|${model}`
 const markExhausted = (key: string, model: string, ms: number) => exhausted.set(`${key}|${model}`, Date.now() + ms);
 
 /**
+ * Giảm "suy nghĩ" cho câu hỏi chữ (trả lời nhanh, ít token): Gemini 3 → thinkingLevel "low"; 2.5 Flash / Flash-Lite → tắt.
+ * Model khác (Pro…) giữ mặc định. Google báo không hỗ trợ → gọi lại không kèm cấu hình này.
+ */
+export function thinkingFor(model: string): Record<string, unknown> | null {
+  if (/^gemini-3/.test(model)) return { thinkingLevel: "low" };
+  if (/^gemini-2\.5-flash/.test(model)) return { thinkingBudget: 0 };
+  return null;
+}
+
+/**
  * Gọi Gemini (generateContent). photos = data URL ảnh. schema có → trả JSON đã parse, không có → trả text.
  */
 type GeminiErr = { error?: { code?: number; message?: string; status?: string; details?: { "@type"?: string; violations?: { quotaId?: string; quotaValue?: string }[]; retryDelay?: string }[] } };
@@ -174,23 +184,31 @@ export async function geminiGenerate(opts: {
     const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(p);
     if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
   }
-  const payload = JSON.stringify({
-    contents: [{ role: "user", parts }],
-    generationConfig: {
-      temperature: opts.temperature ?? 0,
-      ...(opts.schema ? { responseMimeType: "application/json", responseSchema: opts.schema } : {}),
-    },
-  });
+  // câu hỏi chữ (không ảnh) → giảm suy nghĩ cho nhanh; đọc ảnh giữ mặc định (cần chính xác)
+  const fast = !(opts.photos?.length);
+  let noThinking = false;
+  const payload = (model: string) => {
+    const th = fast && !noThinking ? thinkingFor(model) : null;
+    return JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0,
+        ...(opts.schema ? { responseMimeType: "application/json", responseSchema: opts.schema } : {}),
+        ...(th ? { thinkingConfig: th } : {}),
+      },
+    });
+  };
   const deadline = Date.now() + (opts.timeoutMs ?? 50_000);
   const errors: string[] = [];
   let quota = false;
   const badKeys = new Set<string>(); // key sai / bị khoá → bỏ hẳn trong lượt này
+  const deadModels = new Set<string>(); // model không tồn tại (404) → bỏ luôn với mọi key
   // ưu tiên model tốt nhất: thử model chính với MỌI key trước, hết mới xuống model dự phòng
   const models = preferred ? [preferred, ...geminiModels().filter((m) => m !== preferred)] : geminiModels();
   const pairs = models.flatMap((model) => keys.map((key, ki) => ({ model, key, label: keys.length > 1 ? `${model} (key ${ki + 1})` : model })));
   const fresh = pairs.filter((p) => !skipKey(p.key, p.model));
   for (const { model, key, label } of fresh.length ? fresh : pairs) {
-    if (badKeys.has(key)) continue;
+    if (badKeys.has(key) || deadModels.has(model)) continue;
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
       if (left < 3_000) break;
@@ -203,7 +221,7 @@ export async function geminiGenerate(opts: {
               method: "POST",
               signal,
               headers: { "content-type": "application/json", "x-goog-api-key": key },
-              body: payload,
+              body: payload(model),
             });
             const j = await r.json().catch(() => ({}));
             return r.ok ? { ok: true as const, body: j } : { ok: false as const, status: r.status, body: j };
@@ -221,6 +239,18 @@ export async function geminiGenerate(opts: {
         return (b.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
       }
       const d = describeGeminiError(res.status, res.body, label);
+      if (res.status === 400 && !noThinking && /thinking/i.test(JSON.stringify(res.body))) {
+        noThinking = true; // model không nhận cấu hình suy nghĩ → gọi lại bình thường
+        attempt--;
+        continue;
+      }
+      if (res.status === 404) {
+        // model không có (bị Google gỡ / key không được dùng) → bỏ model này với MỌI key trong 6 giờ, sang model khác ngay
+        deadModels.add(model);
+        for (const k of keys) markExhausted(k, model, 6 * 3600_000);
+        errors.push(`Không có model ${model}`);
+        break;
+      }
       if (res.status === 400 && /API key/i.test(JSON.stringify(res.body))) {
         // key sai / bị thu hồi → thử key khác (chỉ báo lỗi khi mọi key đều sai)
         badKeys.add(key);

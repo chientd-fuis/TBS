@@ -133,7 +133,7 @@ export async function getForecast(storeId: string, weekStart: string): Promise<{
         feature: "forecast",
         actor: `admin:${admin.accountId ?? "owner"}`,
         temperature: 0.2,
-        timeoutMs: 25_000,
+        timeoutMs: 40_000,
         prompt: `Bạn là trợ lý xếp ca của quán trà sữa Tiệm Bơ Sầu. Hệ thống đã dự báo doanh thu từng ca tuần ${weekStart} (theo trung vị cùng thứ 6 tuần gần nhất, ngày lễ nhân hệ số ${f.holidayFactor.toFixed(1)}) và gợi ý số người = doanh thu dự báo / doanh thu mỗi người của ca.
 Viết 2–3 câu tiếng Việt cho admin giải thích VÌ SAO gợi ý tăng / giảm người ở đâu (so với định mức hiện tại "current"). CHỈ dựa vào dữ liệu, không bịa con số mới${owner ? "" : ", KHÔNG nêu số tiền doanh thu"}.
 ${JSON.stringify({ holidays: f.holidayNames, cells: f.cells.filter((c) => c.suggest !== c.current).slice(0, 30).map((c) => ({ date: c.date, shift: name(c.tplId), suggest: c.suggest, current: c.current, revenue: owner ? c.rev : undefined, samples: c.samples })) })}`,

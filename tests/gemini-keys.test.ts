@@ -46,3 +46,31 @@ test("Gemini: thông báo lỗi không lộ API key", async () => {
   const d2 = describeGeminiError(418, { error: { message: "bad key AIzaSyA1234567890abcdefghijKLMNOP here" } }, "m");
   assert.ok(!/AIzaSyA1234567890/.test(d2.text), d2.text);
 });
+
+test("Gemini: model không có (404) → bỏ model đó với MỌI key, sang model dự phòng ngay; câu hỏi chữ giảm suy nghĩ", async () => {
+  const env = { ...process.env };
+  const realFetch = globalThis.fetch;
+  process.env.GEMINI_API_KEY = "k1,k2,k3";
+  process.env.GEMINI_MODEL = "gemini-404";
+  process.env.GEMINI_FALLBACK_MODELS = "gemini-3-flash-preview";
+  const calls: string[] = [];
+  let thinking: unknown;
+  globalThis.fetch = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
+    const model = /models\/([^:]+):/.exec(url)![1];
+    calls.push(`${model}|${init.headers["x-goog-api-key"]}`);
+    if (model === "gemini-404") return new Response(JSON.stringify({ error: { code: 404, message: "not found" } }), { status: 404 });
+    thinking = JSON.parse(init.body).generationConfig.thinkingConfig;
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  try {
+    assert.equal(await geminiGenerate({ prompt: "x" }), "ok");
+    assert.deepEqual(calls, ["gemini-404|k1", "gemini-3-flash-preview|k1"]);
+    assert.deepEqual(thinking, { thinkingLevel: "low" });
+    calls.length = 0;
+    assert.equal(await geminiGenerate({ prompt: "x" }), "ok");
+    assert.deepEqual(calls, ["gemini-3-flash-preview|k1"]); // nhớ model 404 → không gọi lại
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = env;
+  }
+});

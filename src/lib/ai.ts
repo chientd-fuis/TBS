@@ -50,12 +50,12 @@ export const AI_FEATURES: {
   { key: "closingOcr", label: "Đọc ảnh tờ chốt ca", hint: "Nhân viên / admin chụp tờ chốt ca → tự điền số", unit: "month", limit: 2000, enabled: true, model: "", essential: true, roles: ["admin", "manager", "staff"] },
   { key: "billOcr", label: "Đọc bill / sao kê", hint: "Nhập chi phí từ ảnh", unit: "month", limit: 300, enabled: true, model: "", roles: ["admin"] },
   { key: "attendanceOcr", label: "Đọc ảnh bảng chấm công", hint: "Chấm công hộ → Đọc ảnh (AI)", unit: "month", limit: 100, enabled: true, model: "", roles: ["admin"] },
-  { key: "reportComment", label: "Nhận xét báo cáo tài chính", hint: "Đoạn nhận xét trong tin Telegram ngày / tuần / tháng", unit: "month", limit: 60, enabled: true, model: "gemini-2.5-flash-lite", roles: [] },
-  { key: "assistant", label: "Trợ lý cửa hàng (nhân viên)", hint: "Nội quy · quản lý · bảo quản · nguyên liệu · chốt ca · chấm công", unit: "dayActor", limit: 10, enabled: true, model: "gemini-2.5-flash-lite", roles: ["manager", "staff"] },
-  { key: "anomaly", label: "Phát hiện bất thường chốt ca & két", hint: "Rà theo từng nhân viên mỗi ngày, AI viết tóm tắt", unit: "day", limit: 3, enabled: true, model: "gemini-2.5-flash-lite", roles: [] },
-  { key: "payExplain", label: "Giải thích lương cho nhân viên", hint: "NV hỏi “vì sao lương tháng này là X”", unit: "monthActor", limit: 3, enabled: false, model: "gemini-2.5-flash-lite", roles: ["manager", "staff"] },
-  { key: "forecast", label: "Dự báo → gợi ý số người / ca", hint: "Thống kê doanh thu theo thứ / ngày lễ; AI viết lý do", unit: "month", limit: 10, enabled: true, model: "gemini-2.5-flash-lite", roles: ["admin"] },
-  { key: "rulesSummary", label: "Tóm tắt nội quy", hint: "Lưu nội quy đầy đủ → AI tóm tắt ~10 điều cho nút “Nội quy” của nhân viên", unit: "month", limit: 30, enabled: true, model: "gemini-2.5-flash-lite", roles: [] },
+  { key: "reportComment", label: "Nhận xét báo cáo tài chính", hint: "Đoạn nhận xét trong tin Telegram ngày / tuần / tháng", unit: "month", limit: 60, enabled: true, model: "", roles: [] },
+  { key: "assistant", label: "Trợ lý cửa hàng (nhân viên)", hint: "Nội quy · quản lý · bảo quản · nguyên liệu · chốt ca · chấm công", unit: "dayActor", limit: 10, enabled: true, model: "", roles: ["manager", "staff"] },
+  { key: "anomaly", label: "Phát hiện bất thường chốt ca & két", hint: "Rà theo từng nhân viên mỗi ngày, AI viết tóm tắt", unit: "day", limit: 3, enabled: true, model: "", roles: [] },
+  { key: "payExplain", label: "Giải thích lương cho nhân viên", hint: "NV hỏi “vì sao lương tháng này là X”", unit: "monthActor", limit: 3, enabled: false, model: "", roles: ["manager", "staff"] },
+  { key: "forecast", label: "Dự báo → gợi ý số người / ca", hint: "Thống kê doanh thu theo thứ / ngày lễ; AI viết lý do", unit: "month", limit: 10, enabled: true, model: "", roles: ["admin"] },
+  { key: "rulesSummary", label: "Tóm tắt nội quy", hint: "Lưu nội quy đầy đủ → AI tóm tắt ~10 điều cho nút “Nội quy” của nhân viên", unit: "month", limit: 30, enabled: true, model: "", roles: [] },
   { key: "ask", label: "Hỏi đáp dữ liệu (admin)", hint: "Hỏi bằng tiếng Việt, AI tra dữ liệu theo quyền", unit: "dayActor", limit: 30, enabled: true, model: "", roles: ["admin"] },
 ];
 export const UNIT_LABEL: Record<LimitUnit, string> = { month: "lượt / tháng", day: "lượt / ngày", dayActor: "câu / ngày / người", monthActor: "lượt / tháng / người" };

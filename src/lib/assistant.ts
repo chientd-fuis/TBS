@@ -60,7 +60,7 @@ ${q.replace(/<<<|>>>/g, "")}
     const json = (await geminiGenerate({
       prompt,
       temperature: 0.2,
-      timeoutMs: 25_000,
+      timeoutMs: 45_000,
       feature: "assistant",
       actor: `user:${user._id}`,
       schema: {
