@@ -40,6 +40,7 @@ const SettingsSchema = new Schema(
     // Nhận hàng: danh mục nguyên liệu dạng chữ (lib/goods.ts) – trống → danh mục mặc định
     goodsCatalog: { type: String, default: "" },
     goodsEnabled: { type: Boolean, default: true }, // Admin Tổng bật / tắt cả chức năng Nhận hàng
+    stockEnabled: { type: Boolean, default: false }, // Tồn kho (kiểm kho) – mặc định tắt
   },
   { timestamps: true },
 );
@@ -459,6 +460,8 @@ export const UserNotice = getModel("UserNotice", UserNoticeSchema);
 /* ---------- Nhận hàng: đồ / nguyên liệu các cơ sở nhận mỗi ngày ---------- */
 const GoodsReceiptSchema = new Schema(
   {
+    // RECEIVE = nhận hàng · STOCK = kiểm kho (số còn tồn cuối ngày)
+    kind: { type: String, enum: ["RECEIVE", "STOCK"], default: "RECEIVE" },
     storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
     date: { type: String, required: true }, // ngày nhận YYYY-MM-DD
     month: { type: String, required: true },
@@ -475,9 +478,26 @@ const GoodsReceiptSchema = new Schema(
   { timestamps: true },
 );
 GoodsReceiptSchema.index({ storeId: 1, date: -1 });
+GoodsReceiptSchema.index({ kind: 1, storeId: 1, date: -1 });
 GoodsReceiptSchema.index({ month: 1, date: -1 });
 export type GoodsReceiptDoc = InferSchemaType<typeof GoodsReceiptSchema> & { _id: Types.ObjectId };
 export const GoodsReceipt = getModel("GoodsReceipt", GoodsReceiptSchema);
+
+/* ---------- Danh mục nguyên liệu + lịch sử giá nhập ---------- */
+const GoodsItemSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    unit: { type: String, default: "" }, // đơn vị tính giá (hộp, kg…)
+    aliases: { type: [String], default: [] }, // cách gọi tắt: mn, bột na…
+    // giá nhập theo ngày áp dụng: từ 15/11 = 20.000 (trước đó 19.000)
+    prices: { type: [{ _id: false, from: String, price: Number, by: String, at: Date }], default: [] },
+    order: { type: Number, default: 0 },
+    active: { type: Boolean, default: true }, // xoá = ẩn (giữ lịch sử)
+  },
+  { timestamps: true },
+);
+export type GoodsItemDoc = InferSchemaType<typeof GoodsItemSchema> & { _id: Types.ObjectId };
+export const GoodsItemModel = getModel("GoodsItem", GoodsItemSchema);
 
 /* ---------- Tài chính: chi phí (bill), chi phí cố định, nhật ký báo cáo ---------- */
 const ShareSchema = new Schema({ storeId: { type: Schema.Types.ObjectId, ref: "Store" }, pct: Number }, { _id: false });

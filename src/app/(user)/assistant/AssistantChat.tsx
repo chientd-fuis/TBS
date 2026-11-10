@@ -5,7 +5,7 @@ import { Button, Input } from "@/components/ui";
 import { askStoreAssistant } from "./actions";
 
 type Msg = { role: "q" | "a"; text: string; status?: string };
-const SUGGEST = ["Quản lý cơ sở mình là ai?", "Sầu riêng mở rồi bảo quản sao?", "Quên check-out thì làm gì?", "Đi muộn bị phạt thế nào?", "Nguyên liệu hỏng thì làm sao?", "Chốt ca như thế nào?"];
+const SUGGEST = ["Quản lý cơ sở mình là ai?", "Sầu riêng mở rồi bảo quản sao?", "Quên check-out thì làm gì?", "Đi muộn bị phạt thế nào?", "Nguyên liệu hỏng thì làm sao?", "Chốt ca như thế nào?", "Nhận hàng ghi vào app thế nào?"];
 
 /** Chat với Trợ lý cửa hàng (lịch sử chỉ giữ trên màn hình). */
 export default function AssistantChat({ enabled, left: left0, limit }: { enabled: boolean; left: number | null; limit: number }) {

@@ -7,7 +7,7 @@ import { mergeLines, parseGoodsText, qtyVi, type GoodsItem, type GoodsLine } fro
 import type { GoodsInput } from "@/lib/goods-server";
 
 type Draft = { key: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; time?: string; source: "TEXT" | "PHOTO" | "MANUAL"; dup?: string; unknown?: string[] };
-type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string };
+type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: "RECEIVE" | "STOCK" };
 type Result = { ok?: boolean; error?: string; message?: string };
 
 let seq = 0;
@@ -68,6 +68,7 @@ function QtyInput({ value, onChange }: { value: number; onChange: (n: number) =>
  */
 export default function GoodsForm({
   mode,
+  kind = "RECEIVE",
   catalog,
   today,
   minDate,
@@ -79,6 +80,8 @@ export default function GoodsForm({
   save,
 }: {
   mode: "user" | "admin";
+  /** RECEIVE = nhận hàng · STOCK = kiểm kho (số còn) */
+  kind?: "RECEIVE" | "STOCK";
   catalog: GoodsItem[];
   today: string;
   minDate?: string;
@@ -99,6 +102,8 @@ export default function GoodsForm({
   const [busy, setBusy] = useState<"" | "ai" | "save">("");
   const [msg, setMsg] = useState<{ tone: "red" | "green" | "yellow"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const stock = kind === "STOCK";
+  const isUser = mode === "user";
   const preview = useMemo(() => parseGoodsText(text, catalog), [text, catalog]);
   const unitOf = useMemo(() => new Map(catalog.map((c) => [c.name, c.unit])), [catalog]);
 
@@ -122,7 +127,7 @@ export default function GoodsForm({
     setBusy("ai");
     setMsg(null);
     try {
-      const r = await fetch("/api/goods/read", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, as: mode, storeId }) });
+      const r = await fetch("/api/goods/read", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, as: mode, storeId, kind }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) return setMsg({ tone: "red", text: j.error || "AI chưa đọc được – gõ tay giúp nhé" });
       const got = (j.drafts ?? []) as Omit<Draft, "key" | "note" | "source">[];
@@ -134,11 +139,11 @@ export default function GoodsForm({
         if (unk.length) setMsg({ tone: "yellow", text: `Không có trong danh mục: ${unk.join(", ")} – báo admin thêm vào danh mục nếu cần` });
         return;
       }
-      // ảnh nhóm chat → mỗi tin báo nhận 1 lần; đã có trong nhóm rồi → mặc định không báo lại
-      const fresh = got.map((g) => ({ ...blank(g.date), ...g, note: "", source: "PHOTO" as const }));
+      // ảnh nhóm chat → mỗi tin báo 1 lần. Nhân viên: luôn ngày hôm nay + luôn báo nhóm; admin: theo ngày trên tin, mặc định không báo lại
+      const fresh = got.map((g) => ({ ...blank(today), ...g, date: isUser ? today : g.date, note: "", source: "PHOTO" as const }));
       setDrafts((ds) => [...ds.filter((d) => d.lines.length), ...fresh]);
-      setTelegram(false);
-      setMsg({ tone: "green", text: `AI đọc được ${fresh.length} tin báo nhận – kiểm tra lại số rồi bấm Lưu` });
+      if (!isUser) setTelegram(false);
+      setMsg({ tone: "green", text: `AI đọc được ${fresh.length} tin báo ${stock ? "tồn" : "nhận"} – kiểm tra lại số rồi bấm Lưu` });
     } catch {
       setMsg({ tone: "red", text: "Mất kết nối – thử lại" });
     } finally {
@@ -168,13 +173,14 @@ export default function GoodsForm({
       setText("");
     }
     const used = ds.filter((d) => d.lines.length);
-    if (!used.length) return setMsg({ tone: "red", text: "Chưa có món nào – gõ “nhận 5mn, 2nl…” hoặc thêm món" });
+    if (!used.length) return setMsg({ tone: "red", text: `Chưa có món nào – gõ “${stock ? "tồn" : "nhận"} 5mn, 2nl…” hoặc thêm món` });
     if (mode === "admin" && !storeId) return setMsg({ tone: "red", text: "Chọn cơ sở" });
     setBusy("save");
     setMsg(null);
     const r = await save({
+      kind,
       storeId,
-      telegram,
+      telegram: isUser || telegram,
       id: initial?.id,
       drafts: used.map((d) => ({ date: d.date, lines: d.lines, note: d.note, raw: d.raw, sender: d.sender, source: d.source })),
     }).catch(() => ({ error: "Mất kết nối – thử lại" }) as Result);
@@ -206,7 +212,7 @@ export default function GoodsForm({
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
-          placeholder="Gõ như nhắn nhóm: nhận 5mn, 2nl, 3 bột na"
+          placeholder={stock ? "Gõ số còn: tồn 3mn, 1nl, 2 bột na, hết sầu múi" : "Gõ như nhắn nhóm: nhận 5mn, 2nl, 3 bột na"}
           className="w-full resize-none rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 text-base"
         />
         {text.trim() && (
@@ -246,16 +252,22 @@ export default function GoodsForm({
       {drafts.map((d, di) => (
         <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-[#fff4e5] ring-warn/40" : "bg-white ring-[#f1e6c8]"}`}>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-bold text-accent">{drafts.length > 1 ? `Lần ${di + 1}` : "Đồ đã nhận"}</span>
-            <input
-              type="date"
-              value={d.date}
-              min={minDate}
-              max={today}
-              onChange={(e) => patch(d.key, { date: e.target.value })}
-              className="rounded-lg border border-[#e9d9a8] px-2 py-0.5 text-sm"
-            />
-            {d.date !== today && <span className="text-xs text-ink/60">({dm(d.date)})</span>}
+            <span className="font-bold text-accent">{drafts.length > 1 ? `Lần ${di + 1}` : stock ? "Đồ còn tồn" : "Đồ đã nhận"}</span>
+            {isUser ? (
+              <span className="text-xs text-ink/60">hôm nay {dm(today)}</span>
+            ) : (
+              <>
+                <input
+                  type="date"
+                  value={d.date}
+                  min={minDate}
+                  max={today}
+                  onChange={(e) => patch(d.key, { date: e.target.value })}
+                  className="rounded-lg border border-[#e9d9a8] px-2 py-0.5 text-sm"
+                />
+                {d.date !== today && <span className="text-xs text-ink/60">({dm(d.date)})</span>}
+              </>
+            )}
             {d.sender && <span className="text-xs text-ink/60">· {d.sender}{d.time ? ` ${d.time}` : ""}</span>}
             {drafts.length > 1 && (
               <button type="button" onClick={() => setDrafts((ds) => ds.filter((x) => x.key !== d.key))} className="ml-auto text-xs text-danger underline">
@@ -274,7 +286,7 @@ export default function GoodsForm({
               {d.lines.map((l, li) => (
                 <li key={`${l.name}|${l.unit}`} className="flex items-center gap-2 py-1.5">
                   <span className="min-w-0 flex-1 truncate font-semibold">{l.name}</span>
-                  <button type="button" aria-label="Bớt" onClick={() => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: Math.max(1, x.qty - 1) } : x)))} className="grid h-8 w-8 place-items-center rounded-full bg-cream">
+                  <button type="button" aria-label="Bớt" onClick={() => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: Math.max(stock ? 0 : 1, x.qty - 1) } : x)))} className="grid h-8 w-8 place-items-center rounded-full bg-cream">
                     <Minus size={15} />
                   </button>
                   <QtyInput value={l.qty} onChange={(v) => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: v } : x)))} />
@@ -314,13 +326,16 @@ export default function GoodsForm({
         </div>
       ))}
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={telegram} onChange={(e) => setTelegram(e.target.checked)} className="h-4 w-4" />
-        Báo vào nhóm Telegram của cơ sở
-      </label>
+      {/* nhân viên: luôn báo nhóm Telegram (không cho tắt) */}
+      {!isUser && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={telegram} onChange={(e) => setTelegram(e.target.checked)} className="h-4 w-4" />
+          Báo vào nhóm Telegram của cơ sở
+        </label>
+      )}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <Button type="button" onClick={onSave} disabled={!!busy || (!total && !preview.lines.length)} className="w-full py-3 text-base">
-        {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : "📦"} {initial ? "Lưu sửa" : "Lưu nhận hàng"}
+        {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : stock ? "📋" : "📦"} {initial ? "Lưu sửa" : stock ? "Lưu tồn kho" : "Lưu nhận hàng"}
       </Button>
     </div>
   );

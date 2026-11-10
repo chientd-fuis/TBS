@@ -14,6 +14,8 @@ import {
   Inbox,
   Receipt,
   Package,
+  Tags,
+  BarChart3,
   LayoutDashboard,
   PiggyBank,
   Settings,
@@ -38,6 +40,8 @@ const items = [
   { href: "/admin/finance", label: "Tài chính", icon: PiggyBank, perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.settings"] },
   { href: "/admin/closings", label: "Chốt ca", icon: Receipt },
   { href: "/admin/goods", label: "Nhận hàng", icon: Package, perm: ["goods"] },
+  { href: "/admin/goods/items", label: "Nguyên liệu & giá nhập", icon: Tags, perm: ["goods"] },
+  { href: "/admin/goods/report", label: "Tổng hợp hàng nhập", icon: BarChart3, perm: ["goods"] },
   { href: "/admin/shifts", label: "Ca làm việc", icon: CalendarClock },
   { href: "/admin/holidays", label: "Ngày lễ", icon: CalendarHeart },
   { href: "/admin/devices", label: "Thiết bị", icon: Smartphone, badge: "devices" },
@@ -52,8 +56,10 @@ export default function AdminNav({ counts, owner = false, perms = [], hide = [] 
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3">
-      {items.filter((it) => !hide.includes(it.href)).filter((it) => owner || (!("owner" in it) && (!("perm" in it) || it.perm.some((p) => perms.includes(p))))).map(({ href, label, icon: Icon, ...rest }) => {
-        const active = href === "/admin" ? path === "/admin" : path.startsWith(href);
+      {items.filter((it) => !hide.some((h) => it.href === h || it.href.startsWith(`${h}/`))).filter((it) => owner || (!("owner" in it) && (!("perm" in it) || it.perm.some((p) => perms.includes(p))))).map(({ href, label, icon: Icon, ...rest }) => {
+        // mục khớp đường dẫn dài nhất mới sáng (VD /admin/goods/items không sáng cả "Nhận hàng")
+        const match = (h: string) => (h === "/admin" ? path === "/admin" : path === h || path.startsWith(`${h}/`));
+        const active = match(href) && !items.some((o) => o.href.length > href.length && o.href.startsWith(href) && match(o.href));
         const n = "badge" in rest ? counts[rest.badge] : 0;
         return (
           <Link

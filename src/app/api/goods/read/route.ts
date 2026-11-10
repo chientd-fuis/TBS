@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/guards";
 import { can } from "@/lib/permissions";
 import { geminiConfigured } from "@/lib/ocr";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { getGoodsCatalog, GOODS_OFF, goodsEnabled, markDupes, readGoods } from "@/lib/goods-server";
+import { getGoodsCatalog, GOODS_OFF, goodsEnabled, markDupes, readGoods, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
 import { HttpError, jsonError } from "@/lib/api";
 import { localDate } from "@/lib/time";
 
@@ -19,6 +19,7 @@ const Body = z.object({
   storeId: z.string().optional(),
   /** form admin gửi kèm → đọc theo quyền admin (nhân viên đăng nhập cùng trình duyệt không bị lẫn) */
   as: z.enum(["admin", "user"]).optional(),
+  kind: z.enum(["RECEIVE", "STOCK"]).optional(),
 });
 
 /** AI đọc ảnh chụp nhóm chat / đoạn tin nhắn nhận hàng → các lần nhận (chưa lưu – người nhập kiểm tra rồi bấm Lưu). */
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
     const p = Body.safeParse(await req.json());
     if (!p.success || (!p.data.photos?.length && !p.data.text?.trim())) throw new HttpError(400, "Cần ảnh hoặc nội dung tin nhắn");
     if (!(await goodsEnabled())) throw new HttpError(403, GOODS_OFF);
+    const kind = p.data.kind ?? "RECEIVE";
+    if (kind === "STOCK" && !(await stockEnabled())) throw new HttpError(403, STOCK_OFF);
     if (!geminiConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY – gõ tay danh sách món", { code: "OCR_OFF" });
     let actor: string;
     let storeId = "";
@@ -48,11 +51,11 @@ export async function POST(req: Request) {
       today = ctx.today;
     }
     const catalog = await getGoodsCatalog();
-    const drafts = await readGoods({ photos: p.data.photos, text: p.data.text }, catalog, today, actor).catch((e: Error) => {
+    const drafts = await readGoods({ photos: p.data.photos, text: p.data.text }, catalog, today, actor, kind).catch((e: Error) => {
       throw new HttpError(502, e.message, { code: "OCR_FAILED" });
     });
-    if (!drafts.length) throw new HttpError(422, "Không thấy tin báo nhận hàng nào – chụp rõ đoạn có chữ “nhận …” hoặc gõ tay");
-    return NextResponse.json({ ok: true, drafts: await markDupes(storeId, drafts) });
+    if (!drafts.length) throw new HttpError(422, kind === "STOCK" ? "Không thấy tin báo tồn kho nào – chụp rõ đoạn “tồn …” hoặc gõ tay" : "Không thấy tin báo nhận hàng nào – chụp rõ đoạn có chữ “nhận …” hoặc gõ tay");
+    return NextResponse.json({ ok: true, drafts: await markDupes(storeId, drafts, kind) });
   } catch (e) {
     return jsonError(e);
   }

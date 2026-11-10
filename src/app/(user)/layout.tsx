@@ -21,11 +21,14 @@ export default async function UserLayout({ children }: { children: React.ReactNo
   return (
     <div className="mx-auto min-h-screen max-w-lg pb-24">
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-primary px-4 py-2 shadow-sm">
-        <Logo size={36} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold">{user.name}</p>
-          <p className="truncate text-xs">{store?.name}</p>
-        </div>
+        {/* bấm logo / tên → về trang chủ chấm công */}
+        <Link href="/" aria-label="Về trang chủ chấm công" className="flex min-w-0 flex-1 items-center gap-3">
+          <Logo size={36} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold">{user.name}</span>
+            <span className="block truncate text-xs">{store?.name}</span>
+          </span>
+        </Link>
         {showAssistant && (
           <Link href="/assistant" className="flex items-center gap-1 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30">
             <Sparkles size={15} /> Hỏi trợ lý

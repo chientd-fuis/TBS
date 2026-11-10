@@ -5,7 +5,7 @@ import { localDate, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
 import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
-import { goodsEnabled } from "@/lib/goods-server";
+import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,7 @@ export default async function HomePage() {
   const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace checkGps checkWifi wifiName").lean();
   const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
   const goodsOn = await goodsEnabled();
+  const stockOn = goodsOn && (await stockEnabled());
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
 
   return (
@@ -54,7 +55,7 @@ export default async function HomePage() {
       >
         <span>
           <span className="block font-bold text-accent">📷 Chốt ca</span>
-          <span className="text-xs text-ink/70">Chụp ảnh cuối ca, gửi vào nhóm Telegram của quán</span>
+          <span className="text-xs text-ink/70">Chụp ảnh tờ chốt ca sáng / chiều / tối. Không chụp ghi nhận 1 lỗi phạt</span>
         </span>
         <span className="text-xl text-accent">›</span>
       </Link>
@@ -65,10 +66,22 @@ export default async function HomePage() {
       >
         <span>
           <span className="block font-bold text-accent">📦 Nhận hàng</span>
-          <span className="text-xs text-ink/70">Gõ “nhận 5mn, 2nl…” hoặc chụp tin nhắn nhóm – app tự ghi &amp; báo nhóm</span>
+          <span className="text-xs text-ink/70">Chụp ảnh tin nhắn đã nhận hàng trong nhóm Facebook hoặc copy nội dung đã nhận – app tự đọc &amp; ghi</span>
         </span>
         <span className="text-xl text-accent">›</span>
       </Link>
+      )}
+      {stockOn && (
+        <Link
+          href="/stock"
+          className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
+        >
+          <span>
+            <span className="block font-bold text-accent">📋 Tồn kho</span>
+            <span className="text-xs text-ink/70">Cuối ngày báo số còn: “tồn 3mn, 1nl, hết sầu múi…”</span>
+          </span>
+          <span className="text-xl text-accent">›</span>
+        </Link>
       )}
       <Card title={`Hôm nay · ${viDate(today)}`}>
         <div className="space-y-2 text-sm">

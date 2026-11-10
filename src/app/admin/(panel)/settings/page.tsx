@@ -56,6 +56,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   </span>
                 </span>
               </label>
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" name="stockEnabled" defaultChecked={s.stockEnabled === true} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Bật Tồn kho (kiểm kho)</b> <span className="text-xs text-ink/60">– mặc định tắt</span>
+                  <span className="block text-xs text-ink/60">
+                    Nhân viên có thêm nút “Tồn kho” để báo số còn cuối ngày (gõ “tồn 3mn, 1nl…” / ảnh nhóm chat). Tổng hợp tháng khi đó tính tiêu thụ = tồn đầu + nhập − tồn cuối, thay vì chỉ theo số nhập.
+                  </span>
+                </span>
+              </label>
             </ActionForm>
             <Link href="/admin/goods" className="mt-2 inline-block text-sm text-accent underline">Mở trang Nhận hàng →</Link>
           </Card>

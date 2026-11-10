@@ -3,27 +3,31 @@ import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
-import { cleanInputs, getGoodsCatalog, GOODS_OFF, goodsEnabled, notifyGoods, type GoodsInput } from "@/lib/goods-server";
-import { addDays } from "@/lib/time";
+import { cleanInputs, getGoodsCatalog, GOODS_OFF, goodsEnabled, notifyGoods, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
 
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Nhân viên ghi đồ đã nhận ở cơ sở đang làm (ca hỗ trợ → cơ sở hỗ trợ) → báo nhóm Telegram cơ sở. */
-export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean }): Promise<GoodsSaveResult> {
+export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "STOCK" }): Promise<GoodsSaveResult> {
   try {
     const user = await requireActiveUser();
     if (!(await goodsEnabled())) return { error: GOODS_OFF };
+    const kind = input?.kind === "STOCK" ? "STOCK" : "RECEIVE";
+    if (kind === "STOCK" && !(await stockEnabled())) return { error: STOCK_OFF };
     const ctx = await resolveClosingContext(user);
     if (!ctx) return { error: "Bạn chưa thuộc cơ sở nào" };
-    const rows = cleanInputs(input?.drafts, await getGoodsCatalog(), { min: addDays(ctx.today, -7), max: ctx.today });
+    // nhân viên: ngày nhận luôn là hôm nay, luôn báo nhóm Telegram cơ sở
+    const drafts = (Array.isArray(input?.drafts) ? input.drafts : []).map((d) => ({ ...d, date: ctx.today }));
+    const rows = cleanInputs(drafts, await getGoodsCatalog(), { min: ctx.today, max: ctx.today }, kind);
     const ids: string[] = [];
     for (const d of rows) {
-      const doc = await GoodsReceipt.create({ ...d, storeId: ctx.store._id, month: d.date.slice(0, 7), byUserId: user._id, byName: user.name || user.email, telegram: { status: input?.telegram ? "PENDING" : "SKIPPED" } });
+      const doc = await GoodsReceipt.create({ ...d, kind, storeId: ctx.store._id, month: d.date.slice(0, 7), byUserId: user._id, byName: user.name || user.email, telegram: { status: "PENDING" } });
       ids.push(String(doc._id));
     }
-    if (input?.telegram) for (const id of ids) await notifyGoods(id);
-    revalidatePath("/receive");
-    return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần nhận` : "nhận hàng"}${input?.telegram ? " và báo nhóm" : ""} ✔` };
+    for (const id of ids) await notifyGoods(id);
+    revalidatePath(kind === "STOCK" ? "/stock" : "/receive");
+    const what = kind === "STOCK" ? "tồn kho" : "nhận hàng";
+    return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what} và báo nhóm ✔` };
   } catch (e) {
     const err = e as { digest?: string; message?: string };
     if (err?.digest?.startsWith("NEXT_REDIRECT")) throw e;
@@ -40,5 +44,6 @@ export async function deleteGoodsUser(_: unknown, fd: FormData): Promise<{ ok?: 
   if (Date.now() - new Date(r.createdAt ?? 0).getTime() > 24 * 3600_000) return { error: "Quá 24 giờ – nhờ admin sửa" };
   await GoodsReceipt.deleteOne({ _id: r._id });
   revalidatePath("/receive");
+  revalidatePath("/stock");
   return { ok: true };
 }

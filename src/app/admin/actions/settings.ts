@@ -95,8 +95,9 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được bật / tắt" };
     await connectDB();
     const on = fd.get("goodsEnabled") === "on";
-    await Settings.updateOne({ key: "main" }, { $set: { goodsEnabled: on } }, { upsert: true });
-    await audit(adminActor(admin), "settings.goodsEnabled", { type: "Settings" }, null, { goodsEnabled: on });
+    const stock = fd.get("stockEnabled") === "on";
+    await Settings.updateOne({ key: "main" }, { $set: { goodsEnabled: on, stockEnabled: stock } }, { upsert: true });
+    await audit(adminActor(admin), "settings.goodsEnabled", { type: "Settings" }, null, { goodsEnabled: on, stockEnabled: stock });
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {

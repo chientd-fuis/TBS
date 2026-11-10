@@ -156,7 +156,7 @@ export default async function AiSettingsPage() {
 
       <Card title="Trợ lý cửa hàng – nội dung nhân viên được hỏi">
         <p className="mb-3 text-xs text-ink/70">
-          Trợ lý <b>chỉ</b> trả lời 6 chủ đề dưới đây, dựa đúng nội dung bạn nhập. Câu ngoài phạm vi → từ chối; câu chưa có nội dung → “chưa có trong nội quy, hỏi quản lý”. Trợ lý không xem được chấm công, lương, doanh thu của ai.
+          Trợ lý <b>chỉ</b> trả lời các chủ đề dưới đây (+ “Cách nhận hàng / tồn kho” và hướng dẫn chụp tờ chốt ca có sẵn trong app), dựa đúng nội dung bạn nhập. Câu ngoài phạm vi → từ chối; câu chưa có nội dung → “chưa có trong nội quy, hỏi quản lý”. Trợ lý không xem được chấm công, lương, doanh thu của ai.
         </p>
         <ActionForm action={saveAssistantContent} submitLabel="Lưu nội dung trợ lý" successText="Đã lưu" className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-2">
