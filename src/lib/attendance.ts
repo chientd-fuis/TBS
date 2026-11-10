@@ -224,7 +224,7 @@ export async function recomputeRounding(now = new Date()) {
   }
   if (ops.length) await Attendance.bulkWrite(ops);
   const { generatePayroll } = await import("./payroll");
-  for (const p of await Payroll.find({ month: { $in: months }, status: "DRAFT" }).select("storeId month").lean()) await generatePayroll(String(p.storeId), p.month);
+  for (const p of await Payroll.find({ month: { $in: months }, status: { $in: ["DRAFT", "PUBLISHED"] } }).select("storeId month").lean()) await generatePayroll(String(p.storeId), p.month);
   return ops.length;
 }
 

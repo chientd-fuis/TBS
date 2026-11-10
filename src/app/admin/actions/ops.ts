@@ -442,7 +442,7 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
       await Payroll.updateOne({ _id: p._id }, { $set: { status: "PAID", paidAt: now, ...(p.publishedAt ? {} : { publishedAt: now, publishedBy: actor.name }) } });
       await audit(actor, "payroll.paid", { type: "Payroll", id: `${storeId}:${month}` });
     } else if (op === "unlock") {
-      // mở khoá cả bảng: bỏ "đã trả" mọi dòng, bảng về "Đã công bố" (nhân viên vẫn xem được), giữ số đã chốt – muốn đổi thì bấm "Tính lại"
+      // mở khoá cả bảng: bỏ "đã trả" mọi dòng, bảng về "Đã công bố" (nhân viên vẫn xem được), lần mở trang sau tự tính lại theo dữ liệu mới nhất
       const reason = str(fd.get("reason"));
       if (reason.length < 3) return { error: "Nhập lý do mở khoá" };
       const p = await Payroll.findOne({ storeId, month });
@@ -475,7 +475,7 @@ export async function payrollItemAction(_: FormState, fd: FormData): Promise<For
     const op = str(fd.get("op"));
     if (op === "paid") {
       if (item.paidAt) return { error: "Đã đánh dấu trả rồi" };
-      await generatePayroll(String(p.storeId), p.month); // bảng nháp: chốt số mới nhất trước khi khoá (đã công bố: giữ số đã chốt)
+      await generatePayroll(String(p.storeId), p.month); // chốt số mới nhất trước khi khoá dòng
       await PayrollItem.updateOne({ _id: item._id, paidAt: null }, { $set: { paidAt: new Date(), paidBy: actor.name } });
       // trả đủ mọi người → cả bảng "Đã trả"
       if (!(await PayrollItem.exists({ payrollId: p._id, paidAt: null })))

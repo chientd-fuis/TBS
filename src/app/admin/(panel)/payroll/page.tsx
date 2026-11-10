@@ -10,6 +10,7 @@ import { Alert, Badge, Card, Empty, Input, LinkButton, PageTitle } from "@/compo
 import { payrollAction, payrollItemAction } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
 import { BpAmount, CopyAccount, ExtrasCell, type ExtraEntry } from "./PayrollCells";
+import PayrollColumns from "./PayrollColumns";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
   if (!store) return <p>Chưa có cơ sở</p>;
   const tz = store.timezone || "Asia/Ho_Chi_Minh";
   const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : prevMonth(localMonth(new Date(), tz));
-  // Bảng nháp luôn tính sẵn: mở trang là tạo / tính lại. Đã công bố / đã trả → giữ số đã chốt (generatePayroll bỏ qua)
+  // Luôn tính sẵn: mở trang là tạo / tính lại (nháp + đã công bố). Đã trả → giữ số đã chốt (generatePayroll bỏ qua)
   const existing = await Payroll.findOne({ storeId: store._id, month }).select("status").lean();
   if (existing?.status !== "PAID" && month <= localMonth(new Date(), tz)) await generatePayroll(String(store._id), month);
   const payroll = await Payroll.findOne({ storeId: store._id, month }).lean();
@@ -93,7 +94,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         actions={
           <div className="flex flex-wrap gap-2">
             {payroll?.status === "DRAFT" && (
-              <ActionForm action={payrollAction} submitLabel="Công bố cho nhân viên" variant="secondary" successText="" className="inline-block" confirm={`Công bố bảng lương tháng ${viMonth(month)}? Nhân viên sẽ xem được. Số liệu được CHỐT tại lúc công bố – sửa chấm công / thưởng phạt sau đó phải bấm "Tính lại" mới cập nhật.`}>
+              <ActionForm action={payrollAction} submitLabel="Công bố cho nhân viên" variant="secondary" successText="" className="inline-block" confirm={`Công bố bảng lương tháng ${viMonth(month)}? Nhân viên sẽ xem được. Sửa tiếp sau đó (chấm công, thưởng / phạt, phụ cấp…) nhân viên thấy luôn số mới.`}>
                 {hidden("publish")}
               </ActionForm>
             )}
@@ -102,10 +103,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                 <ActionForm action={payrollAction} submitLabel="Đã trả tất cả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu ĐÃ TRẢ lương tháng ${viMonth(month)} cho tất cả? Bảng lương sẽ bị khoá (mở khoá cần lý do).`}>
                   {hidden("paid")}
                 </ActionForm>
-                <ActionForm action={payrollAction} submitLabel="Tính lại" variant="outline" successText="Đã tính lại" className="inline-block" confirm={`Tính lại bảng lương tháng ${viMonth(month)} theo chấm công, thưởng phạt, lương giờ, tài khoản ngân hàng MỚI NHẤT? Số nhân viên đang xem sẽ thay đổi (dòng đã trả giữ nguyên).`}>
-                  {hidden("generate")}
-                </ActionForm>
-                <ActionForm action={payrollAction} submitLabel="Huỷ công bố" variant="ghost" successText="" className="inline-block" confirm="Ẩn bảng lương khỏi nhân viên? (bảng về nháp, tự tính lại theo dữ liệu mới nhất)">
+                <ActionForm action={payrollAction} submitLabel="Huỷ công bố" variant="ghost" successText="" className="inline-block" confirm="Ẩn bảng lương khỏi nhân viên?">
                   {hidden("unpublish")}
                 </ActionForm>
               </>
@@ -120,13 +118,14 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         )}
         {payroll?.status === "PUBLISHED" && (
           <Alert tone="green">
-            Đã công bố lúc {viDateTime(payroll.publishedAt)} bởi {payroll.publishedBy} – nhân viên xem được. 🔒 Số liệu đã chốt lúc {viDateTime(payroll.calculatedAt)}, sửa chấm công / thưởng phạt sau đó không tự cập nhật – bấm <b>Tính lại</b> nếu cần. Đã trả <b>{paidCount}/{items.length}</b> người.
+            Đã công bố lúc {viDateTime(payroll.publishedAt)} bởi {payroll.publishedBy} – nhân viên xem được. Sửa tiếp thì nhân viên thấy luôn số mới (tự tính lại · cập nhật {viDateTime(payroll.calculatedAt)}). Đã trả <b>{paidCount}/{items.length}</b> người.
           </Alert>
         )}
         {payroll?.status === "PAID" && <Alert tone="green">🔒 Đã trả hết – bảng lương đã khoá. Cần sửa thì mở khoá (nhập lý do) ở cuối trang hoặc từng dòng.</Alert>}
         {!payroll ? (
           <Empty>Chưa có dữ liệu tháng này</Empty>
         ) : (
+          <PayrollColumns>
           <div className="mt-3 overflow-x-auto">
             <table className="tbs">
               <thead>
@@ -206,8 +205,10 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                     </td>
                   </tr>
                 )}
+                {/* đủ 11 ô (không gộp cột) để ẩn cột vẫn thẳng hàng */}
                 <tr>
-                  <td colSpan={8} className="text-right font-bold">TỔNG</td>
+                  <td className="font-bold">TỔNG</td>
+                  {Array.from({ length: 7 }, (_, n) => <td key={n}></td>)}
                   <td className="text-right text-base font-bold text-secondary-dark">{vnd(total)}</td>
                   <td></td>
                   <td></td>
@@ -215,6 +216,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
               </tbody>
             </table>
           </div>
+          </PayrollColumns>
         )}
       </Card>
 
@@ -228,7 +230,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
 
       {payroll?.status === "PAID" && (
         <Card title="Mở khoá cả bảng lương">
-          <ActionForm action={payrollAction} submitLabel="Mở khoá" variant="danger" confirm="Mở khoá sẽ bỏ trạng thái Đã trả của mọi nhân viên, bảng về Đã công bố và GIỮ số đã chốt (bấm Tính lại nếu cần cập nhật). Nhân viên vẫn xem được. Tiếp tục?" className="flex flex-wrap items-end gap-2">
+          <ActionForm action={payrollAction} submitLabel="Mở khoá" variant="danger" confirm="Mở khoá sẽ bỏ trạng thái Đã trả của mọi nhân viên, bảng về Đã công bố và tự tính lại theo dữ liệu mới nhất. Nhân viên vẫn xem được. Tiếp tục?" className="flex flex-wrap items-end gap-2">
             {hidden("unlock")}
             <Input name="reason" placeholder="Lý do mở khoá (bắt buộc)" className="w-80" />
           </ActionForm>

@@ -15,9 +15,9 @@ const multOf = (v: unknown) => {
   return (HOLIDAY_MULTIPLIERS as readonly number[]).includes(n) ? n : 2;
 };
 
-/** Tính lại bảng lương NHÁP của các tháng bị ảnh hưởng; bảng đã công bố giữ nguyên (đã chốt). */
+/** Tính lại bảng lương (nháp + đã công bố) của các tháng bị ảnh hưởng; bảng đã trả giữ nguyên. */
 async function recalc(months: string[]) {
-  const list = await Payroll.find({ month: { $in: [...new Set(months)] }, status: "DRAFT" }).select("storeId month").lean();
+  const list = await Payroll.find({ month: { $in: [...new Set(months)] }, status: { $in: ["DRAFT", "PUBLISHED"] } }).select("storeId month").lean();
   for (const p of list) await generatePayroll(String(p.storeId), p.month);
   revalidatePath("/admin", "layout");
 }

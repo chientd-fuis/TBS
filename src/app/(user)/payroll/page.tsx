@@ -1,3 +1,4 @@
+import { generatePayroll } from "@/lib/payroll";
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
 import { BonusPenalty, Payroll, PayrollFeedback, PayrollItem, Store, type BpDetail, type ExtrasNote } from "@/lib/models";
@@ -19,10 +20,16 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   const { month: m } = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : prevMonth(localMonth(new Date(), tz));
-  const item = await PayrollItem.findOne({ userId: user._id, month }).lean();
-  const payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
+  let item = await PayrollItem.findOne({ userId: user._id, month }).lean();
+  let payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
+  if (payroll?.status === "PUBLISHED") {
+    // công bố = cho xem; số luôn theo dữ liệu mới nhất (dòng đã trả giữ nguyên)
+    await generatePayroll(String(payroll.storeId), month);
+    item = await PayrollItem.findOne({ userId: user._id, month }).lean();
+    payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
+  }
   const visible = payroll && payroll.status !== "DRAFT";
-  // bảng đã công bố: chi tiết thưởng / phạt theo bản đã chốt cùng tổng (bảng cũ chưa có bản chốt → dữ liệu hiện tại)
+  // chi tiết thưởng / phạt theo dòng lương (bảng cũ chưa có chi tiết → dữ liệu hiện tại)
   const bps: { key: string; kind?: string | null; date: string; content?: string | null; amountVnd: number; attendanceId?: unknown }[] = !visible
     ? []
     : item.bpDetails
@@ -79,7 +86,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <dd className="border-t border-[#f1e6c8] pt-2 text-right text-lg font-bold text-secondary-dark">{vnd(item.netPay)}</dd>
             </dl>
             <p className="mt-2 text-xs text-ink/60">
-              {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu đã chốt lúc công bố – quán tính lại thì sẽ cập nhật."}
+              {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu cập nhật theo chấm công, thưởng / phạt mới nhất – chốt khi quán trả lương."}
             </p>
           </Card>
           {/* AI giải thích lương – chỉ hiện khi Admin Tổng bật ở Cài đặt → AI */}

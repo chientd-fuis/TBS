@@ -16,8 +16,8 @@ function wageAt(history: { hourlyWage: number; effectiveFrom: string }[], date: 
 }
 
 /**
- * Tạo (nếu chưa có) + tính lại bảng lương NHÁP. Đã công bố → bảng CHỐT số lúc công bố (kể cả tên, STK, chi tiết thưởng phạt),
- * chỉ tính lại khi admin bấm "Tính lại" (`force`). KHÔNG tính lại dòng đã trả (paidAt) và bảng "Đã trả".
+ * Tạo (nếu chưa có) + tính lại bảng lương (nháp lẫn đã công bố – "Công bố" chỉ là cho nhân viên xem, KHÔNG chốt số,
+ * sửa tiếp thì nhân viên thấy luôn số mới; không lưu bản cũ). KHÔNG tính lại dòng đã trả (paidAt) và bảng "Đã trả".
  * Giữ nguyên phụ cấp / tạm ứng admin đã nhập.
  */
 export async function generatePayroll(storeId: string, month: string, opts: { force?: boolean } = {}) {
@@ -25,7 +25,7 @@ export async function generatePayroll(storeId: string, month: string, opts: { fo
   let payroll = await Payroll.findOne({ storeId, month });
   if (!payroll) payroll = await Payroll.create({ storeId, month, status: "DRAFT" });
   if (payroll.status === "PAID") return payroll;
-  if (payroll.status === "PUBLISHED" && !opts.force) return payroll;
+  void opts.force; // giữ tham số cho chỗ gọi cũ – giờ luôn tính lại
 
   const atts = await Attendance.find({ month, status: "COMPLETED", ...payStoreFilter(storeId) }).lean();
   const bps = await BonusPenalty.find({ storeId, month }).lean();
