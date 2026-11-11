@@ -49,18 +49,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-end gap-2 border-b border-[#f1e6c8] bg-white px-4 py-2 text-sm">
-          {ask.enabled && geminiConfigured() && <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />}
-          <span className="text-ink/70">
-            {admin.kind === "OWNER" ? "👑 Admin Tổng" : "Admin"}: <b>{admin.kind === "OWNER" ? admin.email : `${admin.name} (${admin.email})`}</b>
+        {/* mobile: tên (rút gọn) bên trái + Trợ lý AI + Đăng xuất bên phải trên 1 hàng – không để nút bị đẩy ra ngoài màn hình */}
+        <header className="flex items-center gap-2 border-b border-[#f1e6c8] bg-white px-3 py-2 text-sm lg:justify-end lg:px-4">
+          <span className="min-w-0 flex-1 truncate text-ink/70 lg:flex-none" title={admin.email}>
+            {admin.kind === "OWNER" ? (
+              <>
+                👑 <b className="lg:hidden">Admin Tổng</b>
+                <span className="hidden lg:inline">Admin Tổng: <b>{admin.email}</b></span>
+              </>
+            ) : (
+              <>
+                Admin: <b>{admin.name}</b>
+                <b className="hidden lg:inline"> ({admin.email})</b>
+              </>
+            )}
           </span>
-          {admin.kind === "OWNER" ? (
-            <SignOutButton callbackUrl="/admin/login" />
-          ) : (
-            <form action={adminLogout}>
-              <Button variant="ghost" type="submit">Đăng xuất</Button>
-            </form>
+          {ask.enabled && geminiConfigured() && (
+            <span className="shrink-0 lg:order-first">
+              <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />
+            </span>
           )}
+          <span className="shrink-0">
+            {admin.kind === "OWNER" ? (
+              <SignOutButton callbackUrl="/admin/login" />
+            ) : (
+              <form action={adminLogout}>
+                <Button variant="ghost" type="submit">Đăng xuất</Button>
+              </form>
+            )}
+          </span>
         </header>
         <main className="space-y-4 p-4 lg:p-6">
           <SectionTabs {...nav} />

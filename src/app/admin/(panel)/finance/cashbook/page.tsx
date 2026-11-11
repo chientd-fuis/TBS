@@ -6,18 +6,20 @@ import { CashCount, CashTransfer, Expense, Payroll, PayrollItem, ShiftClosing, S
 import { dayRevenueFromClosings } from "@/lib/revenue";
 import {
   CASH_KINDS,
+  actualCash,
   applyDayTransfers,
   cashBalance,
   cashKindOf,
   payrollEntries,
   type CashSide,
 } from "@/lib/cashbook";
-import { localDate } from "@/lib/time";
+import { addDays, localDate } from "@/lib/time";
 import { Badge, Card, Field, Input, Select } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import {
   deleteCashTransfer,
   saveCashTransfer,
+  toggleTransferCounted,
 } from "@/app/admin/actions/finance";
 import { cn } from "@/lib/format";
 import { can } from "@/lib/permissions";
@@ -77,11 +79,19 @@ export default async function CashbookPage() {
   const counted = new Set(counts.map((c) => `${c.storeId}|${c.date}`));
   const dayRows = applyDayTransfers(dayRevenueFromClosings(closings), all);
   const takenTm = dayRows.filter((r) => counted.has(`${r.storeId}|${r.date}`)).reduce((s, r) => s + r.tm, 0);
+  const realTm = actualCash(takenTm, moves);
   const notTaken = dayRows.filter((r) => !counted.has(`${r.storeId}|${r.date}`));
   const nameOf = new Map(
     stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]),
   );
   const today = localDate(new Date());
+  // Lịch sử ghi phiếu + chi tiết 2 ô: Admin Tổng cấp quyền xem toàn bộ / 7 ngày gần nhất; không có → chỉ thấy 2 số dư
+  const histAll = can(admin, "finance.cashbook.history");
+  const hist7 = !histAll && can(admin, "finance.cashbook.history7");
+  const showHist = histAll || hist7;
+  const since = hist7 ? addDays(today, -6) : "";
+  const histPays = pays.filter((p) => p.date >= since);
+  const histMoves = moves.filter((t) => t.date >= since);
 
   return (
     <div className="space-y-4">
@@ -90,7 +100,7 @@ export default async function CashbookPage() {
           <FundBox
             title="🏦 Tài khoản"
             side={fund.tk}
-            rows={[
+            rows={!showHist ? [] : [
               ["Doanh thu tài khoản", fund.tk.revenue, 1],
               ["Bill chuyển khoản", fund.tk.bills, -1],
               ["Thanh toán lương", fund.tk.payroll, -1],
@@ -101,7 +111,8 @@ export default async function CashbookPage() {
           <FundBox
             title="💵 Tiền mặt"
             side={fund.tm}
-            rows={[
+            sub={seeCount ? realTm : undefined}
+            rows={!showHist ? [] : [
               ["Doanh thu tiền mặt", fund.tm.revenue, 1],
               ["Đã rút", fund.tm.take, -1],
               ["Bổ sung vốn", fund.tm.add, 1],
@@ -131,7 +142,8 @@ export default async function CashbookPage() {
         </p>
       </Card>
 
-      <Card title={owner ? "Ghi phiếu" : `Các phiếu đã ghi (${moves.length})`}>
+      {showHist && (
+      <Card title={owner ? "Ghi phiếu" : `Các phiếu đã ghi${hist7 ? " · 7 ngày gần nhất" : ""} (${histMoves.length})`}>
         {owner && (
           <ActionForm
             action={saveCashTransfer}
@@ -177,13 +189,17 @@ export default async function CashbookPage() {
                 </Field>
               </div>
             </div>
+            <label className="flex items-center gap-2 text-xs text-ink/70">
+              <input type="checkbox" name="counted" className="h-4 w-4" />
+              Bổ sung vốn tiền mặt: đã lấy (cộng vào tiền thực tế đang cầm)
+            </label>
           </ActionForm>
         )}
-        {pays.length > 0 && (
+        {histPays.length > 0 && (
           <div className="mb-3">
             <p className="text-xs font-semibold text-ink/60">Thanh toán lương – tự ghi khi bảng lương “Đã trả” (trừ tài khoản)</p>
             <ul className="divide-y divide-[#f1e6c8] text-sm">
-              {pays.slice(0, 60).map((p, i) => (
+              {histPays.slice(0, 60).map((p, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-2 py-1.5">
                   <span className="w-20 tabular-nums">{p.date.slice(8)}/{p.date.slice(5, 7)}/{p.date.slice(2, 4)}</span>
                   <Badge tone="red">Lương</Badge>
@@ -194,11 +210,11 @@ export default async function CashbookPage() {
             </ul>
           </div>
         )}
-        {!moves.length ? (
+        {!histMoves.length ? (
           <p className="text-sm text-ink/50">Chưa có phiếu nào.</p>
         ) : (
           <ul className="divide-y divide-[#f1e6c8] text-sm">
-            {moves.slice(0, 200).map((t) => {
+            {histMoves.slice(0, 200).map((t) => {
               const k = cashKindOf(t);
               const out = t.kind === "TAKE";
               return (
@@ -223,6 +239,15 @@ export default async function CashbookPage() {
                       {nameOf.get(String(t.storeId))}
                     </span>
                   )}
+                  {t.kind === "ADD" && t.account === "TM" && seeCount && (
+                    owner ? (
+                      <ActionForm action={toggleTransferCounted} submitLabel={t.counted ? "✓ Đã lấy" : "Chưa lấy"} variant={t.counted ? "outline" : "ghost"} successText="" className="inline-block" buttonClassName="!px-2 !py-0.5 text-xs">
+                        <input type="hidden" name="id" value={String(t._id)} />
+                      </ActionForm>
+                    ) : (
+                      <span className="text-xs text-ink/50">{t.counted ? "✓ Đã lấy" : "Chưa lấy"}</span>
+                    )
+                  )}
                   <span className="min-w-0 flex-1 truncate text-xs text-ink/60">
                     {t.note}
                   </span>
@@ -243,6 +268,7 @@ export default async function CashbookPage() {
           </ul>
         )}
       </Card>
+      )}
     </div>
   );
 }
@@ -253,11 +279,14 @@ function FundBox({
   side,
   rows,
   extra,
+  sub,
 }: {
   title: string;
   side: CashSide;
   rows: [string, number, 1 | -1][];
   extra?: ReactNode;
+  /** số nhỏ, mờ cạnh số dư (tiền mặt thực tế đang cầm) */
+  sub?: number;
 }) {
   return (
     <div className="rounded-2xl bg-cream p-3 ring-1 ring-[#f1e6c8]">
@@ -269,6 +298,11 @@ function FundBox({
         )}
       >
         {vnd(side.balance)}
+        {sub != null && (
+          <span className="ml-2 align-baseline text-sm font-semibold text-ink/45" title="Thực tế đang cầm: tiền mặt các ngày đã lấy & đếm − đã rút + vốn đã lấy">
+            {vnd(sub)}
+          </span>
+        )}
       </p>
       <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-xs">
         {rows

@@ -74,3 +74,27 @@ test("đếm tiền: tiền mặt ngày = chốt ca ± phiếu nộp / rút đú
   );
   assert.deepEqual(rows.map((r) => [r.tm, r.tk]), [[2_200_000, 1_800_000], [2_000_000, 0]]);
 });
+
+test("tiền mặt thực tế = các ngày đã đếm − rút TM + vốn TM đã lấy", async () => {
+  const { actualCash } = await import("../src/lib/cashbook");
+  const v = actualCash(10_000_000, [
+    { kind: "TAKE", account: "TM", amount: 3_000_000 },
+    { kind: "TAKE", account: "TK", amount: 999 },
+    { kind: "ADD", account: "TM", amount: 1_000_000, counted: true },
+    { kind: "ADD", account: "TM", amount: 500_000 },
+  ]);
+  assert.equal(v, 8_000_000);
+});
+
+test("đếm tiền thiếu / thừa: sửa tiền mặt ca cuối, chênh lệch so với số chốt gốc", async () => {
+  const { recountCash, mismatchText } = await import("../src/lib/cashbook");
+  // chốt ca 3tr, đã nộp 1tr vào TK → tiền mặt ngày 2tr; đếm thực tế 1,8tr → thiếu 200k
+  const a = recountCash({ counted: 1_800_000, dayTm: 2_000_000, closingTm: 3_000_000 });
+  assert.deepEqual(a, { newTm: 2_800_000, original: 3_000_000, diff: -200_000 });
+  assert.equal(mismatchText(a.diff), "Thiếu 200.000");
+  // sửa lại lần 2 (đếm lại 2,05tr) → vẫn so với số gốc 3tr → thừa 50k
+  const b = recountCash({ counted: 2_050_000, dayTm: 1_800_000, closingTm: 2_800_000, original: 3_000_000 });
+  assert.equal(b.diff, 50_000);
+  assert.equal(mismatchText(b.diff), "Thừa 50.000");
+  assert.equal(mismatchText(0), "");
+});

@@ -191,6 +191,7 @@ export async function saveCashTransfer(_: FormState, fd: FormData): Promise<Form
       kind: k.kind,
       ...(k.account ? { account: k.account } : {}),
       amount: Math.round(amt.value),
+      ...(k.value === "ADD_TM" && fd.get("counted") ? { counted: true } : {}),
       note: str(fd.get("note")).slice(0, 200),
       createdBy: adminActor(admin).name,
     };
@@ -231,6 +232,67 @@ export async function setCashCount(storeId: string, date: string, counted: boole
     else await CashCount.deleteOne({ storeId, date });
     await audit(actor, counted ? "cash.count" : "cash.uncount", { type: "CashCount", id: `${storeId}|${date}` }, null, { storeId, date });
     revalidatePath("/admin/finance/cashbook", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Bổ sung vốn tiền mặt: đánh dấu đã lấy / chưa lấy (cộng vào tiền thực tế đang cầm). */
+export async function toggleTransferCounted(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertOwner();
+    await connectDB();
+    const { CashTransfer } = await import("@/lib/models");
+    const c = await CashTransfer.findById(str(fd.get("id"))).lean();
+    if (!c || c.kind !== "ADD" || c.account !== "TM") return { error: "Chỉ phiếu bổ sung vốn tiền mặt" };
+    const counted = !c.counted;
+    await CashTransfer.updateOne({ _id: c._id }, counted ? { $set: { counted: true } } : { $unset: { counted: 1 } });
+    await audit(adminActor(admin), counted ? "cash.count" : "cash.uncount", { type: "CashTransfer", id: String(c._id) }, null, { amount: c.amount, date: c.date });
+    revalidatePath("/admin/finance", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/**
+ * Đếm tiền: tiền mặt đếm thực tế không khớp chốt ca → sửa tiền mặt ca chốt cuối ngày đó + lưu cảnh báo Thiếu / Thừa
+ * (mọi admin thấy ở Chốt ca / Đếm tiền), đánh dấu luôn ngày đó đã đếm. Nhập lại đúng số chốt ca gốc = bỏ cảnh báo.
+ */
+export async function recountDayCash(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertOwner();
+    const storeId = str(fd.get("storeId"));
+    const date = str(fd.get("date"));
+    if (!isValidObjectId(storeId) || !isYmd(date)) return { error: "Ngày / cơ sở không hợp lệ" };
+    const amt = evalMoneyExpr(str(fd.get("counted")));
+    if (!amt.ok || amt.value < 0) return { error: "Số tiền không hợp lệ" };
+    await connectDB();
+    const { CashCount, CashTransfer, ShiftClosing } = await import("@/lib/models");
+    const { dayClosing } = await import("@/lib/revenue");
+    const { recountCash, mismatchText } = await import("@/lib/cashbook");
+    const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
+    const list = await ShiftClosing.find({ storeId, workDate: date, "revenue.tm": { $ne: null } });
+    const last = dayClosing(list);
+    if (!last) return { error: "Ngày này chưa có chốt ca có tiền mặt" };
+    const tr = await CashTransfer.find({ storeId, date, kind: { $in: ["DEPOSIT", "WITHDRAW"] } }).lean();
+    const net = tr.reduce((s2, t) => s2 + (t.kind === "DEPOSIT" ? t.amount : -t.amount), 0);
+    const closingTm = Number(last.revenue?.tm ?? 0);
+    const prev = last.cashMismatch?.original;
+    const r = recountCash({ counted: Math.round(amt.value), dayTm: closingTm - net, closingTm, original: typeof prev === "number" ? prev : null });
+    const actor = adminActor(admin);
+    last.set("revenue.tm", r.newTm);
+    last.set("revenueInput.tm", r.newTm.toLocaleString("vi-VN"));
+    if (r.diff) last.set("cashMismatch", { diff: r.diff, original: r.original, at: new Date(), by: actor.name });
+    else last.set("cashMismatch", undefined);
+    await last.save();
+    await CashCount.updateOne({ storeId, date }, { $set: { countedAt: new Date(), countedBy: actor.name } }, { upsert: true });
+    await audit(actor, "cash.recount", { type: "ShiftClosing", id: String(last._id) }, { tm: closingTm }, { tm: r.newTm, mismatch: mismatchText(r.diff) || "khớp" });
+    const { wasSynced, changed } = await recomputeDay(last.storeId, date);
+    if (wasSynced && changed) await syncDaySheet(last.storeId, date);
+    revalidatePath("/admin/finance", "layout");
+    revalidatePath("/admin/closings");
     return { ok: true };
   } catch (e) {
     return errMsg(e);

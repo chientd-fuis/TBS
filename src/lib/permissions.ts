@@ -12,6 +12,8 @@ export const ADMIN_PERMS = [
   { key: "finance.rent", label: "Tài chính – Tiền thuê nhà", group: "Tài chính" },
   { key: "finance.revenue", label: "Tài chính – Xem doanh thu theo ngày (không sửa)", group: "Tài chính" },
   { key: "finance.cashbook", label: "Tài chính – Xem sổ quỹ (không ghi phiếu)", group: "Tài chính" },
+  { key: "finance.cashbook.history", label: "Tài chính – Sổ quỹ: xem lịch sử ghi phiếu (toàn bộ) + chi tiết 2 ô Tài khoản / Tiền mặt", group: "Tài chính" },
+  { key: "finance.cashbook.history7", label: "Tài chính – Sổ quỹ: xem lịch sử ghi phiếu 7 ngày gần nhất + chi tiết 2 ô", group: "Tài chính" },
   { key: "finance.cashcount", label: "Tài chính – Sổ quỹ: xem số tiền thực tế đã lấy & Đếm tiền (cần thêm quyền xem sổ quỹ)", group: "Tài chính" },
   { key: "finance.settings", label: "Tài chính – Cài đặt", group: "Tài chính" },
   { key: "payroll", label: "Bảng lương", group: "Lương" },

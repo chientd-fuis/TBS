@@ -6,7 +6,11 @@ import { can } from "@/lib/permissions";
 import { connectDB } from "@/lib/db";
 import { CashCount, CashTransfer, ShiftClosing, Store } from "@/lib/models";
 import { dayRevenueFromClosings } from "@/lib/revenue";
-import { applyDayTransfers } from "@/lib/cashbook";
+import { applyDayTransfers, mismatchText } from "@/lib/cashbook";
+import { recountDayCash } from "@/app/admin/actions/finance";
+import { ActionForm } from "@/components/ActionForm";
+import Modal from "@/components/Modal";
+import { Field, Input } from "@/components/ui";
 import { dayVi } from "@/lib/goods";
 import { localMonth, viDateTime } from "@/lib/time";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
@@ -38,15 +42,18 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
   const [stores, closings, transfers, counts] = await Promise.all([
     Store.find().select("name").sort({ name: 1 }).lean(),
     ShiftClosing.find({ ...sq, workDate: dateQ, "revenue.tm": { $ne: null } })
-      .select("storeId workDate shiftName createdAt revenue")
+      .select("storeId workDate shiftName createdAt revenue cashMismatch")
       .lean(),
     CashTransfer.find({ ...sq, date: dateQ, kind: { $in: ["DEPOSIT", "WITHDRAW"] } }).lean(),
     CashCount.find({ ...sq, date: dateQ }).lean(),
   ]);
   const nameOf = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]));
+  // cảnh báo tiền mặt không khớp (lưu trên ca chốt cuối ngày)
+  const misOf = new Map<string, number>();
+  for (const c of closings) if (c.cashMismatch?.diff) misOf.set(`${c.storeId}|${c.workDate}`, c.cashMismatch.diff);
   const countOf = new Map(counts.map((c) => [`${c.storeId}|${c.date}`, c]));
   const allRows = applyDayTransfers(dayRevenueFromClosings(closings), transfers)
-    .map((r) => ({ ...r, count: countOf.get(`${r.storeId}|${r.date}`) }))
+    .map((r) => ({ ...r, count: countOf.get(`${r.storeId}|${r.date}`), mis: misOf.get(`${r.storeId}|${r.date}`) ?? 0 }))
     .sort((a, b) => b.date.localeCompare(a.date) || (nameOf.get(a.storeId) ?? "").localeCompare(nameOf.get(b.storeId) ?? ""));
   const rows = allRows.filter((r) => (st === "yes" ? r.count : st === "no" ? !r.count : true));
   const sumTm = (xs: typeof allRows) => xs.reduce((s, r) => s + r.tm, 0);
@@ -121,7 +128,27 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
                         {dayVi(r.date)}
                         {!storeId && <div className="text-xs text-ink/60">{nameOf.get(r.storeId)}</div>}
                       </td>
-                      <td className="text-right font-semibold tabular-nums">{vnd(r.tm)}</td>
+                      <td className="text-right tabular-nums">
+                        <div className="flex items-center justify-end gap-1">
+                          <b>{vnd(r.tm)}</b>
+                          {owner && (
+                            <Modal label="✎" title={`Sửa tiền mặt đếm thực tế – ${nameOf.get(r.storeId) ?? ""} ${dayVi(r.date)}`} className="rounded-md px-1.5 py-0.5 text-xs text-accent hover:bg-primary-light">
+                              <ActionForm action={recountDayCash} submitLabel="Lưu" successText="Đã sửa tiền mặt" className="space-y-2">
+                                <input type="hidden" name="storeId" value={r.storeId} />
+                                <input type="hidden" name="date" value={r.date} />
+                                <p className="text-xs text-ink/60">
+                                  Tiền mặt theo chốt ca: <b>{vnd(r.tm)}</b>. Nhập số đếm thực tế → sửa tiền mặt của ca chốt cuối ngày, hiện cảnh báo
+                                  “Tiền mặt không khớp: Thiếu / Thừa …” cho mọi admin, và tích luôn “đã đếm”.
+                                </p>
+                                <Field label="Tiền mặt đếm thực tế">
+                                  <Input name="counted" defaultValue={vnd(r.tm)} inputMode="numeric" required className="text-right" />
+                                </Field>
+                              </ActionForm>
+                            </Modal>
+                          )}
+                        </div>
+                        {r.mis ? <div className="text-xs font-bold text-danger">⚠ Không khớp: {mismatchText(r.mis)}</div> : null}
+                      </td>
                       <td className="text-right tabular-nums">{vnd(r.dt)}</td>
                       <td className="text-right tabular-nums">{vnd(r.tk)}</td>
                       <td className="text-right tabular-nums">{vnd(r.cp)}</td>

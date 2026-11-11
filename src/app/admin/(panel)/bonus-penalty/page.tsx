@@ -57,8 +57,8 @@ export default async function BonusPenaltyPage({
           <Field label="Loại">
             <Select name="kind" defaultValue={sp.kind || ""} className="w-32">
               <option value="">Tất cả</option>
-              <option value="BONUS">Thưởng</option>
               <option value="PENALTY">Phạt</option>
+              <option value="BONUS">Thưởng</option>
             </Select>
           </Field>
           <input type="hidden" name="month" value={month} />
@@ -73,7 +73,7 @@ export default async function BonusPenaltyPage({
           ) : (
             <ActionForm action={createBonusPenalty} submitLabel="Thêm" successText="Đã thêm">
               <input type="hidden" name="attendanceId" value={sp.att || ""} />
-              <KindTabs defaultValue={sp.att ? "PENALTY" : "BONUS"} />
+              <KindTabs defaultValue="PENALTY" />
               <StaffMultiPick
                 key={`${store?._id}|${sp.user ?? ""}`}
                 staff={staff.map((u) => ({ id: String(u._id), name: u.name || "?", inactive: u.status !== "ACTIVE" }))}

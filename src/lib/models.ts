@@ -362,6 +362,13 @@ const ShiftClosingSchema = new Schema(
     isDayEnd: { type: Boolean, default: false }, // ca cuối ngày → ghi Google Sheet
     revenueEditedBy: String, // admin sửa số liệu
     revenueEditedByOwner: Boolean, // Admin Tổng sửa → admin khác không thấy nhãn "Admin sửa"
+    // Đếm tiền: tiền mặt đếm thực tế khác chốt ca → sửa tiền mặt ca cuối ngày + cảnh báo (mọi admin thấy)
+    cashMismatch: {
+      diff: Number, // thực tế − chốt ca gốc: âm = thiếu, dương = thừa
+      original: Number, // tiền mặt (luỹ kế) nhân viên chốt ban đầu
+      at: Date,
+      by: String,
+    },
     editCount: { type: Number, default: 0 }, // số lần nhân viên chốt lại (cập nhật) ca này
     lastEditedAt: Date,
   },
@@ -760,6 +767,8 @@ const CashTransferSchema = new Schema(
     kind: { type: String, enum: ["DEPOSIT", "WITHDRAW", "TAKE", "ADD"], required: true },
     account: { type: String, enum: ["TK", "TM"] },
     amount: { type: Number, required: true, min: 1 },
+    // bổ sung vốn tiền mặt: đã đưa vào số tiền thực tế đang cầm (Đếm tiền) chưa
+    counted: Boolean,
     note: String,
     createdBy: String,
   },

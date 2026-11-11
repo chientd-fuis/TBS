@@ -68,6 +68,34 @@ export function applyDayTransfers<R extends { storeId: string; date: string; tm:
   });
 }
 
+/**
+ * Tiền mặt thực tế đang cầm = tiền mặt các ngày đã lấy & đếm − đã rút tiền mặt + bổ sung vốn tiền mặt được đánh dấu "đã lấy".
+ */
+export function actualCash(takenTm: number, moves: { kind: string; account?: string | null; amount: number; counted?: boolean | null }[]) {
+  const tm = moves.filter((m) => m.account === "TM");
+  const take = tm.filter((m) => m.kind === "TAKE").reduce((s, m) => s + m.amount, 0);
+  const add = tm.filter((m) => m.kind === "ADD" && m.counted).reduce((s, m) => s + m.amount, 0);
+  return takenTm - take + add;
+}
+
+/** Cảnh báo đếm tiền: "Thiếu 200.000" / "Thừa 50.000" ("" khi khớp) */
+export function mismatchText(diff: number | null | undefined) {
+  const d = Math.round(Number(diff) || 0);
+  if (!d) return "";
+  return `${d < 0 ? "Thiếu" : "Thừa"} ${Math.abs(d).toLocaleString("vi-VN")}`;
+}
+
+/**
+ * Sửa tiền mặt theo số đếm thực tế. dayTm = tiền mặt ngày đang hiện (chốt ca − nộp + rút), closingTm = tiền mặt luỹ kế ca cuối,
+ * original = số nhân viên chốt ban đầu (lần sửa trước đã lưu) → tiền mặt mới của ca cuối + chênh lệch so với số gốc.
+ */
+export function recountCash({ counted, dayTm, closingTm, original }: { counted: number; dayTm: number; closingTm: number; original?: number | null }) {
+  const net = closingTm - dayTm; // phiếu nộp TM → TK (trừ rút) của ngày đó
+  const newTm = counted + net;
+  const base = original ?? closingTm;
+  return { newTm, original: base, diff: newTm - base };
+}
+
 export function cashBalance({ revenue, bills, moves, payroll = [] }: { revenue: { tk: number; tm: number }[]; bills: { amount: number }[]; moves: CashMove[]; payroll?: { amount: number }[] }) {
   const sum = (xs: number[]) => xs.reduce((s, x) => s + (Number(x) || 0), 0);
   const of = (kind: CashKind, acc?: CashAccount) =>

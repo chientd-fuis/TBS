@@ -90,6 +90,7 @@ const A: Record<string, [ActivityGroup, string]> = {
   "cash.transfer.delete": ["revenue", "Xoá phiếu sổ quỹ"],
   "cash.count": ["revenue", "Đếm tiền: tích đã lấy tiền mặt"],
   "cash.uncount": ["revenue", "Đếm tiền: bỏ tích đã lấy"],
+  "cash.recount": ["revenue", "Đếm tiền: sửa tiền mặt thực tế (thiếu / thừa)"],
   "holiday.create": ["payroll", "Thêm ngày lễ"],
   "holiday.update": ["payroll", "Sửa ngày lễ"],
   "holiday.delete": ["payroll", "Xoá ngày lễ"],

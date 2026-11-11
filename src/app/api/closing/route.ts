@@ -118,7 +118,7 @@ export async function POST(req: Request) {
           webhook: {},
           ...(prev ? { lastEditedAt: now } : {}),
         },
-        $unset: { shiftStart: 1, shiftEnd: 1, revenueEditedBy: 1, revenueEditedByOwner: 1 },
+        $unset: { shiftStart: 1, shiftEnd: 1, revenueEditedBy: 1, revenueEditedByOwner: 1, cashMismatch: 1 },
         ...(prev ? { $inc: { editCount: 1 } } : {}),
         $setOnInsert: { _id: id },
       },

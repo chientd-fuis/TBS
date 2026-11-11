@@ -11,6 +11,7 @@ import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/co
 import { deleteClosing, editClosingRevenue, resendClosing, syncClosingSheet } from "../../actions/closing";
 import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
+import { mismatchText } from "@/lib/cashbook";
 import { addDays } from "@/lib/time";
 import { ocrConfigured } from "@/lib/ocr";
 import AddClosing from "./AddClosing";
@@ -169,6 +170,12 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                                 const d = revenueDiff(c.revenue as Partial<Revenue>);
                                 return <div className={d ? "font-bold text-danger" : "text-secondary-dark"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
                               })()}
+                            {!!c.cashMismatch?.diff && (
+                              <div className="mt-0.5 rounded-md bg-danger/10 px-1.5 py-0.5 font-bold text-danger">
+                                ⚠ Tiền mặt không khớp: {mismatchText(c.cashMismatch.diff)}
+                                <div className="font-normal">Chốt ca {vnd(c.cashMismatch.original)} → đếm thực tế {vnd(c.revenue.tm)}</div>
+                              </div>
+                            )}
                             {/* Admin Tổng sửa → chỉ Admin Tổng thấy nhãn */}
                             {c.revenueEditedBy && (!c.revenueEditedByOwner || admin.kind === "OWNER") && <div className="text-warn">Admin sửa: {c.revenueEditedBy}</div>}
                             {!!c.editCount && <div className="text-ink/60">NV chốt lại {c.editCount} lần</div>}
