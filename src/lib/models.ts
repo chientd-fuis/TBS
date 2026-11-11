@@ -355,6 +355,7 @@ const ShiftClosingSchema = new Schema(
     },
     isDayEnd: { type: Boolean, default: false }, // ca cuối ngày → ghi Google Sheet
     revenueEditedBy: String, // admin sửa số liệu
+    revenueEditedByOwner: Boolean, // Admin Tổng sửa → admin khác không thấy nhãn "Admin sửa"
     editCount: { type: Number, default: 0 }, // số lần nhân viên chốt lại (cập nhật) ca này
     lastEditedAt: Date,
   },

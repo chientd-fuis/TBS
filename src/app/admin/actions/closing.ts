@@ -82,7 +82,7 @@ export async function editClosingRevenue(_: FormState, fd: FormData): Promise<Fo
       revenue[k] = k === "dt" && !raw ? null : r.value; // DT máy để trống = chưa có
       revenueInput[k] = raw;
     }
-    c.set({ revenue, revenueInput, revenueEditedBy: adminActor(admin).name });
+    c.set({ revenue, revenueInput, revenueEditedBy: adminActor(admin).name, revenueEditedByOwner: admin.kind === "OWNER" });
     await c.save();
     await audit(adminActor(admin), "closing.revenue.edit", { type: "ShiftClosing", id }, before, revenue);
     const { wasSynced, changed } = await recomputeDay(c.storeId, c.workDate);

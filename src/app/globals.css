@@ -124,3 +124,9 @@ input::-webkit-calendar-picker-indicator {
 @media (prefers-reduced-motion: reduce) {
   .tbs-live, .tbs-live-dot::after { animation: none; }
 }
+
+/* Kéo xuống để tải lại: dùng PullToRefresh của app, tắt bản mặc định của trình duyệt (tránh tải 2 lần) */
+html,
+body {
+  overscroll-behavior-y: contain;
+}

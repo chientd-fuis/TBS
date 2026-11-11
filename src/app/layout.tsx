@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export const metadata: Metadata = {
   title: "Tiệm Bơ Sầu – Chấm công",
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        <PullToRefresh />
+      </body>
     </html>
   );
 }

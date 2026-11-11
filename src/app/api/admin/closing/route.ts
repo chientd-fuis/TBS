@@ -81,7 +81,7 @@ export async function POST(req: Request) {
           webhook: {},
           ...(prev ? { lastEditedAt: now } : {}),
         },
-        $unset: { revenueEditedBy: 1, ...(user ? {} : { userId: 1 }) },
+        $unset: { revenueEditedBy: 1, revenueEditedByOwner: 1, ...(user ? {} : { userId: 1 }) },
         ...(prev ? { $inc: { editCount: 1 } } : {}),
         $setOnInsert: { _id: new Types.ObjectId() },
       },
