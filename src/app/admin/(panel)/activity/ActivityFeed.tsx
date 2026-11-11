@@ -30,7 +30,7 @@ export default function ActivityFeed({ rows, today, empty = "Chưa có hoạt đ
         const list = rows.filter((r) => r.day === d);
         return (
           <section key={d}>
-            <h3 className="sticky top-0 z-10 mb-1 bg-white/95 py-1 text-xs font-bold uppercase tracking-wide text-ink/50">
+            <h3 className="sticky top-[52px] z-10 mb-1 bg-white/95 lg:top-0 py-1 text-xs font-bold uppercase tracking-wide text-ink/50">
               {dayTitle(d)} <span className="font-normal normal-case">({list.length})</span>
             </h3>
             <ul className="divide-y divide-ink/5">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { SignOutButton } from "@/components/user/AuthButtons";
 import { adminLogout } from "../actions/auth";
 import AdminNav from "./AdminNav";
+import MobileMenu from "./MobileMenu";
 import SectionTabs from "./SectionTabs";
 import AskAiPanel from "./AskAiPanel";
 import { aiAllowed, aiRemaining } from "@/lib/ai";
@@ -36,9 +37,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     hide: (await goodsEnabled()) ? [] : ["/admin/goods"],
     counts: { approvals, devices, requests: adj + fb + covers, shiftRequests },
   };
+  const logout =
+    admin.kind === "OWNER" ? (
+      <SignOutButton callbackUrl="/admin/login" />
+    ) : (
+      <form action={adminLogout}>
+        <Button variant="ghost" type="submit">Đăng xuất</Button>
+      </form>
+    );
   return (
     <div className="min-h-screen lg:flex">
-      <aside className="bg-secondary-dark lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
+      {/* máy tính: menu dọc bên trái · điện thoại: thanh gọn + nút ☰ (MobileMenu) */}
+      <aside className="hidden bg-secondary-dark lg:sticky lg:top-0 lg:block lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
         <Link href="/admin" className="flex items-center gap-2 p-3" title="Về Tổng quan">
           <Logo size={36} />
           <div className="text-white">
@@ -49,19 +59,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">
-        {/* mobile: tên (rút gọn) bên trái + Trợ lý AI + Đăng xuất bên phải trên 1 hàng – không để nút bị đẩy ra ngoài màn hình */}
-        <header className="flex items-center gap-2 border-b border-[#f1e6c8] bg-white px-3 py-2 text-sm lg:justify-end lg:px-4">
-          <span className="min-w-0 flex-1 truncate text-ink/70 lg:flex-none" title={admin.email}>
+        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:static lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none">
+          <MobileMenu
+            nav={nav}
+            account={
+              <div className="space-y-2">
+                <div className="text-xs leading-snug">
+                  <div className="opacity-75">{admin.kind === "OWNER" ? "👑 Admin Tổng" : `Admin: ${admin.name}`}</div>
+                  <div className="truncate font-semibold">{admin.email}</div>
+                </div>
+                <div className="[&_button]:w-full [&_button]:justify-center [&_button]:bg-white/15 [&_button]:text-white">{logout}</div>
+              </div>
+            }
+          />
+          <span className="hidden min-w-0 truncate text-ink/70 lg:inline" title={admin.email}>
             {admin.kind === "OWNER" ? (
-              <>
-                👑 <b className="lg:hidden">Admin Tổng</b>
-                <span className="hidden lg:inline">Admin Tổng: <b>{admin.email}</b></span>
-              </>
+              <>👑 Admin Tổng: <b>{admin.email}</b></>
             ) : (
-              <>
-                Admin: <b>{admin.name}</b>
-                <b className="hidden lg:inline"> ({admin.email})</b>
-              </>
+              <>Admin: <b>{admin.name}</b> <b>({admin.email})</b></>
             )}
           </span>
           {ask.enabled && geminiConfigured() && (
@@ -69,15 +84,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />
             </span>
           )}
-          <span className="shrink-0">
-            {admin.kind === "OWNER" ? (
-              <SignOutButton callbackUrl="/admin/login" />
-            ) : (
-              <form action={adminLogout}>
-                <Button variant="ghost" type="submit">Đăng xuất</Button>
-              </form>
-            )}
-          </span>
+          <span className="hidden shrink-0 lg:inline">{logout}</span>
         </header>
         <main className="space-y-4 p-4 lg:p-6">
           <SectionTabs {...nav} />

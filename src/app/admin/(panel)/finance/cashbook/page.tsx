@@ -35,7 +35,9 @@ export default async function CashbookPage() {
   const admin = await requirePerm("finance.cashbook");
   const owner = admin.kind === "OWNER";
   // số tiền thực tế đã lấy (Đếm tiền): Admin Tổng + admin được cấp quyền
-  const seeCount = can(admin, "finance.cashcount");
+  // chi tiết (đã lấy / chưa lấy) kèm luôn số thực tế; trang Đếm tiền chỉ Admin Tổng
+  const seeCountDetail = can(admin, "finance.cashcount.detail");
+  const seeCount = seeCountDetail || can(admin, "finance.cashcount");
   await connectDB();
   const [stores, closings, bills, all, payrolls, payItems, counts] = await Promise.all([
     Store.find().select("name").lean(),
@@ -118,7 +120,7 @@ export default async function CashbookPage() {
               ["Bổ sung vốn", fund.tm.add, 1],
             ]}
             extra={
-              seeCount && <div className="mt-2 border-t border-dashed border-[#e9d9a8] pt-2 text-xs">
+              seeCountDetail && <div className="mt-2 border-t border-dashed border-[#e9d9a8] pt-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-ink/70" title="Tiền thực tế đã qua các cửa hàng lấy về và đếm (tích ở Đếm tiền)">✓ Thực tế đã lấy</span>
                   <b className="tabular-nums text-secondary-dark">{vnd(takenTm)}</b>
@@ -127,9 +129,11 @@ export default async function CashbookPage() {
                   <span>Chưa lấy ({notTaken.length} ngày)</span>
                   <span className="tabular-nums">{vnd(notTaken.reduce((s, r) => s + r.tm, 0))}</span>
                 </div>
+                {owner && (
                 <Link href="/admin/finance/cashbook/count" className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 font-semibold text-accent ring-1 ring-[#e9d9a8] hover:bg-primary-light">
                   🧮 Đếm tiền →
                 </Link>
+                )}
               </div>
             }
           />
@@ -239,7 +243,7 @@ export default async function CashbookPage() {
                       {nameOf.get(String(t.storeId))}
                     </span>
                   )}
-                  {t.kind === "ADD" && t.account === "TM" && seeCount && (
+                  {t.kind === "ADD" && t.account === "TM" && seeCountDetail && (
                     owner ? (
                       <ActionForm action={toggleTransferCounted} submitLabel={t.counted ? "✓ Đã lấy" : "Chưa lấy"} variant={t.counted ? "outline" : "ghost"} successText="" className="inline-block" buttonClassName="!px-2 !py-0.5 text-xs">
                         <input type="hidden" name="id" value={String(t._id)} />

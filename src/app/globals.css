@@ -130,3 +130,9 @@ html,
 body {
   overscroll-behavior-y: contain;
 }
+
+/* menu trượt admin trên điện thoại */
+@keyframes tbs-drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}

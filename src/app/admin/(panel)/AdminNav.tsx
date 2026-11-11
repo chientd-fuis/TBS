@@ -4,11 +4,24 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/format";
 import { activeLink, canSee, NAV } from "./nav-items";
 
-export default function AdminNav({ counts, owner = false, perms = [], hide = [] }: { counts: Record<string, number>; owner?: boolean; perms?: string[]; hide?: string[] }) {
+export default function AdminNav({
+  counts,
+  owner = false,
+  perms = [],
+  hide = [],
+  vertical = false,
+}: {
+  counts: Record<string, number>;
+  owner?: boolean;
+  perms?: string[];
+  hide?: string[];
+  /** menu trượt trên điện thoại: luôn xếp dọc */
+  vertical?: boolean;
+}) {
   const path = usePathname();
   const access = { owner, perms, hide };
   return (
-    <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3">
+    <nav className={vertical ? "flex flex-col gap-0.5 px-2.5 pb-2" : "flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:px-3"}>
       {NAV.map((g) => {
         const links = g.links.filter((l) => canSee(l, access));
         if (!links.length) return null;

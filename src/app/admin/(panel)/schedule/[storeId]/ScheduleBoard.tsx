@@ -315,7 +315,7 @@ export default function ScheduleBoard(p: Props) {
       </ConfirmDialog>
 
       {/* Bảng lịch theo mẫu – thanh chọn tuần ghim trên đầu khi cuộn (điện thoại) */}
-      <div className="sticky top-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#f1e6c8] bg-cream/95 px-4 py-2 shadow-sm backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
+      <div className="sticky top-[52px] z-20 -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#f1e6c8] bg-cream/95 px-4 py-2 shadow-sm backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
         {p.weekNav}
         <div className="inline-flex rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]" role="tablist">
           <button

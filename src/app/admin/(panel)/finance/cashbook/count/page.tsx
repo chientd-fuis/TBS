@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { isValidObjectId } from "mongoose";
-import { redirect } from "next/navigation";
-import { requirePerm } from "@/lib/guards";
-import { can } from "@/lib/permissions";
+import { requireOwner } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
 import { CashCount, CashTransfer, ShiftClosing, Store } from "@/lib/models";
 import { dayRevenueFromClosings } from "@/lib/revenue";
@@ -29,8 +27,8 @@ type SP = { month?: string; store?: string; st?: string };
  * Tổng tiền mặt các ngày đã tích = "Thực tế đã lấy" ở ô Tiền mặt của sổ quỹ.
  */
 export default async function CashCountPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const admin = await requirePerm("finance.cashbook");
-  if (!can(admin, "finance.cashcount")) redirect("/admin/finance/cashbook");
+  // Đếm tiền: chỉ Admin Tổng
+  const admin = await requireOwner();
   const owner = admin.kind === "OWNER";
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : localMonth(new Date());
@@ -68,7 +66,6 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
         <p className="mb-3 text-xs text-ink/60">
           Đi qua cửa hàng lấy tiền mặt về đếm xong thì tích ngày đó. Tổng tiền mặt các ngày đã tích = <b>“Thực tế đã lấy”</b> ở ô Tiền mặt của sổ quỹ.
           Tiền mặt ở đây là số chốt ca cuối ngày (đã trừ chi phí két, đã tính phiếu nộp / rút tài khoản).
-          {!owner && " Chỉ Admin Tổng tích được."}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <MonthPicker month={month} base="/admin/finance/cashbook/count" params={{ store: storeId || undefined, st: st || undefined }} />
