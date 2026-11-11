@@ -6,12 +6,12 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import AdminNav from "./AdminNav";
-import { activeLink, canSee, NAV } from "./nav-items";
+import { canSee, NAV } from "./nav-items";
 
 type NavProps = { counts: Record<string, number>; owner?: boolean; perms?: string[]; hide?: string[] };
 
 /**
- * Điện thoại: nút ☰ (kèm tổng số việc chờ) + tên trang đang mở; bấm ☰ → menu trượt từ trái (đủ mục, tài khoản, đăng xuất).
+ * Điện thoại: nút ☰ (kèm tổng số việc chờ) + logo "Tiệm Bơ Sầu / Quản lý cửa hàng"; bấm ☰ → menu trượt từ trái (đủ mục, tài khoản, đăng xuất).
  * Máy tính (lg) không dùng – vẫn là menu dọc bên trái.
  */
 export default function MobileMenu({ nav, account }: { nav: NavProps; account: ReactNode }) {
@@ -19,14 +19,11 @@ export default function MobileMenu({ nav, account }: { nav: NavProps; account: R
   const [open, setOpen] = useState(false);
   const access = { owner: !!nav.owner, perms: nav.perms ?? [], hide: nav.hide ?? [] };
 
-  // tên trang đang mở + tổng số chờ xử lý (chỉ các mục được thấy)
-  let title = "Tổng quan";
+  // tổng số chờ xử lý (chỉ các mục được thấy)
   let pending = 0;
   for (const g of NAV) {
     const links = g.links.filter((l) => canSee(l, access));
     pending += links.reduce((s, l) => s + (l.badge ? nav.counts[l.badge] ?? 0 : 0), 0);
-    const a = activeLink(path, links);
-    if (a) title = g.tabs ? a.label : g.label;
   }
 
   // đổi trang → đóng menu
@@ -59,9 +56,10 @@ export default function MobileMenu({ nav, account }: { nav: NavProps; account: R
       </button>
       <Link href="/admin" className="flex min-w-0 flex-1 items-center gap-2 lg:hidden" title="Về Tổng quan">
         <Logo size={30} />
+        {/* tên chức năng đã có ở tiêu đề trang → header chỉ giữ thương hiệu */}
         <span className="min-w-0 text-white">
-          <span className="block text-[11px] leading-tight opacity-80">Tiệm Bơ Sầu</span>
-          <span className="block truncate text-[15px] leading-tight font-bold">{title}</span>
+          <span className="block truncate text-[15px] leading-tight font-bold">Tiệm Bơ Sầu</span>
+          <span className="block truncate text-[11px] leading-tight opacity-80">Quản lý cửa hàng</span>
         </span>
       </Link>
       {open &&

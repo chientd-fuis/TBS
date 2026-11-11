@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
-import { Device, LoginLog, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
+import { Attendance, AttendanceArchive, Device, LoginLog, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
+import { seniorityStart, seniorityText } from "@/lib/seniority";
 import { decrypt } from "@/lib/crypto";
 import { vnd } from "@/lib/format";
 import { localDate, localMonth, viDate, viDateTime, viMonth } from "@/lib/time";
@@ -30,6 +31,14 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
     User.find({ _id: { $ne: u._id } }).select("email name googleName status createdAt").sort({ createdAt: -1 }).limit(300).lean(),
     SalaryHistory.find({ userId: u._id }).sort({ effectiveMonth: -1, createdAt: -1 }).lean(),
   ]);
+  // thâm niên: ngày bắt đầu sớm nhất (vào làm / ngày đi làm đầu tiên đã lưu / chấm công sớm nhất còn lại)
+  const [firstAtt, archived, liveDays] = await Promise.all([
+    Attendance.findOne({ userId: u._id }).sort({ workDate: 1 }).select("workDate").lean(),
+    AttendanceArchive.aggregate<{ days: number; hours: number }>([{ $match: { userId: u._id } }, { $group: { _id: null, days: { $sum: "$days" }, hours: { $sum: "$hours" } } }]),
+    Attendance.distinct("workDate", { userId: u._id }),
+  ]);
+  const startDay = seniorityStart([u.joinedAt ? localDate(new Date(u.joinedAt)) : null, u.firstWorkDate, firstAtt?.workDate]);
+  const workDays = (archived[0]?.days ?? 0) + liveDays.length;
   const fulltime = u.payType === "FULLTIME";
   const rank = (st: string) => (st === "NEW" ? 0 : st === "PENDING" ? 1 : st === "REJECTED" ? 2 : 3);
   const candidates = others
@@ -53,6 +62,11 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
             )}
             <div className="text-xs text-ink/70">
               <p>Vào làm: {u.joinedAt ? viDateTime(u.joinedAt).slice(0, 10) : "—"}</p>
+              {startDay && (
+                <p>
+                  Thâm niên: <b>{seniorityText(startDay, localDate(new Date()))}</b> (từ {viDate(startDay)}) · {workDays} ngày công
+                </p>
+              )}
               <p>Đồng ý điều khoản chấm công: {u.consentFaceAt ? viDateTime(u.consentFaceAt) : "—"}</p>
             </div>
           </div>

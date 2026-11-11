@@ -4,6 +4,7 @@ import {
   AdjustmentRequest,
   AdminActivity,
   Attendance,
+  AttendanceArchive,
   AuditLog,
   BonusPenalty,
   CoverRequest,
@@ -30,7 +31,7 @@ import {
  */
 
 /** Hồ sơ lấy từ tài khoản cũ (tài khoản mới chỉ giữ email / tên Google / ảnh đại diện). */
-const PROFILE_FIELDS = ["name", "phone", "bankName", "bankAccountEnc", "hourlyWage", "payType", "monthlySalary", "status", "storeId", "joinedAt", "registeredAt", "consentFaceAt", "managerPerms", "managerStoreIds"] as const;
+const PROFILE_FIELDS = ["name", "phone", "bankName", "bankAccountEnc", "hourlyWage", "payType", "monthlySalary", "status", "storeId", "joinedAt", "firstWorkDate", "registeredAt", "consentFaceAt", "managerPerms", "managerStoreIds"] as const;
 
 export type MergePreview = {
   counts: Record<string, number>;
@@ -126,6 +127,7 @@ export async function mergeUserAccount(fromId: string, toId: string) {
   const moved: Record<string, number> = {};
   const run = async (name: string, p: Promise<{ modifiedCount: number }>) => (moved[name] = (await p).modifiedCount);
   await run("attendance", Attendance.updateMany({ userId: f }, set));
+  await run("attendanceArchive", AttendanceArchive.updateMany({ userId: f }, set));
   await run("assignment", ShiftAssignment.updateMany({ userId: f }, set));
   await run("shiftReg", ShiftRegRequest.updateMany({ userId: f }, set));
   await run("closing", ShiftClosing.updateMany({ userId: f }, set));

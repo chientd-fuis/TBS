@@ -2,16 +2,26 @@ import mongoose, { type Model } from "mongoose";
 import { connectDB } from "./db";
 import {
   AdjustmentRequest,
+  AdminActivity,
   AdminLoginLog,
+  AdminLoginSession,
+  AiCall,
+  AiUsage,
+  AnomalyResolved,
+  AnomalyRun,
+  AssistantLog,
   Attendance,
   AttendanceAdjustment,
+  AttendanceArchive,
   AuditLog,
   CoverRequest,
   DayRevenue,
   Device,
   Expense,
   FaceProfile,
+  GoodsReceipt,
   LoginLog,
+  Payroll,
   PayrollFeedback,
   PayrollItem,
   PendingPhoto,
@@ -20,6 +30,7 @@ import {
   ShiftAssignment,
   ShiftClosing,
   ShiftRegRequest,
+  StaffActivity,
   Store,
   User,
   UserNotice,
@@ -90,6 +101,95 @@ async function junkUserIds(c: Ctx) {
   return cand.filter((i) => !used.has(String(i)));
 }
 
+/** Bảng trong database không thuộc model nào của app (bản cũ để lại) – app không đọc / ghi nữa. */
+async function unusedCollections() {
+  const db = mongoose.connection.db!;
+  const used = new Set(mongoose.modelNames().map((n) => mongoose.model(n).collection.collectionName));
+  const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((x) => x.name);
+  return names.filter((n) => !n.startsWith("system.") && !used.has(n)).sort();
+}
+const dropOp = (name: string): Op => ({
+  label: `dòng trong bảng “${name}”`,
+  count: () => mongoose.connection.db!.collection(name).estimatedDocumentCount(),
+  run: async () => {
+    const col = mongoose.connection.db!.collection(name);
+    const n = await col.estimatedDocumentCount();
+    await col.drop();
+    return n;
+  },
+});
+
+/**
+ * Chấm công cũ được xoá: tháng < min(mốc chọn, giữ 3 tháng gần nhất) VÀ bảng lương cơ sở (trả lương) tháng đó đã "Đã trả"
+ * (bảng chưa trả còn tự tính lại từ chấm công → không được xoá).
+ */
+async function oldAttendanceQuery(c: Ctx): Promise<Q> {
+  const safe = safeCutoff(c.now);
+  const m = c.month < safe ? c.month : safe;
+  const paid = await Payroll.find({ status: "PAID", month: { $lt: m } }).select("storeId month").lean();
+  if (!paid.length) return { _id: null };
+  return { $or: paid.map((p) => ({ month: p.month, $or: [{ homeStoreId: p.storeId }, { homeStoreId: null, storeId: p.storeId }] })) };
+}
+
+/** Lưu tóm tắt từng tháng + ngày đi làm đầu tiên → rồi xoá chấm công (kèm lịch sử sửa công, ảnh tạm của các lượt đó). */
+function attendanceOp(q: Q): Op {
+  return {
+    label: "lượt chấm công (đã lưu tóm tắt tháng)",
+    count: () => Attendance.countDocuments(q),
+    run: async () => {
+      const rows = await Attendance.aggregate<{
+        _id: { u: unknown; s: unknown; m: string };
+        days: string[];
+        shifts: number;
+        hours: number;
+        late: number;
+        first: string;
+        last: string;
+      }>([
+        { $match: q },
+        {
+          $group: {
+            _id: { u: "$userId", s: { $ifNull: ["$homeStoreId", "$storeId"] }, m: "$month" },
+            days: { $addToSet: "$workDate" },
+            shifts: { $sum: 1 },
+            hours: { $sum: { $ifNull: ["$roundedHours", 0] } },
+            late: { $sum: { $ifNull: ["$lateMinutes", 0] } },
+            first: { $min: "$workDate" },
+            last: { $max: "$workDate" },
+          },
+        },
+      ]);
+      if (!rows.length) return 0;
+      await AttendanceArchive.bulkWrite(
+        rows.map((r) => ({
+          updateOne: {
+            filter: { userId: r._id.u, storeId: r._id.s, month: r._id.m },
+            update: { $inc: { days: r.days.length, shifts: r.shifts, hours: Math.round(r.hours * 100) / 100, lateMinutes: r.late }, $min: { firstDate: r.first }, $max: { lastDate: r.last } },
+            upsert: true,
+          },
+        })),
+      );
+      // ngày đi làm đầu tiên của từng người (giữ thâm niên)
+      const first = new Map<string, string>();
+      for (const r of rows) {
+        const k = String(r._id.u);
+        if (!first.has(k) || r.first < first.get(k)!) first.set(k, r.first);
+      }
+      await User.bulkWrite(
+        [...first].map(([id, d]) => ({
+          updateOne: { filter: { _id: id, $or: [{ firstWorkDate: null }, { firstWorkDate: { $gt: d } }] }, update: { $set: { firstWorkDate: d } } },
+        })),
+      );
+      const docs = await Attendance.find(q).select("_id checkInPendingPhotoId checkOutPendingPhotoId").lean();
+      const attIds = docs.map((d) => d._id);
+      const photoIds = docs.flatMap((d) => [d.checkInPendingPhotoId, d.checkOutPendingPhotoId]).filter(Boolean);
+      if (photoIds.length) await PendingPhoto.deleteMany({ _id: { $in: photoIds } });
+      await AttendanceAdjustment.deleteMany({ attendanceId: { $in: attIds } });
+      return (await Attendance.deleteMany({ _id: { $in: attIds } })).deletedCount ?? 0;
+    },
+  };
+}
+
 /** Doanh thu ngày không còn bản chốt ca nào. */
 async function orphanDayIds() {
   const rows = await DayRevenue.aggregate<{ _id: unknown }>([
@@ -115,6 +215,18 @@ async function opsFor(key: CleanupKey, c: Ctx): Promise<Op[]> {
       return [del("đăng nhập nhân viên", LoginLog, byDate), del("đăng nhập admin", AdminLoginLog, byDate)];
     case "auditLogs":
       return [del("dòng nhật ký", AuditLog, byDate)];
+    case "activityLogs":
+      return [del("dòng hoạt động admin", AdminActivity, byDate), del("dòng nhật ký quản lý cơ sở", StaffActivity, byDate)];
+    case "aiLogs":
+      return [del("lượt dùng AI", AiUsage, byDate), del("lượt gọi Gemini", AiCall, byDate), del("câu hỏi trợ lý", AssistantLog, byDate)];
+    case "anomalyLogs":
+      return [del("lần AI soát bất thường", AnomalyRun, byDate), del("mục bất thường đã xử lý", AnomalyResolved, byDate)];
+    case "sessions":
+      return [del("phiên đăng nhập admin", AdminLoginSession, { $or: [{ expiresAt: { $lt: c.now } }, { revokedAt: { $ne: null } }] })];
+    case "unusedCollections":
+      return (await unusedCollections()).map(dropOp);
+    case "attendance":
+      return [attendanceOp(await oldAttendanceQuery(c))];
     case "adjustLogs":
       return [del("dòng lịch sử sửa công", AttendanceAdjustment, byDate)];
     case "reportLogs":
@@ -184,6 +296,7 @@ async function opsFor(key: CleanupKey, c: Ctx): Promise<Op[]> {
           $unset: { ocr: 1, webhook: 1, "telegram.messageIds": 1, "telegram.error": 1 },
         }),
         upd("khoản chi phí", Expense, { ...byDate, $or: [{ ocr: { $exists: true } }, { "telegram.messageIds.0": { $exists: true } }] }, { $unset: { ocr: 1, "telegram.messageIds": 1, "telegram.error": 1 } }),
+        upd("lần nhận hàng / tồn kho", GoodsReceipt, { ...byDate, $or: [{ "telegram.messageId": { $exists: true } }, { "telegram.error": { $exists: true } }] }, { $unset: { "telegram.messageId": 1, "telegram.error": 1 } }),
       ];
     case "photos":
       return [
@@ -204,7 +317,17 @@ async function opsFor(key: CleanupKey, c: Ctx): Promise<Op[]> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function warnFor(_key: CleanupKey, _c: Ctx): Promise<string | undefined> {
+async function warnFor(key: CleanupKey, _c: Ctx): Promise<string | undefined> {
+  if (key === "attendance") {
+    const safe = safeCutoff(_c.now);
+    const m = _c.month < safe ? _c.month : safe;
+    const [all, ok] = await Promise.all([Attendance.countDocuments({ month: { $lt: m } }), Attendance.countDocuments(await oldAttendanceQuery(_c))]);
+    return all > ok ? `${all - ok} lượt chấm công cũ chưa xoá vì bảng lương tháng đó chưa bấm “Đã trả”` : undefined;
+  }
+  if (key === "unusedCollections") {
+    const n = await unusedCollections();
+    return n.length ? `Sẽ xoá hẳn ${n.length} bảng không còn dùng: ${n.join(", ")}` : undefined;
+  }
   return undefined;
 }
 

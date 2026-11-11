@@ -105,6 +105,8 @@ const UserSchema = new Schema(
     rejectReason: String,
     storeId: { type: Schema.Types.ObjectId, ref: "Store" },
     joinedAt: Date,
+    // ngày đi làm đầu tiên (YYYY-MM-DD) – lưu khi dọn chấm công cũ để vẫn tính được thâm niên
+    firstWorkDate: String,
     registeredAt: Date,
     consentFaceAt: Date,
     // quyền quản lý admin cấp cho nhân viên (lib/permissions.ts): schedule | bonus | cover
@@ -281,6 +283,24 @@ AttendanceSchema.index({ userId: 1, month: 1 });
 AttendanceSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: "OPEN" }, name: "one_open_per_user" });
 export type AttendanceDoc = InferSchemaType<typeof AttendanceSchema> & { _id: Types.ObjectId };
 export const Attendance = getModel("Attendance", AttendanceSchema);
+
+/** Tóm tắt chấm công từng tháng (lưu lại trước khi dọn chấm công cũ): ngày công, giờ công – giữ thâm niên / lịch sử làm việc */
+const AttendanceArchiveSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" }, // cơ sở trả lương
+    month: { type: String, required: true },
+    days: { type: Number, default: 0 }, // số ngày có đi làm
+    shifts: { type: Number, default: 0 }, // số lượt chấm công
+    hours: { type: Number, default: 0 }, // giờ tính công
+    lateMinutes: { type: Number, default: 0 },
+    firstDate: String,
+    lastDate: String,
+  },
+  { timestamps: true },
+);
+AttendanceArchiveSchema.index({ userId: 1, month: 1 });
+export const AttendanceArchive = getModel("AttendanceArchive", AttendanceArchiveSchema);
 
 const AttendanceAdjustmentSchema = new Schema({
   attendanceId: { type: Schema.Types.ObjectId, ref: "Attendance", index: true },
