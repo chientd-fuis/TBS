@@ -19,6 +19,7 @@ import {
   User,
   UserNotice,
   WageHistory,
+  SalaryHistory,
 } from "./models";
 
 /*
@@ -29,7 +30,7 @@ import {
  */
 
 /** Hồ sơ lấy từ tài khoản cũ (tài khoản mới chỉ giữ email / tên Google / ảnh đại diện). */
-const PROFILE_FIELDS = ["name", "phone", "bankName", "bankAccountEnc", "hourlyWage", "status", "storeId", "joinedAt", "registeredAt", "consentFaceAt", "managerPerms", "managerStoreIds"] as const;
+const PROFILE_FIELDS = ["name", "phone", "bankName", "bankAccountEnc", "hourlyWage", "payType", "monthlySalary", "status", "storeId", "joinedAt", "registeredAt", "consentFaceAt", "managerPerms", "managerStoreIds"] as const;
 
 export type MergePreview = {
   counts: Record<string, number>;
@@ -133,6 +134,7 @@ export async function mergeUserAccount(fromId: string, toId: string) {
   await run("coverTo", CoverRequest.updateMany({ toUserId: f }, { $set: { toUserId: t } }));
   await run("notice", UserNotice.updateMany({ userId: f }, set));
   await run("wage", WageHistory.updateMany({ userId: f }, set));
+  await run("salary", SalaryHistory.updateMany({ userId: f }, set));
   await run("bonusPenalty", BonusPenalty.updateMany({ userId: f }, set));
   await run("bonusPenaltyCreator", BonusPenalty.updateMany({ createdByUserId: f }, { $set: { createdByUserId: t } }));
   await run("payrollItem", PayrollItem.updateMany({ userId: f }, set));

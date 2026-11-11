@@ -245,7 +245,7 @@ export async function buildExport(f: ExportFilter) {
         { header: "Nhân viên", key: "n", width: 24 },
         { header: "Cơ sở", key: "s", width: 16 },
         { header: "Giờ tính công", key: "h", width: 12, fmt: HOURS },
-        { header: "Lương giờ", key: "w", width: 12, fmt: VND },
+        { header: "Lương giờ / cứng (tháng)", key: "w", width: 16, fmt: VND },
         { header: "Lương cơ bản", key: "b", width: 14, fmt: VND },
         { header: "Phụ cấp", key: "a", width: 12, fmt: VND },
         { header: "Tổng thưởng", key: "tb", width: 13, fmt: VND },
@@ -256,7 +256,7 @@ export async function buildExport(f: ExportFilter) {
       ]);
       for (const i of items) {
         const u = userMap.get(String(i.userId));
-        const row = s.add([viMonth(i.month), i.userName || u?.name || "", storeName.get(String(i.storeId)) || "", i.totalHours, i.hourlyWage, i.basePay, i.allowance, i.totalBonus, i.totalPenalty, i.advance, i.netPay, statusOf(i.payrollId)]);
+        const row = s.add([viMonth(i.month), i.userName || u?.name || "", storeName.get(String(i.storeId)) || "", i.totalHours, i.payType === "FULLTIME" ? i.monthlySalary ?? 0 : i.hourlyWage, i.basePay, i.allowance, i.totalBonus, i.totalPenalty, i.advance, i.netPay, statusOf(i.payrollId)]);
         row.getCell(8).font = { color: { argb: COLORS.bonus } };
         row.getCell(9).font = { color: { argb: COLORS.penalty } };
         row.getCell(11).font = { bold: true };
@@ -310,13 +310,13 @@ export async function buildExport(f: ExportFilter) {
       { header: "SĐT", key: "p", width: 14 },
       { header: "Ngân hàng", key: "b", width: 16 },
       { header: "Số tài khoản", key: "acc", width: 20 },
-      { header: "Lương giờ", key: "w", width: 12, fmt: VND },
+      { header: "Lương giờ / cứng (tháng)", key: "w", width: 16, fmt: VND },
       { header: "Cơ sở", key: "s", width: 16 },
       { header: "Trạng thái", key: "st", width: 12 },
       { header: "Ngày vào làm", key: "j", width: 13 },
     ]);
     for (const u of users) {
-      const row = s.add([u.name, u.email, u.phone, u.bankName, decrypt(u.bankAccountEnc), u.hourlyWage, storeName.get(String(u.storeId)) || "", u.status === "ACTIVE" ? "Đang làm" : "Nghỉ việc", u.joinedAt ? viDateTime(u.joinedAt).slice(0, 10) : ""]);
+      const row = s.add([u.name, u.email, u.phone, u.bankName, decrypt(u.bankAccountEnc), u.payType === "FULLTIME" ? u.monthlySalary : u.hourlyWage, storeName.get(String(u.storeId)) || "", u.status === "ACTIVE" ? "Đang làm" : "Nghỉ việc", u.joinedAt ? viDateTime(u.joinedAt).slice(0, 10) : ""]);
       row.getCell(3).numFmt = "@";
       row.getCell(5).numFmt = "@";
     }

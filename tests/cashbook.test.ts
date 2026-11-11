@@ -57,3 +57,20 @@ test("sổ quỹ: lương đã trả → phiếu 'Thanh toán lương tháng xx'
   assert.equal(f.tk.payroll, 10_200_000);
   assert.equal(f.tk.balance, 9_800_000);
 });
+
+test("đếm tiền: tiền mặt ngày = chốt ca ± phiếu nộp / rút đúng cơ sở + ngày", async () => {
+  const { applyDayTransfers } = await import("../src/lib/cashbook");
+  const rows = applyDayTransfers(
+    [
+      { storeId: "a", date: "2026-11-10", tm: 3_000_000, tk: 1_000_000 },
+      { storeId: "b", date: "2026-11-10", tm: 2_000_000, tk: 0 },
+    ],
+    [
+      { kind: "DEPOSIT", amount: 1_000_000, storeId: "a", date: "2026-11-10" },
+      { kind: "WITHDRAW", amount: 200_000, storeId: "a", date: "2026-11-10" },
+      { kind: "TAKE", amount: 999, storeId: "b", date: "2026-11-10" },
+      { kind: "DEPOSIT", amount: 500_000, date: "2026-11-10" },
+    ],
+  );
+  assert.deepEqual(rows.map((r) => [r.tm, r.tk]), [[2_200_000, 1_800_000], [2_000_000, 0]]);
+});

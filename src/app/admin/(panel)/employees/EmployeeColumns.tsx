@@ -7,7 +7,7 @@ const COLS = [
   { n: 2, label: "Email" },
   { n: 3, label: "SĐT" },
   { n: 4, label: "Cơ sở" },
-  { n: 5, label: "Lương giờ" },
+  { n: 5, label: "Lương" },
   { n: 6, label: "Trạng thái" },
 ] as const;
 

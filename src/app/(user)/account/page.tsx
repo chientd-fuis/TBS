@@ -19,7 +19,11 @@ export default async function AccountPage() {
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-ink/60">Email</dt><dd className="break-all">{user.email}</dd>
           <dt className="text-ink/60">Cơ sở</dt><dd>{store?.name}</dd>
-          <dt className="text-ink/60">Lương giờ</dt><dd>{vnd(user.hourlyWage)}</dd>
+          {user.payType === "FULLTIME" ? (
+            <><dt className="text-ink/60">Lương cứng</dt><dd>{vnd(user.monthlySalary)} / tháng</dd></>
+          ) : (
+            <><dt className="text-ink/60">Lương giờ</dt><dd>{vnd(user.hourlyWage)}</dd></>
+          )}
         </dl>
         <ActionForm action={updateMyProfile} submitLabel="Lưu thông tin" successText="Đã lưu thông tin" className="mt-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">

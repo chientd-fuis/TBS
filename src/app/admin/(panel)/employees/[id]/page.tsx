@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
-import { Device, LoginLog, Store, User, WageHistory } from "@/lib/models";
+import { Device, LoginLog, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
 import { decrypt } from "@/lib/crypto";
 import { vnd } from "@/lib/format";
-import { localDate, viDate, viDateTime } from "@/lib/time";
+import { localDate, localMonth, viDate, viDateTime, viMonth } from "@/lib/time";
+import { PayTermsFields } from "@/components/PayTermsFields";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { DeviceActions } from "../../devices/DeviceActions";
-import { setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
+import { setPayTerms, setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
 import { STAFF_PERMS } from "@/lib/permissions";
 import TransferAccount from "./TransferAccount";
 
@@ -20,14 +21,16 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
   const { transferred } = await searchParams;
   const u = await User.findById(id).lean().catch(() => null);
   if (!u) notFound();
-  const [stores, devices, wages, logs, others] = await Promise.all([
+  const [stores, devices, wages, logs, others, salaries] = await Promise.all([
     Store.find().sort({ name: 1 }).lean(),
     Device.find({ userId: u._id }).sort({ lastSeenAt: -1 }).lean(),
     WageHistory.find({ userId: u._id }).sort({ effectiveFrom: -1 }).lean(),
     LoginLog.find({ userId: u._id }).sort({ createdAt: -1 }).limit(20).lean(),
     // ứng viên Gmail mới: tài khoản mới đăng nhập / chờ duyệt lên đầu
     User.find({ _id: { $ne: u._id } }).select("email name googleName status createdAt").sort({ createdAt: -1 }).limit(300).lean(),
+    SalaryHistory.find({ userId: u._id }).sort({ effectiveMonth: -1, createdAt: -1 }).lean(),
   ]);
+  const fulltime = u.payType === "FULLTIME";
   const rank = (st: string) => (st === "NEW" ? 0 : st === "PENDING" ? 1 : st === "REJECTED" ? 2 : 3);
   const candidates = others
     .sort((a, b) => rank(a.status) - rank(b.status))
@@ -75,7 +78,27 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
             </div>
           </ActionForm>
         </Card>
-        <Card title={`Lương giờ hiện tại: ${vnd(u.hourlyWage)}`}>
+        <Card title={fulltime ? `Full-time · lương cứng ${vnd(u.monthlySalary)} / tháng · nghỉ có lương ${u.paidLeaveDays || 0} ngày` : "Hình thức lương: Part-time (lương giờ)"}>
+          <p className="mb-2 text-xs text-ink/70">
+            Full-time: lương cơ bản trong bảng lương = lương cứng / tháng (giờ chấm công vẫn được đếm để theo dõi, không nhân lương giờ, không nhân hệ số ngày lễ).
+            Đổi hình thức / mức lương cứng áp dụng cho cả tháng chọn trở đi.
+          </p>
+          <ActionForm action={setPayTerms} submitLabel="Cập nhật hình thức lương" className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="userId" value={String(u._id)} />
+            <PayTermsFields defaultType={fulltime ? "FULLTIME" : "HOURLY"} defaultSalary={u.monthlySalary || 0} defaultLeave={u.paidLeaveDays || 0} hourly={false} month={localMonth(new Date())} />
+          </ActionForm>
+          {salaries.length > 0 && (
+            <ul className="mt-3 space-y-1 text-sm">
+              {salaries.map((h) => (
+                <li key={String(h._id)}>
+                  Từ tháng {viMonth(h.effectiveMonth)}: <b>{h.payType === "FULLTIME" ? `Full-time · ${vnd(h.monthlySalary ?? 0)} / tháng · nghỉ có lương ${h.paidLeaveDays ?? 0} ngày` : "Part-time (lương giờ)"}</b>{" "}
+                  <span className="text-xs text-ink/60">({h.createdBy})</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card title={`Lương giờ hiện tại: ${vnd(u.hourlyWage)}${fulltime ? " (không dùng khi Full-time)" : ""}`}>
           <ActionForm action={setWage} submitLabel="Cập nhật lương" className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="userId" value={String(u._id)} />
             <Field label="Lương giờ mới (VND)"><Input name="hourlyWage" inputMode="numeric" required /></Field>

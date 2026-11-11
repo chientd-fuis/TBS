@@ -5,7 +5,7 @@ import { ColumnToggle } from "@/components/ColumnToggle";
 /** Ẩn / hiện cột bảng lương: cột "Nhân viên" (1) và "Thực nhận" (9) luôn hiện. */
 const COLS = [
   { n: 2, label: "Giờ công" },
-  { n: 3, label: "Lương giờ" },
+  { n: 3, label: "Lương giờ / cứng" },
   { n: 4, label: "Lương CB" },
   { n: 5, label: "Phụ cấp" },
   { n: 6, label: "Tạm ứng" },

@@ -68,7 +68,11 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                   <dd className="text-right text-xs text-danger">{item.holidayNote}</dd>
                 </>
               )}
-              <dt>Lương giờ</dt><dd className="text-right">{vnd(item.hourlyWage)}</dd>
+              {item.payType === "FULLTIME" ? (
+                <><dt>Lương cứng (Full-time)</dt><dd className="text-right">{vnd(item.monthlySalary ?? 0)} / tháng</dd></>
+              ) : (
+                <><dt>Lương giờ</dt><dd className="text-right">{vnd(item.hourlyWage)}</dd></>
+              )}
               <dt>Lương cơ bản</dt><dd className="text-right">{vnd(item.basePay)}</dd>
               {!!item.holidayExtra && (
                 <>

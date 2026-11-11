@@ -95,6 +95,12 @@ const UserSchema = new Schema(
     bankName: { type: String, default: "" },
     bankAccountEnc: { type: String, default: "" }, // STK mã hoá AES
     hourlyWage: { type: Number, default: 0 },
+    // hình thức lương hiện tại (lịch sử theo tháng: SalaryHistory) – HOURLY = part-time theo giờ, FULLTIME = lương cứng / tháng
+    payType: { type: String, enum: ["HOURLY", "FULLTIME"], default: "HOURLY" },
+    monthlySalary: { type: Number, default: 0 },
+    paidLeaveDays: { type: Number, default: 0 }, // full-time: số ngày nghỉ có lương / tháng
+    // hồ sơ nhân viên của 1 admin (cùng Gmail) – để admin có dòng trong bảng lương
+    adminStaff: { type: Boolean, default: false },
     status: { type: String, enum: USER_STATUS, default: "NEW" },
     rejectReason: String,
     storeId: { type: Schema.Types.ObjectId, ref: "Store" },
@@ -572,6 +578,18 @@ const WageHistorySchema = new Schema({
 });
 export const WageHistory = getModel("WageHistory", WageHistorySchema);
 
+/** Hình thức lương theo tháng: áp dụng từ effectiveMonth tới khi có mốc mới. Không có mốc nào → HOURLY (lương giờ). */
+const SalaryHistorySchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  payType: { type: String, enum: ["HOURLY", "FULLTIME"], required: true },
+  monthlySalary: { type: Number, default: 0 },
+  paidLeaveDays: { type: Number, default: 0 }, // full-time: số ngày nghỉ có lương / tháng
+  effectiveMonth: { type: String, required: true }, // YYYY-MM
+  createdBy: String,
+  createdAt: { type: Date, default: Date.now },
+});
+export const SalaryHistory = getModel("SalaryHistory", SalaryHistorySchema);
+
 const BonusPenaltySchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -616,6 +634,9 @@ const PayrollItemSchema = new Schema(
     totalHours: { type: Number, default: 0 },
     workDays: { type: Number, default: 0 },
     hourlyWage: { type: Number, default: 0 }, // lương giờ hiện hành (hiển thị)
+    payType: { type: String, enum: ["HOURLY", "FULLTIME"], default: "HOURLY" }, // FULLTIME: basePay = lương cứng tháng
+    monthlySalary: { type: Number, default: 0 },
+    paidLeaveDays: { type: Number, default: 0 }, // full-time: số ngày nghỉ có lương / tháng (dùng tính nghỉ không lương ở Tạm ứng)
     basePay: { type: Number, default: 0 },
     allowance: { type: Number, default: 0 },
     totalBonus: { type: Number, default: 0 },
@@ -745,6 +766,16 @@ const CashTransferSchema = new Schema(
   { timestamps: true },
 );
 export const CashTransfer = getModel("CashTransfer", CashTransferSchema);
+
+/** Sổ quỹ → Đếm tiền: ngày nào của cơ sở nào đã đi lấy & đếm tiền mặt (số tiền = tiền mặt doanh thu ngày đó, lấy số hiện tại) */
+const CashCountSchema = new Schema({
+  storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+  date: { type: String, required: true }, // YYYY-MM-DD
+  countedAt: { type: Date, default: Date.now },
+  countedBy: String,
+});
+CashCountSchema.index({ storeId: 1, date: 1 }, { unique: true });
+export const CashCount = getModel("CashCount", CashCountSchema);
 
 /* ---------- Nhật ký thao tác của nhân viên được cấp quyền quản lý (hiện ở Tổng quan từng cơ sở) ---------- */
 const StaffActivitySchema = new Schema({

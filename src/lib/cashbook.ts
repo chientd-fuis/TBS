@@ -48,6 +48,26 @@ export function payrollEntries(
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+/**
+ * Doanh thu từng ngày sau phiếu nộp TM → TK / rút TK → TM (Admin Tổng ghi theo cơ sở + ngày):
+ * nộp → TM ↓ TK ↑, rút → TK ↓ TM ↑. Đây là số tiền mặt thật còn lại của ngày đó.
+ */
+export function applyDayTransfers<R extends { storeId: string; date: string; tm: number; tk: number }>(
+  rows: R[],
+  transfers: { kind: string; amount: number; storeId?: unknown; date: string }[],
+): R[] {
+  const net = new Map<string, number>();
+  for (const t of transfers) {
+    if (!t.storeId || (t.kind !== "DEPOSIT" && t.kind !== "WITHDRAW")) continue;
+    const k = `${String(t.storeId)}|${t.date}`;
+    net.set(k, (net.get(k) ?? 0) + (t.kind === "DEPOSIT" ? t.amount : -t.amount));
+  }
+  return rows.map((r) => {
+    const n = net.get(`${r.storeId}|${r.date}`) ?? 0;
+    return n ? { ...r, tm: r.tm - n, tk: r.tk + n } : r;
+  });
+}
+
 export function cashBalance({ revenue, bills, moves, payroll = [] }: { revenue: { tk: number; tm: number }[]; bills: { amount: number }[]; moves: CashMove[]; payroll?: { amount: number }[] }) {
   const sum = (xs: number[]) => xs.reduce((s, x) => s + (Number(x) || 0), 0);
   const of = (kind: CashKind, acc?: CashAccount) =>

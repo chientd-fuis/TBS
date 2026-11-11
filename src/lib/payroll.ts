@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { connectDB } from "./db";
-import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, WageHistory, type ExtrasNote } from "./models";
+import { Attendance, BonusPenalty, Payroll, PayrollItem, SalaryHistory, Store, User, WageHistory, type ExtrasNote } from "./models";
+import { payTermsAt } from "./salary";
 import { computePay } from "./calc";
 import { holidayNote, loadHolidays } from "./holiday";
 import { payStoreFilter } from "./attendance";
@@ -55,12 +56,15 @@ export async function generatePayroll(storeId: string, month: string, opts: { fo
     const user = await User.findById(uid).lean();
     if (!user) continue;
     const history = await WageHistory.find({ userId: uid }).sort({ effectiveFrom: 1 }).lean();
+    // full-time: lương cơ bản = lương cứng tháng (giờ công vẫn đếm để theo dõi, không nhân lương giờ / hệ số lễ)
+    const terms = payTermsAt(await SalaryHistory.find({ userId: uid }).lean(), month);
+    const fulltime = terms.payType === "FULLTIME";
     const myAtts = atts.filter((a) => String(a.userId) === uid);
     const myBps = bps.filter((b) => String(b.userId) === uid);
     const hoursByWage = myAtts.map((a) => ({
       hours: a.roundedHours || 0,
-      wage: wageAt(history, a.workDate, user.hourlyWage || 0),
-      mult: holidays.get(a.workDate)?.multiplier ?? 1, // ngày lễ ×2 / ×3 / ×4
+      wage: fulltime ? 0 : wageAt(history, a.workDate, user.hourlyWage || 0),
+      mult: fulltime ? 1 : (holidays.get(a.workDate)?.multiplier ?? 1), // ngày lễ ×2 / ×3 / ×4
     }));
     const totalBonus = myBps.filter((b) => b.kind === "BONUS").reduce((s, b) => s + b.amountVnd, 0);
     const totalPenalty = myBps.filter((b) => b.kind === "PENALTY").reduce((s, b) => s + b.amountVnd, 0);
@@ -68,7 +72,7 @@ export async function generatePayroll(storeId: string, month: string, opts: { fo
     if (prev?.paidAt) continue; // đã trả → giữ nguyên số đã trả
     const allowance = prev?.allowance ?? 0;
     const advance = prev?.advance ?? 0;
-    const { totalHours, basePay, netPay, holidayHours, holidayExtra } = computePay({ hoursByWage, allowance, totalBonus, totalPenalty, advance });
+    const { totalHours, basePay, netPay, holidayHours, holidayExtra } = computePay({ hoursByWage, allowance, totalBonus, totalPenalty, advance, fixedBasePay: fulltime ? terms.monthlySalary : undefined });
     await PayrollItem.updateOne(
       { payrollId: payroll._id, userId: uid },
       {
@@ -77,7 +81,10 @@ export async function generatePayroll(storeId: string, month: string, opts: { fo
           month,
           totalHours,
           workDays: new Set(myAtts.map((a) => a.workDate)).size,
-          hourlyWage: wageAt(history, monthRange(month).last, user.hourlyWage || 0), // lương giờ áp dụng cuối tháng này
+          hourlyWage: fulltime ? 0 : wageAt(history, monthRange(month).last, user.hourlyWage || 0), // lương giờ áp dụng cuối tháng này
+          payType: terms.payType,
+          monthlySalary: terms.monthlySalary,
+          paidLeaveDays: terms.paidLeaveDays,
           basePay,
           totalBonus,
           totalPenalty,
@@ -89,7 +96,7 @@ export async function generatePayroll(storeId: string, month: string, opts: { fo
           ...support(myAtts),
           holidayHours,
           holidayExtra,
-          holidayNote: holidayNote(myAtts, holidays),
+          holidayNote: fulltime ? "" : holidayNote(myAtts, holidays),
           userName: user.name,
           bankName: user.bankName ?? "",
           bankAccountEnc: user.bankAccountEnc ?? "",
@@ -224,9 +231,15 @@ export async function estimateStorePay(storeId: Types.ObjectId | string, month: 
   const uids = [...new Set(atts.map((a) => String(a.userId)))];
   const users = await User.find({ _id: { $in: uids } }).select("hourlyWage").lean();
   const histories = await WageHistory.find({ userId: { $in: uids } }).sort({ effectiveFrom: 1 }).lean();
+  // full-time: lương cứng cả tháng của nhân viên đang làm tại cơ sở (không tính theo giờ)
+  const fixed = await fulltimeOfStore(storeId, month);
   let hours = 0;
-  let basePay = 0;
+  let basePay = [...fixed.values()].reduce((s, v) => s + v, 0);
   for (const a of atts) {
+    if (fixed.has(String(a.userId))) {
+      hours += a.roundedHours || 0;
+      continue;
+    }
     const u = users.find((x) => String(x._id) === String(a.userId));
     const h = histories.filter((x) => String(x.userId) === String(a.userId));
     const w = wageAt(h, a.workDate, u?.hourlyWage || 0);
@@ -236,5 +249,18 @@ export async function estimateStorePay(storeId: Types.ObjectId | string, month: 
   const bonus = bps.filter((b) => b.kind === "BONUS").reduce((s, b) => s + b.amountVnd, 0);
   const penalty = bps.filter((b) => b.kind === "PENALTY").reduce((s, b) => s + b.amountVnd, 0);
   basePay = Math.round(basePay);
-  return { hours: Math.round(hours * 100) / 100, basePay, bonus, penalty, total: basePay + bonus - penalty, staffCount: uids.length };
+  return { hours: Math.round(hours * 100) / 100, basePay, bonus, penalty, total: basePay + bonus - penalty, staffCount: new Set([...uids, ...fixed.keys()]).size };
+}
+
+/** Nhân viên full-time đang làm tại cơ sở trong tháng → lương cứng (userId → VND). */
+export async function fulltimeOfStore(storeId: Types.ObjectId | string, month: string) {
+  await connectDB();
+  const staff = await User.find({ storeId, status: "ACTIVE" }).select("_id").lean();
+  const hist = await SalaryHistory.find({ userId: { $in: staff.map((u) => u._id) } }).lean();
+  const out = new Map<string, number>();
+  for (const u of staff) {
+    const t = payTermsAt(hist.filter((h) => String(h.userId) === String(u._id)), month);
+    if (t.payType === "FULLTIME") out.set(String(u._id), t.monthlySalary);
+  }
+  return out;
 }

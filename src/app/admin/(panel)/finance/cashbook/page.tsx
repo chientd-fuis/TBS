@@ -1,9 +1,12 @@
 import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
-import { CashTransfer, Expense, Payroll, PayrollItem, ShiftClosing, Store, User } from "@/lib/models";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { CashCount, CashTransfer, Expense, Payroll, PayrollItem, ShiftClosing, Store, User } from "@/lib/models";
 import { dayRevenueFromClosings } from "@/lib/revenue";
 import {
   CASH_KINDS,
+  applyDayTransfers,
   cashBalance,
   cashKindOf,
   payrollEntries,
@@ -17,6 +20,7 @@ import {
   saveCashTransfer,
 } from "@/app/admin/actions/finance";
 import { cn } from "@/lib/format";
+import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
@@ -28,8 +32,10 @@ const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
 export default async function CashbookPage() {
   const admin = await requirePerm("finance.cashbook");
   const owner = admin.kind === "OWNER";
+  // số tiền thực tế đã lấy (Đếm tiền): Admin Tổng + admin được cấp quyền
+  const seeCount = can(admin, "finance.cashcount");
   await connectDB();
-  const [stores, closings, bills, all, payrolls, payItems] = await Promise.all([
+  const [stores, closings, bills, all, payrolls, payItems, counts] = await Promise.all([
     Store.find().select("name").lean(),
     ShiftClosing.find({ "revenue.tm": { $ne: null } })
       .select("storeId workDate shiftName createdAt revenue")
@@ -42,6 +48,7 @@ export default async function CashbookPage() {
     CashTransfer.find().sort({ date: -1, createdAt: -1 }).lean(),
     Payroll.find({ $or: [{ status: "PAID" }, { paidAt: { $ne: null } }] }).select("storeId month status paidAt").lean(),
     PayrollItem.find({ paidAt: { $ne: null } }).select("payrollId userId userName netPay paidAt").lean(),
+    CashCount.find().select("storeId date").lean(),
   ]);
   // lương đã trả → phiếu "Thanh toán lương tháng xx" (tự sinh, trừ tài khoản)
   const payUsers = new Map(
@@ -66,6 +73,11 @@ export default async function CashbookPage() {
     moves,
     payroll: pays,
   });
+  // Đếm tiền: tiền mặt các ngày đã đi lấy & đếm (số tiền mặt doanh thu ngày đó, sau phiếu nộp / rút)
+  const counted = new Set(counts.map((c) => `${c.storeId}|${c.date}`));
+  const dayRows = applyDayTransfers(dayRevenueFromClosings(closings), all);
+  const takenTm = dayRows.filter((r) => counted.has(`${r.storeId}|${r.date}`)).reduce((s, r) => s + r.tm, 0);
+  const notTaken = dayRows.filter((r) => !counted.has(`${r.storeId}|${r.date}`));
   const nameOf = new Map(
     stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]),
   );
@@ -94,6 +106,21 @@ export default async function CashbookPage() {
               ["Đã rút", fund.tm.take, -1],
               ["Bổ sung vốn", fund.tm.add, 1],
             ]}
+            extra={
+              seeCount && <div className="mt-2 border-t border-dashed border-[#e9d9a8] pt-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ink/70" title="Tiền thực tế đã qua các cửa hàng lấy về và đếm (tích ở Đếm tiền)">✓ Thực tế đã lấy</span>
+                  <b className="tabular-nums text-secondary-dark">{vnd(takenTm)}</b>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-ink/60">
+                  <span>Chưa lấy ({notTaken.length} ngày)</span>
+                  <span className="tabular-nums">{vnd(notTaken.reduce((s, r) => s + r.tm, 0))}</span>
+                </div>
+                <Link href="/admin/finance/cashbook/count" className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 font-semibold text-accent ring-1 ring-[#e9d9a8] hover:bg-primary-light">
+                  🧮 Đếm tiền →
+                </Link>
+              </div>
+            }
           />
         </div>
         <p className="mt-2 text-[11px] text-ink/50">
@@ -225,10 +252,12 @@ function FundBox({
   title,
   side,
   rows,
+  extra,
 }: {
   title: string;
   side: CashSide;
   rows: [string, number, 1 | -1][];
+  extra?: ReactNode;
 }) {
   return (
     <div className="rounded-2xl bg-cream p-3 ring-1 ring-[#f1e6c8]">
@@ -259,6 +288,7 @@ function FundBox({
             </div>
           ))}
       </dl>
+      {extra}
     </div>
   );
 }

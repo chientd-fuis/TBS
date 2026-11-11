@@ -73,11 +73,14 @@ export type PayrollInput = {
   totalBonus: number;
   totalPenalty: number;
   advance: number;
+  /** full-time: lương cơ bản = lương cứng tháng (bỏ qua giờ × lương giờ) */
+  fixedBasePay?: number;
 };
 /** Thực nhận = Lương cơ bản + Phụ cấp + Thưởng − Phạt − Tạm ứng (VND, số nguyên). */
 export function computePay(i: PayrollInput) {
   const totalHours = Math.round(i.hoursByWage.reduce((s, x) => s + x.hours, 0) * 100) / 100;
-  const basePay = Math.round(i.hoursByWage.reduce((s, x) => s + x.hours * x.wage * (x.mult ?? 1), 0));
+  const basePay =
+    i.fixedBasePay != null ? Math.round(Math.max(0, i.fixedBasePay)) : Math.round(i.hoursByWage.reduce((s, x) => s + x.hours * x.wage * (x.mult ?? 1), 0));
   const netPay = basePay + i.allowance + i.totalBonus - i.totalPenalty - i.advance;
   // ngày lễ: số giờ + tiền cộng thêm (đã nằm trong basePay)
   const hol = i.hoursByWage.filter((x) => (x.mult ?? 1) > 1);

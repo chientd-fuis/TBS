@@ -3,6 +3,7 @@ import { requirePerm } from "@/lib/guards";
 import { BonusPenalty, Payroll, PayrollItem, Store, User, type BpDetail, type ExtrasNote } from "@/lib/models";
 import { localMonth, prevMonth, viDateTime, viMonth } from "@/lib/time";
 import { hoursVi, vnd } from "@/lib/format";
+import { daysOfMonth } from "@/lib/salary";
 import { decrypt } from "@/lib/crypto";
 import { ActionForm } from "@/components/ActionForm";
 import { MonthPicker } from "@/components/MonthPicker";
@@ -130,7 +131,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
             <table className="tbs">
               <thead>
                 <tr>
-                  <th>Nhân viên</th><th className="text-right">Giờ công</th><th className="text-right">Lương giờ</th><th className="text-right">Lương CB</th>
+                  <th>Nhân viên</th><th className="text-right">Giờ công</th><th className="text-right">Lương giờ / cứng</th><th className="text-right">Lương CB</th>
                   <th className="text-right text-secondary-dark">+ Phụ cấp</th><th className="text-right text-danger">− Tạm ứng</th><th className="text-right">Thưởng</th><th className="text-right">Phạt</th><th className="text-right">Thực nhận</th><th>Chuyển khoản</th><th>Trả lương</th>
                 </tr>
               </thead>
@@ -145,9 +146,11 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                   const bankAcc = decrypt(i.userName ? i.bankAccountEnc : u?.bankAccountEnc);
                   return (
                     <tr key={String(i._id)} className={paid ? "bg-[#f3faf5]" : ""}>
-                      <td className="font-semibold">{name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}</td>
+                      <td className="font-semibold">{name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}{i.payType === "FULLTIME" && <div className="text-xs font-normal text-[#1e40af]">Full-time · nghỉ có lương {i.paidLeaveDays ?? 0} ngày</div>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
-                      <td className="text-right">{vnd(i.hourlyWage)}</td>
+                      <td className="whitespace-nowrap text-right">
+                        {i.payType === "FULLTIME" ? <span title="Full-time: lương cơ bản = lương cứng / tháng">{vnd(i.monthlySalary ?? 0)}<div className="text-xs text-[#1e40af]">Full-time / tháng</div></span> : vnd(i.hourlyWage)}
+                      </td>
                       <td className="text-right">{vnd(i.basePay)}</td>
                       {(["allowance", "advance"] as const).map((field) => {
                         // từng khoản có ghi chú (index = vị trí trong extrasNotes) + phần nhập tay cũ không ghi chú (index -1)
@@ -159,7 +162,19 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                         if (rest > 0) entries.unshift({ index: -1, amount: rest, note: "", meta: "nhập tay trước đây" });
                         return (
                           <td key={field} className="text-right">
-                            <ExtrasCell itemId={String(i._id)} field={field} total={i[field]} entries={entries} name={name} locked={paid || payroll.status === "PAID"} />
+                            <ExtrasCell
+                              itemId={String(i._id)}
+                              field={field}
+                              total={i[field]}
+                              entries={entries}
+                              name={name}
+                              locked={paid || payroll.status === "PAID"}
+                              leave={
+                                field === "advance" && i.payType === "FULLTIME"
+                                  ? { monthlySalary: i.monthlySalary ?? 0, paidLeaveDays: i.paidLeaveDays ?? 0, daysInMonth: daysOfMonth(i.month), workDays: i.workDays }
+                                  : undefined
+                              }
+                            />
                           </td>
                         );
                       })}

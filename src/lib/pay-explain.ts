@@ -24,7 +24,10 @@ export async function explainMyPay(user: { _id: unknown; name?: string | null },
   const pick = (i: (typeof items)[number]) => ({
     totalHours: i.totalHours,
     workDays: i.workDays,
+    payType: i.payType === "FULLTIME" ? "full-time (lương cứng)" : "part-time (lương giờ)",
     hourlyWage: i.hourlyWage,
+    monthlySalary: i.monthlySalary ?? 0,
+    paidLeaveDays: i.paidLeaveDays ?? 0,
     basePay: i.basePay,
     allowance: i.allowance,
     totalBonus: i.totalBonus,
@@ -51,7 +54,7 @@ export async function explainMyPay(user: { _id: unknown; name?: string | null },
     temperature: 0.2,
     timeoutMs: 45_000,
     prompt: `Bạn giải thích BẢNG LƯƠNG tháng ${month} cho nhân viên quán trà sữa Tiệm Bơ Sầu (xưng "mình", gọi "bạn"), tiếng Việt, dễ hiểu.
-Công thức: Thực nhận = Lương cơ bản + Phụ cấp + Thưởng − Phạt − Tạm ứng. Lương cơ bản = giờ tính công × lương giờ (giờ làm ngày lễ được nhân hệ số, đã gồm trong lương cơ bản).
+Công thức: Thực nhận = Lương cơ bản + Phụ cấp + Thưởng − Phạt − Tạm ứng. Part-time: Lương cơ bản = giờ tính công × lương giờ (giờ làm ngày lễ được nhân hệ số, đã gồm trong lương cơ bản). Full-time: Lương cơ bản = lương cứng tháng (monthlySalary), giờ công chỉ để theo dõi; nghỉ quá số ngày nghỉ có lương (paidLeaveDays) bị trừ trong tạm ứng (ghi chú "Nghỉ không lương").
 Viết danh sách đánh số 3–6 dòng: giờ công (nêu các ngày được cộng thêm giờ nếu có), lương cơ bản, phụ cấp / thưởng / phạt (kèm lý do từng khoản), tạm ứng, thực nhận.
 Nếu có tháng trước: 1 câu so sánh, nêu nguyên nhân chính chênh lệch. CHỈ dùng số trong dữ liệu (định dạng 1.234.567 ₫), không bịa, không markdown đậm.
 Dữ liệu (JSON):

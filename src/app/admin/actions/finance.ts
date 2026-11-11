@@ -218,3 +218,21 @@ export async function deleteCashTransfer(_: FormState, fd: FormData): Promise<Fo
     return errMsg(e);
   }
 }
+
+/** Sổ quỹ → Đếm tiền: tích / bỏ tích "đã lấy & đếm tiền mặt" ngày đó của cơ sở (Admin Tổng). */
+export async function setCashCount(storeId: string, date: string, counted: boolean): Promise<FormState> {
+  try {
+    const admin = await assertOwner();
+    if (!isValidObjectId(storeId) || !isYmd(date)) return { error: "Ngày / cơ sở không hợp lệ" };
+    await connectDB();
+    const { CashCount } = await import("@/lib/models");
+    const actor = adminActor(admin);
+    if (counted) await CashCount.updateOne({ storeId, date }, { $set: { countedAt: new Date(), countedBy: actor.name } }, { upsert: true });
+    else await CashCount.deleteOne({ storeId, date });
+    await audit(actor, counted ? "cash.count" : "cash.uncount", { type: "CashCount", id: `${storeId}|${date}` }, null, { storeId, date });
+    revalidatePath("/admin/finance/cashbook", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}

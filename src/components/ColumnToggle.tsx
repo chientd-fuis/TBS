@@ -12,6 +12,7 @@ export function ColumnToggle({
   storageKey,
   keepNote,
   minimalLabel,
+  defaultHidden = [],
   children,
 }: {
   cols: readonly { n: number; label: string }[];
@@ -20,15 +21,18 @@ export function ColumnToggle({
   keepNote: string;
   /** nút ẩn hết các cột ẩn được, VD "Chỉ tên + thực nhận" */
   minimalLabel: string;
+  /** cột ẩn sẵn khi máy này chưa chọn lần nào */
+  defaultHidden?: number[];
   children: ReactNode;
 }) {
   const all = cols.map((c) => c.n);
-  const [hidden, setHidden] = useState<number[]>([]);
+  const [hidden, setHidden] = useState<number[]>(defaultHidden);
   const [open, setOpen] = useState(false);
   const scope = `ct-${storageKey.replace(/[^a-z0-9]/gi, "")}`;
   useEffect(() => {
     try {
-      const v = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      const raw = localStorage.getItem(storageKey);
+      const v = raw == null ? defaultHidden : JSON.parse(raw);
       if (Array.isArray(v)) setHidden(v.filter((n) => all.includes(n)));
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps

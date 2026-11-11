@@ -1,14 +1,16 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
-import { Device, Store, User, WageHistory } from "@/lib/models";
-import { assertAdmin } from "@/lib/guards";
+import { AdminAccount, Device, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
+import { assertAdmin, assertOwner } from "@/lib/guards";
+import { isOwnerEmail } from "@/lib/auth";
+import { isPayType, payTermsAt, type PayType } from "@/lib/salary";
 import { adminActor } from "@/lib/admin-session";
 import { approveDevice } from "@/lib/device";
 import { encrypt } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
-import { localDate } from "@/lib/time";
-import { errMsg, num, str, type FormState } from "./types";
+import { localDate, localMonth } from "@/lib/time";
+import { dec, errMsg, num, str, type FormState } from "./types";
 
 /* ===== Duyệt đăng ký (spec 3.1) ===== */
 export async function approveUser(_: FormState, fd: FormData): Promise<FormState> {
@@ -45,6 +47,93 @@ export async function rejectUser(_: FormState, fd: FormData): Promise<FormState>
     await user.save();
     await Device.updateMany({ userId: user._id, status: "PENDING" }, { $set: { status: "REJECTED" } });
     await audit(adminActor(admin), "user.reject", { type: "User", id: String(user._id) }, null, { reason });
+    revalidatePath("/admin", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/* ===== Hình thức lương: part-time (lương giờ) / full-time (lương cứng tháng) ===== */
+const MONTH_RE = /^\d{4}-\d{2}$/;
+type UserInstance = InstanceType<typeof User>;
+
+/**
+ * Đổi hình thức lương từ tháng `month`: thêm mốc SalaryHistory nếu khác mức đang áp dụng tháng đó,
+ * rồi cập nhật payType / monthlySalary hiện tại của user (= mức áp dụng tháng này). KHÔNG save user.
+ */
+async function applyPayTerms(user: UserInstance, payType: PayType, monthlySalary: number, month: string, by: string, paidLeaveDays = 0) {
+  if (!MONTH_RE.test(month)) throw new Error("Tháng hiệu lực không hợp lệ");
+  const salary = payType === "FULLTIME" ? Math.round(monthlySalary) : 0;
+  if (payType === "FULLTIME" && !(salary > 0)) throw new Error("Nhập lương cứng / tháng");
+  if (salary > 1_000_000_000) throw new Error("Lương cứng quá lớn");
+  // ngày nghỉ có lương: bước 0,5 ngày, < 28 (để số ngày công chuẩn luôn > 0)
+  const leave = payType === "FULLTIME" ? Math.round(paidLeaveDays * 2) / 2 : 0;
+  if (!(leave >= 0 && leave < 28)) throw new Error("Số ngày nghỉ có lương không hợp lệ (0 – 27)");
+  const cur = payTermsAt(await SalaryHistory.find({ userId: user._id }).lean(), month);
+  const changed = cur.payType !== payType || cur.monthlySalary !== salary || cur.paidLeaveDays !== leave;
+  if (changed) await SalaryHistory.create({ userId: user._id, payType, monthlySalary: salary, paidLeaveDays: leave, effectiveMonth: month, createdBy: by });
+  const now = payTermsAt(await SalaryHistory.find({ userId: user._id }).lean(), localMonth(new Date()));
+  user.payType = now.payType;
+  user.monthlySalary = now.monthlySalary;
+  user.paidLeaveDays = now.paidLeaveDays;
+  return changed;
+}
+
+/** Card "Hình thức lương" ở Chi tiết nhân viên. */
+export async function setPayTerms(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    await connectDB();
+    const user = await User.findById(str(fd.get("userId")));
+    if (!user) return { error: "Không tìm thấy nhân viên" };
+    const payType = str(fd.get("payType"));
+    if (!isPayType(payType)) return { error: "Chọn hình thức lương" };
+    const month = str(fd.get("effectiveMonth")) || localMonth(new Date());
+    const before = { payType: user.payType, monthlySalary: user.monthlySalary, paidLeaveDays: user.paidLeaveDays };
+    const changed = await applyPayTerms(user, payType, num(fd.get("monthlySalary")), month, adminActor(admin).name, dec(fd.get("paidLeaveDays")));
+    if (!changed) return { error: "Hình thức lương tháng này không đổi" };
+    await user.save();
+    await audit(adminActor(admin), "user.payTerms", { type: "User", id: String(user._id) }, before, { payType, monthlySalary: num(fd.get("monthlySalary")), paidLeaveDays: user.paidLeaveDays, effectiveMonth: month });
+    revalidatePath("/admin/employees", "layout");
+    revalidatePath("/admin/payroll");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/**
+ * Admin Tổng: tạo hồ sơ nhân viên cho 1 admin (cùng Gmail) để admin có dòng trong bảng lương.
+ * Gmail đã có hồ sơ nhân viên → dùng lại hồ sơ đó (đánh dấu admin, kích hoạt, đặt lương).
+ */
+export async function createAdminStaff(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const owner = await assertOwner();
+    await connectDB();
+    const email = str(fd.get("email")).toLowerCase();
+    const acc = await AdminAccount.findOne({ email }).lean();
+    if (!acc && !isOwnerEmail(email)) return { error: "Chọn admin" };
+    const storeId = str(fd.get("storeId"));
+    if (!(await Store.exists({ _id: storeId }))) return { error: "Chọn cơ sở" };
+    const payType = str(fd.get("payType"));
+    if (!isPayType(payType)) return { error: "Chọn hình thức lương" };
+    const wage = Math.round(num(fd.get("hourlyWage")));
+    if (payType === "HOURLY" && !(wage > 0)) return { error: "Nhập lương giờ" };
+    const name = (str(fd.get("name")) || acc?.name || "").replace(/\s+/g, " ").slice(0, 80);
+    if (name.length < 2) return { error: "Nhập họ tên" };
+    const by = adminActor(owner).name;
+    let user = await User.findOne({ email });
+    if (user?.adminStaff) return { error: "Admin này đã có hồ sơ nhân viên – sửa lương ở danh sách / Chi tiết" };
+    if (!user) user = new User({ email, joinedAt: new Date() });
+    user.set({ name, storeId, status: "ACTIVE", adminStaff: true, joinedAt: user.joinedAt ?? new Date() });
+    if (payType === "HOURLY" && wage !== user.hourlyWage) {
+      user.hourlyWage = wage;
+      await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: "2000-01-01", createdBy: by });
+    }
+    await applyPayTerms(user, payType, num(fd.get("monthlySalary")), str(fd.get("effectiveMonth")) || localMonth(new Date()), by, dec(fd.get("paidLeaveDays")));
+    await user.save();
+    await audit(adminActor(owner), "user.createAdminStaff", { type: "User", id: String(user._id) }, null, { email, name, storeId, payType, hourlyWage: wage, monthlySalary: user.monthlySalary });
     revalidatePath("/admin", "layout");
     return { ok: true };
   } catch (e) {
@@ -181,14 +270,19 @@ export async function setStaffPerms(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /* ===== Nhân viên không có tài khoản đăng nhập (VD đã nghỉ việc – để import chấm công / tính lương tháng cũ) ===== */
-async function makeOfflineStaff(admin: Awaited<ReturnType<typeof assertAdmin>>, input: { name: string; storeId: string; hourlyWage: number; active: boolean; phone?: string }) {
+async function makeOfflineStaff(
+  admin: Awaited<ReturnType<typeof assertAdmin>>,
+  input: { name: string; storeId: string; hourlyWage: number; active: boolean; phone?: string; payType?: PayType; monthlySalary?: number; paidLeaveDays?: number },
+) {
   const { randomUUID } = await import("node:crypto");
   const name = input.name.replace(/\s+/g, " ").trim().slice(0, 80);
   if (name.length < 2) throw new Error("Nhập họ tên");
   if (!(await Store.exists({ _id: input.storeId }))) throw new Error("Chọn cơ sở");
   if (!(input.hourlyWage >= 0)) throw new Error("Lương giờ không hợp lệ");
+  const payType = input.payType ?? "HOURLY";
+  if (payType === "FULLTIME" && !((input.monthlySalary ?? 0) > 0)) throw new Error("Nhập lương cứng / tháng");
   await connectDB();
-  const user = await User.create({
+  const user = new User({
     // email giả (không đăng nhập được bằng Google) – sau này có Gmail thì dùng "Chuyển sang tài khoản Gmail mới"
     email: `nv-${randomUUID()}@khong-dang-nhap.local`,
     name,
@@ -199,8 +293,11 @@ async function makeOfflineStaff(admin: Awaited<ReturnType<typeof assertAdmin>>, 
     noLogin: true,
     joinedAt: new Date(),
   });
+  // full-time tạo mới: lương cứng áp dụng cho mọi tháng (kể cả tháng cũ cần import chấm công)
+  if (payType === "FULLTIME") await applyPayTerms(user, "FULLTIME", input.monthlySalary ?? 0, "2000-01", adminActor(admin).name, input.paidLeaveDays ?? 0);
+  await user.save();
   if (input.hourlyWage > 0) await WageHistory.create({ userId: user._id, hourlyWage: Math.round(input.hourlyWage), effectiveFrom: "2000-01-01", createdBy: adminActor(admin).name });
-  await audit(adminActor(admin), "user.createOffline", { type: "User", id: String(user._id) }, null, { name, storeId: input.storeId, hourlyWage: input.hourlyWage, status: user.status });
+  await audit(adminActor(admin), "user.createOffline", { type: "User", id: String(user._id) }, null, { name, storeId: input.storeId, hourlyWage: input.hourlyWage, payType, monthlySalary: user.monthlySalary, status: user.status });
   revalidatePath("/admin", "layout");
   return user;
 }
@@ -215,6 +312,9 @@ export async function createOfflineStaff(_: FormState, fd: FormData): Promise<Fo
       hourlyWage: num(fd.get("hourlyWage")),
       active: str(fd.get("status")) === "ACTIVE",
       phone: str(fd.get("phone")),
+      payType: str(fd.get("payType")) === "FULLTIME" ? "FULLTIME" : "HOURLY",
+      monthlySalary: num(fd.get("monthlySalary")),
+      paidLeaveDays: dec(fd.get("paidLeaveDays")),
     });
     return { ok: true };
   } catch (e) {
@@ -245,20 +345,23 @@ export async function quickEditEmployee(_: FormState, fd: FormData): Promise<For
     if (!user) return { error: "Không tìm thấy nhân viên" };
     const name = str(fd.get("name")).replace(/\s+/g, " ").slice(0, 80);
     if (name.length < 2) return { error: "Họ tên quá ngắn" };
+    const payType: PayType = str(fd.get("payType")) === "FULLTIME" ? "FULLTIME" : "HOURLY";
     const wage = Math.round(num(fd.get("hourlyWage")));
-    if (!(wage > 0)) return { error: "Lương giờ phải > 0" };
+    if (payType === "HOURLY" && !(wage > 0)) return { error: "Lương giờ phải > 0" };
     const from = str(fd.get("effectiveFrom")) || localDate(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Ngày hiệu lực không hợp lệ" };
-    const before = { name: user.name, hourlyWage: user.hourlyWage };
+    const before = { name: user.name, hourlyWage: user.hourlyWage, payType: user.payType, monthlySalary: user.monthlySalary };
     user.name = name;
-    if (wage !== user.hourlyWage) {
+    // hình thức lương đổi theo tháng (tháng của ngày hiệu lực)
+    await applyPayTerms(user, payType, num(fd.get("monthlySalary")), from.slice(0, 7), adminActor(admin).name, dec(fd.get("paidLeaveDays")));
+    if (payType === "HOURLY" && wage !== user.hourlyWage) {
       await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: from, createdBy: adminActor(admin).name });
       // lương hiện tại = mức có hiệu lực tới hôm nay (ngày hiệu lực ở tương lai → giữ lương cũ tới ngày đó)
       const latest = await WageHistory.findOne({ userId: user._id, effectiveFrom: { $lte: localDate(new Date()) } }).sort({ effectiveFrom: -1, createdAt: -1 }).lean();
       user.hourlyWage = latest?.hourlyWage ?? wage;
     }
     await user.save();
-    await audit(adminActor(admin), "user.update", { type: "User", id: String(user._id) }, before, { name, hourlyWage: wage, effectiveFrom: from });
+    await audit(adminActor(admin), "user.update", { type: "User", id: String(user._id) }, before, { name, hourlyWage: wage, payType, monthlySalary: user.monthlySalary, effectiveFrom: from });
     revalidatePath("/admin/employees", "layout");
     revalidatePath("/admin/payroll");
     return { ok: true };

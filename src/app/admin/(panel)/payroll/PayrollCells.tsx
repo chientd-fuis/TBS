@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Check, Copy, Loader2, Plus, Trash2, X } from "lucide-react";
 import Modal from "@/components/Modal";
 import { evalCalc } from "@/lib/calc-expr";
+import { suggestUnpaidDays, unpaidLeaveAmount } from "@/lib/salary";
 import { addPayrollExtras, removePayrollExtra } from "../../actions/ops";
 
 const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} ₫`;
@@ -11,13 +12,32 @@ const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} ₫`;
 /** 1 khoản phụ cấp / tạm ứng đã lưu; index = vị trí trong extrasNotes, -1 = phần nhập tay không ghi chú */
 export type ExtraEntry = { index: number; amount: number; note: string; meta?: string };
 type Row = { text: string; note: string };
+/** Full-time: dữ liệu tính tiền nghỉ không lương ở popup Tạm ứng */
+export type LeaveInfo = { monthlySalary: number; paidLeaveDays: number; daysInMonth: number; workDays: number };
+const days = (n: number) => String(n).replace(".", ",");
 
 /**
  * Ô Phụ cấp / Tạm ứng (giống ô Thưởng / Phạt): 0 đ → nút "+"; có tiền → bấm số tiền xem chi tiết.
  * Popup: danh sách từng khoản (xoá được) + các dòng nhập "số tiền + nội dung" (Thêm dòng) → Lưu → đóng popup.
  * Số tiền gõ được "155k", "1tr2", "31 × 5k".
  */
-export function ExtrasCell({ itemId, field, total, entries, name, locked }: { itemId: string; field: "allowance" | "advance"; total: number; entries: ExtraEntry[]; name: string; locked: boolean }) {
+export function ExtrasCell({
+  itemId,
+  field,
+  total,
+  entries,
+  name,
+  locked,
+  leave,
+}: {
+  itemId: string;
+  field: "allowance" | "advance";
+  total: number;
+  entries: ExtraEntry[];
+  name: string;
+  locked: boolean;
+  leave?: LeaveInfo;
+}) {
   const plus = field === "allowance";
   const label = plus ? "Phụ cấp" : "Tạm ứng";
   const tone = plus ? "text-secondary-dark" : "text-danger";
@@ -25,6 +45,7 @@ export function ExtrasCell({ itemId, field, total, entries, name, locked }: { it
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  const [unpaid, setUnpaid] = useState("");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -33,7 +54,8 @@ export function ExtrasCell({ itemId, field, total, entries, name, locked }: { it
   }, [open]);
 
   const show = () => {
-    setRows(total || locked ? [] : [{ text: "", note: "" }]);
+    setRows(total || locked || leave ? [] : [{ text: "", note: "" }]);
+    setUnpaid(leave ? days(suggestUnpaidDays(leave.daysInMonth, leave.workDays, leave.paidLeaveDays)) : "");
     setError("");
     setOpen(true);
   };
@@ -45,6 +67,14 @@ export function ExtrasCell({ itemId, field, total, entries, name, locked }: { it
       if (r?.error) setError(r.error);
       else setOpen(false);
     });
+  // nghỉ không lương = lương / (số ngày trong tháng − ngày nghỉ có lương) × số ngày nghỉ không lương
+  const unpaidDays = Number(unpaid.replace(",", "."));
+  const leaveAmount = leave ? unpaidLeaveAmount(leave.monthlySalary, leave.daysInMonth, leave.paidLeaveDays, unpaidDays) : null;
+  const addLeaveRow = () => {
+    if (!leave || leaveAmount == null) return;
+    const note = `Nghỉ không lương ${days(unpaidDays)} ngày = ${vnd(leave.monthlySalary)} / (${leave.daysInMonth} − ${days(leave.paidLeaveDays)}) × ${days(unpaidDays)}`;
+    setRows([...rows.filter((r) => r.text.trim()), { text: String(leaveAmount), note }]);
+  };
   const remove = (e: ExtraEntry) => {
     if (!confirm(`Xoá khoản ${label.toLowerCase()} ${vnd(e.amount)}${e.note ? ` – ${e.note}` : ""}?`)) return;
     start(async () => {
@@ -108,6 +138,48 @@ export function ExtrasCell({ itemId, field, total, entries, name, locked }: { it
                 </ul>
               )}
               {locked && <p className="text-xs text-ink/60">🔒 Đã trả lương – mở khoá dòng lương để sửa.</p>}
+
+              {!locked && leave && (
+                <div className="mb-3 rounded-xl border border-[#e9d9a8] bg-cream/60 p-2.5">
+                  <p className="mb-1.5 font-semibold text-accent">Nghỉ không lương (Full-time)</p>
+                  <dl className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-xs">
+                    <dt className="text-ink/70">Lương cứng</dt><dd className="text-right">{vnd(leave.monthlySalary)}</dd>
+                    <dt className="text-ink/70">Số ngày trong tháng</dt><dd className="text-right">{leave.daysInMonth}</dd>
+                    <dt className="text-ink/70">Ngày nghỉ có lương</dt><dd className="text-right font-semibold">{days(leave.paidLeaveDays)}</dd>
+                    <dt className="text-ink/70">Ngày có chấm công</dt><dd className="text-right">{leave.workDays}</dd>
+                  </dl>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <label className="block">
+                      <span className="block text-[11px] text-ink/70">Ngày nghỉ không lương</span>
+                      <input
+                        value={unpaid}
+                        onChange={(e) => setUnpaid(e.target.value)}
+                        inputMode="decimal"
+                        aria-label="Số ngày nghỉ không lương"
+                        className="block w-24 rounded-xl border border-[#e9d9a8] bg-white px-2.5 py-1.5 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                      />
+                    </label>
+                    <span className="flex-1 pb-1.5 text-right text-xs">
+                      {leaveAmount != null ? (
+                        <>
+                          {vnd(leave.monthlySalary)} / ({leave.daysInMonth} − {days(leave.paidLeaveDays)}) × {days(unpaidDays)} = <b className="text-danger">{vnd(leaveAmount)}</b>
+                        </>
+                      ) : (
+                        <span className="text-ink/50">{leave.daysInMonth - leave.paidLeaveDays > 0 ? "Nhập số ngày > 0" : "Ngày nghỉ có lương ≥ số ngày trong tháng"}</span>
+                      )}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-ink/50">Gợi ý = số ngày trong tháng − ngày có chấm công − ngày nghỉ có lương; sửa lại nếu cần.</p>
+                  <button
+                    type="button"
+                    disabled={leaveAmount == null}
+                    onClick={addLeaveRow}
+                    className="mt-2 flex items-center gap-1 rounded-xl bg-white px-2.5 py-1.5 text-xs font-semibold text-danger ring-1 ring-[#f3c4c4] disabled:opacity-50"
+                  >
+                    <Plus size={14} /> Thêm vào tạm ứng
+                  </button>
+                </div>
+              )}
 
               {!locked && (
                 <div className="space-y-2">
