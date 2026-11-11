@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdmin, type AdminSession } from "./admin-session";
-import { getSessionEmail, isOwnerEmail } from "./auth";
+import { getSessionEmail, isOwnerEmail, userAppBlocked } from "./auth";
 import { connectDB } from "./db";
 import { User } from "./models";
 import { ensureSeed } from "./settings";
@@ -47,12 +47,13 @@ export async function assertAdmin(): Promise<AdminSession> {
   return a;
 }
 
-/** Nhân viên đang đăng nhập (Google). */
+/** Nhân viên đang đăng nhập (Google). Gmail admin chưa được phép vào app nhân viên (Cài đặt) → null. */
 export async function getCurrentUser() {
   const email = await getSessionEmail();
   if (!email) return null;
   await ensureSeed();
   await connectDB();
+  if (await userAppBlocked(email)) return null;
   return User.findOne({ email }).lean();
 }
 
@@ -60,10 +61,11 @@ export async function getCurrentUser() {
 export async function requireActiveUser() {
   const email = await getSessionEmail();
   if (!email) redirect("/login");
-  if (isOwnerEmail(email)) redirect("/admin");
+  // Gmail admin chưa được phép vào app nhân viên → về trang quản lý (kể cả khi có hồ sơ nhân viên Full-time / part-time)
+  if (await userAppBlocked(email)) redirect(isOwnerEmail(email) ? "/admin" : "/admin/login");
   const u = await getCurrentUser();
   if (!u) {
-    // Gmail của admin (không phải nhân viên) → về trang quản lý thay vì vòng lặp /login ↔ /
+    // Gmail admin bị khoá / chờ duyệt (không phải nhân viên) → về trang quản lý thay vì vòng lặp /login ↔ /
     const { AdminAccount } = await import("./models");
     if (await AdminAccount.exists({ email })) redirect("/admin/login");
     redirect("/login");

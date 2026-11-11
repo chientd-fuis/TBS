@@ -105,6 +105,23 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
   }
 }
 
+/** Admin Tổng: cho admin / chính Admin Tổng (có hồ sơ nhân viên) vào app nhân viên. */
+export async function saveUserAppAccess(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
+    await connectDB();
+    const adminUserApp = fd.get("adminUserApp") === "on";
+    const ownerUserApp = fd.get("ownerUserApp") === "on";
+    await Settings.updateOne({ key: "main" }, { $set: { adminUserApp, ownerUserApp } }, { upsert: true });
+    await audit(adminActor(admin), "settings.userAppAccess", { type: "Settings" }, null, { adminUserApp, ownerUserApp });
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
 /** Bật / tắt tự dọn hằng tháng. */
 export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error?: string }> {
   try {

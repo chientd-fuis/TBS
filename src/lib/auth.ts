@@ -2,11 +2,33 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { getServerSession } from "next-auth";
 import { connectDB } from "./db";
-import { AdminAccount, AdminLoginLog, User } from "./models";
+import { AdminAccount, AdminLoginLog, Settings, User } from "./models";
 
 export function isOwnerEmail(email?: string | null) {
   const owner = (process.env.OWNER_EMAIL || "").toLowerCase().trim();
   return !!email && !!owner && email.toLowerCase() === owner;
+}
+
+/** Gmail là admin (Admin Tổng / admin đang hoạt động) → đăng nhập xong luôn vào trang quản lý. */
+export async function isAdminEmail(email?: string | null) {
+  if (!email) return false;
+  if (isOwnerEmail(email)) return true;
+  await connectDB();
+  return !!(await AdminAccount.exists({ email: email.toLowerCase(), status: "ACTIVE" }));
+}
+
+/**
+ * Gmail admin có bị chặn khỏi app nhân viên không (kể cả khi có hồ sơ nhân viên adminStaff để có dòng bảng lương).
+ * Admin Tổng bật ở Cài đặt: "Admin được vào app nhân viên" (adminUserApp) / "Admin Tổng được vào…" (ownerUserApp).
+ * Nhân viên cần quản lý dùng role quản lý ở app User.
+ */
+export async function userAppBlocked(email?: string | null) {
+  if (!email) return false;
+  const owner = isOwnerEmail(email);
+  if (!owner && !(await isAdminEmail(email))) return false;
+  await connectDB();
+  const s = await Settings.findOne({ key: "main" }).select("adminUserApp ownerUserApp").lean();
+  return owner ? s?.ownerUserApp !== true : s?.adminUserApp !== true;
 }
 
 export const authOptions: NextAuthOptions = {

@@ -30,7 +30,14 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
   const store = stores.find((s) => String(s._id) === sp.store) ?? stores[0];
   if (!store) return <p>Chưa có cơ sở</p>;
   const tz = store.timezone || "Asia/Ho_Chi_Minh";
-  const month = /^\d{4}-\d{2}$/.test(sp.month || "") ? sp.month! : prevMonth(localMonth(new Date(), tz));
+  // Mặc định: tháng trước (tháng cần trả); tháng trước đã trả hết → mở thẳng tháng hiện tại
+  let month = sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : "";
+  if (!month) {
+    const cur = localMonth(new Date(), tz);
+    const prev = prevMonth(cur);
+    const prevPaid = await Payroll.exists({ storeId: store._id, month: prev, status: "PAID" });
+    month = prevPaid ? cur : prev;
+  }
   // Luôn tính sẵn: mở trang là tạo / tính lại (nháp + đã công bố). Đã trả → giữ số đã chốt (generatePayroll bỏ qua)
   const existing = await Payroll.findOne({ storeId: store._id, month }).select("status").lean();
   if (existing?.status !== "PAID" && month <= localMonth(new Date(), tz)) await generatePayroll(String(store._id), month);

@@ -41,6 +41,9 @@ const SettingsSchema = new Schema(
     goodsCatalog: { type: String, default: "" },
     goodsEnabled: { type: Boolean, default: true }, // Admin Tổng bật / tắt cả chức năng Nhận hàng
     stockEnabled: { type: Boolean, default: false }, // Tồn kho (kiểm kho) – mặc định tắt
+    // App nhân viên cho Gmail admin (có hồ sơ nhân viên): mặc định chặn – đăng nhập luôn vào trang quản lý
+    adminUserApp: { type: Boolean, default: false }, // admin (AdminAccount) được vào app nhân viên
+    ownerUserApp: { type: Boolean, default: false }, // Admin Tổng được vào app nhân viên
   },
   { timestamps: true },
 );

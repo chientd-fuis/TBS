@@ -5,7 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveConfig, saveGoodsEnabled } from "../../actions/settings";
+import { disconnectDrive, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
 
@@ -76,6 +76,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               Admin đăng nhập bằng <b>Gmail</b> (không còn mật khẩu chung). Thêm / duyệt / phân quyền admin ở mục{" "}
               <Link className="text-accent underline" href="/admin/admins">Quản lý admin</Link>.
             </p>
+            <ActionForm action={saveUserAppAccess} submitLabel="Lưu" successText="Đã lưu" className="mt-3 space-y-3 border-t border-[#f1e6c8] pt-3">
+              <p className="text-xs text-ink/60">
+                Gmail admin đăng nhập luôn vào trang quản lý. Mặc định admin <b>không</b> vào được app nhân viên (kể cả có hồ sơ nhân viên Full-time / part-time để có dòng bảng lương) – nhân viên cần quản lý dùng role quản lý ở app nhân viên.
+              </p>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="adminUserApp" defaultChecked={s.adminUserApp === true} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Cho phép admin vào app nhân viên</b>
+                  <span className="block text-xs text-ink/60">Admin có hồ sơ nhân viên sẽ thấy nút “App nhân viên” trên trang quản lý để chấm công, xem lương…</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="ownerUserApp" defaultChecked={s.ownerUserApp === true} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Cho phép chính Admin Tổng vào app nhân viên</b>
+                  <span className="block text-xs text-ink/60">Cần có hồ sơ nhân viên cho Gmail Admin Tổng (tạo ở Nhân viên → hồ sơ cho admin).</span>
+                </span>
+              </label>
+            </ActionForm>
           </Card>
         )}
 

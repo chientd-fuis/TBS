@@ -14,6 +14,7 @@ import { aiAllowed, aiRemaining } from "@/lib/ai";
 import { can } from "@/lib/permissions";
 import { geminiConfigured } from "@/lib/ocr";
 import { goodsEnabled } from "@/lib/goods-server";
+import { userAppBlocked } from "@/lib/auth";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -37,6 +38,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     hide: (await goodsEnabled()) ? [] : ["/admin/goods"],
     counts: { approvals, devices, requests: adj + fb + covers, shiftRequests },
   };
+  // Admin Tổng cho phép (Cài đặt) + có hồ sơ nhân viên đang làm → nút sang app nhân viên
+  const userApp =
+    !!admin.email && !(await userAppBlocked(admin.email)) && !!(await User.exists({ email: admin.email.toLowerCase(), status: "ACTIVE" }));
+  const userAppLink = userApp && (
+    <Link href="/" className="inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-current/30 hover:bg-black/5">
+      📱 App nhân viên
+    </Link>
+  );
   const logout =
     admin.kind === "OWNER" ? (
       <SignOutButton callbackUrl="/admin/login" />
@@ -68,6 +77,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   <div className="opacity-75">{admin.kind === "OWNER" ? "👑 Admin Tổng" : `Admin: ${admin.name}`}</div>
                   <div className="truncate font-semibold">{admin.email}</div>
                 </div>
+                {userAppLink && <div className="text-white [&_a]:w-full">{userAppLink}</div>}
                 <div className="[&_button]:w-full [&_button]:justify-center [&_button]:bg-white/15 [&_button]:text-white">{logout}</div>
               </div>
             }
@@ -84,6 +94,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />
             </span>
           )}
+          {userAppLink && <span className="hidden shrink-0 text-accent lg:inline">{userAppLink}</span>}
           <span className="hidden shrink-0 lg:inline">{logout}</span>
         </header>
         <main className="space-y-4 p-4 lg:p-6">

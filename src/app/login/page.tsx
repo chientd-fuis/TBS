@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSessionEmail, isOwnerEmail } from "@/lib/auth";
+import { getSessionEmail, isAdminEmail, isOwnerEmail } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { Alert, Card } from "@/components/ui";
 import { GoogleSignIn, SignOutButton } from "@/components/user/AuthButtons";
@@ -9,7 +9,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const email = await getSessionEmail();
   const { error } = await searchParams;
   // Không tự chuyển trang khi có lỗi (VD tài khoản nghỉ việc) → tránh vòng lặp /login ⇄ /
-  if (email && !error) redirect(isOwnerEmail(email) ? "/admin" : "/");
+  if (email && !error) redirect(isOwnerEmail(email) ? "/admin" : (await isAdminEmail(email)) ? "/admin/login" : "/");
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6">
       <Logo size={160} />
