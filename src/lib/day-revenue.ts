@@ -57,9 +57,10 @@ export async function recomputeDay(storeId: Id, date: string) {
         dtMissing,
         calcVersion: DAY_CALC_VERSION,
         note,
-        ...(changed && prev?.sheet?.status === "SENT" ? { "sheet.status": "PENDING" } : {}),
+        // ngày mới → chờ ghi sheet; đã ghi (SENT) mà số đổi → ghi lại.
+        // Không dùng $setOnInsert cho cùng path: $set + $setOnInsert "sheet.status" → MongoDB báo conflict, cả lệnh fail
+        ...(!prev || (changed && prev.sheet?.status === "SENT") ? { "sheet.status": "PENDING" } : {}),
       },
-      $setOnInsert: { "sheet.status": "PENDING" },
     },
     { upsert: true, returnDocument: "after" },
   ).lean();
