@@ -4,7 +4,10 @@ import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, Store, Us
 import { resolveOvertime } from "../../actions/overtime";
 import { extraKinds, hoursShort, OVERTIME_GRACE_MIN } from "@/lib/overtime";
 import { adminDirectory, APPROVE_PERM } from "@/lib/admin-stores";
-import { attText, compareWarnings, dayAttendances, pickTarget, requestWindow } from "@/lib/adjustment";
+import { attendancesNear, attText, compareWarnings, dayAttendances, findOverlap, pickTarget, requestWindow } from "@/lib/adjustment";
+import { findShiftFor } from "@/lib/attendance";
+import { getSettings } from "@/lib/settings";
+import { roundedHours } from "@/lib/calc";
 import { localTime } from "@/lib/time";
 import { resolveCover } from "../../actions/cover";
 import { weekdayVi } from "@/lib/time";
@@ -40,6 +43,8 @@ export default async function RequestsPage() {
   const stores = new Map(storeList.map((s) => [String(s._id), s.name]));
   const tzOf = new Map(storeList.map((s) => [String(s._id), s.timezone || "Asia/Ho_Chi_Minh"]));
   const hm = (d: Date | null | undefined, storeId: unknown) => (d ? localTime(d, tzOf.get(String(storeId))).slice(0, 5) : "—");
+  const st = await getSettings();
+  const roundCfg = { stepHours: st.roundStepHours, graceMinutes: st.roundGraceMinutes, graceHourMinutes: st.roundGraceHourMinutes ?? st.roundGraceMinutes };
   // yêu cầu chấm công bù: các lượt app đã ghi trong ngày + lượt sẽ sửa (chọn sẵn theo giờ) + cảnh báo so với giờ app ghi
   const adjCtx = new Map(
     await Promise.all(
@@ -47,8 +52,20 @@ export default async function RequestsPage() {
         const tz = tzOf.get(String(r.storeId)) || "Asia/Ho_Chi_Minh";
         const list = r.workDate ? await dayAttendances(r.userId, r.workDate) : [];
         const { reqIn, reqOut } = r.workDate ? requestWindow(r.workDate, r.checkInTime, r.checkOutTime, tz) : { reqIn: null, reqOut: null };
-        const target = pickTarget(list, reqIn, reqOut);
-        return [String(r._id), { tz, list, targetId: target ? String(target._id) : null, warnings: compareWarnings(target, reqIn, reqOut) }] as const;
+        // sửa giờ: đúng lượt đã chọn (null = lượt đã bị xoá) · chấm bù: thêm mới · kiểu cũ: đoán theo giờ
+        const target =
+          r.kind === "EDIT" ? (list.find((a) => String(a._id) === String(r.attendanceId)) ?? null) : r.kind === "MISSING" ? null : pickTarget(list, reqIn, reqOut);
+        const warnings = r.kind === "MISSING" ? [] : r.kind === "EDIT" && !target ? [] : compareWarnings(target, reqIn, reqOut);
+        // sửa giờ: lượt đã bị đổi sau khi nhân viên gửi (admin sửa / nhân viên tự check-out lại…)
+        const changedSince =
+          r.kind === "EDIT" && target && r.before
+            ? String(target.checkInAt) !== String(r.before.checkInAt) || String(target.checkOutAt ?? "") !== String(r.before.checkOutAt ?? "")
+            : false;
+        // chấm bù: trùng lượt đã có (có thể vừa được chấm hộ) + ca được xếp khớp giờ xin
+        const clash = r.kind === "MISSING" && reqIn && reqOut ? findOverlap(await attendancesNear(r.userId, reqIn, reqOut), reqIn, reqOut) : null;
+        const shift = r.kind === "MISSING" && reqIn ? await findShiftFor(String(r.userId), reqIn, tz) : null;
+        const reqHours = reqIn && reqOut ? roundedHours(reqIn, reqOut, roundCfg) : null;
+        return [String(r._id), { tz, list, target, targetId: target ? String(target._id) : null, warnings, changedSince, clash, shift, reqHours }] as const;
       }),
     ),
   );
@@ -207,39 +224,103 @@ export default async function RequestsPage() {
           <Empty>Không có yêu cầu</Empty>
         ) : (
           <div className="space-y-3">
-            {reqs.map((r) => (
-              <div key={String(r._id)} className="rounded-xl bg-cream p-3 text-sm">
-                <p>
-                  <b>{users.get(String(r.userId))}</b> · {stores.get(String(r.storeId))} · gửi {viDateTime(r.createdAt)}
+            {reqs.map((r) => {
+              const ctx = adjCtx.get(String(r._id))!;
+              const kind = r.kind as "EDIT" | "MISSING" | undefined;
+              const t = ctx.target;
+              return (
+              <div
+                key={String(r._id)}
+                className={`space-y-1 rounded-xl p-3 text-sm ${kind === "EDIT" ? "bg-[#f5f9ff] ring-1 ring-[#c7dbfb]" : kind === "MISSING" ? "bg-[#faf5ff] ring-1 ring-[#e3d0f7]" : "bg-cream"}`}
+              >
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {kind && (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${kind === "EDIT" ? "bg-[#1e3a8a]" : "bg-[#6b21a8]"}`}>
+                      {kind === "EDIT" ? "Sửa giờ lượt đã chấm" : "Chấm bù ca (quên chấm công)"}
+                    </span>
+                  )}
+                  <span>
+                    <b>{users.get(String(r.userId))}</b> · {stores.get(String(r.storeId))} · {r.workDate && `${weekdayVi(r.workDate)} ${viDate(r.workDate)}`}
+                    {kind === "EDIT" && t?.shiftLabel ? ` · ${t.shiftLabel}` : ""}
+                  </span>
                 </p>
-                <p>
-                  NV xin ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b>
-                </p>
-                <p className="text-ink/70">Lý do: {r.reason}</p>
-                {(() => {
-                  const ctx = adjCtx.get(String(r._id));
-                  if (!ctx) return null;
-                  return (
-                    <div className="mt-1 space-y-1 rounded-lg bg-white/70 p-2 text-xs ring-1 ring-[#f1e6c8]">
-                      <p className="font-semibold text-ink/70">
-                        App đang ghi ngày này: {ctx.list.length ? `${ctx.list.length} lượt` : "không có lượt nào"}
-                      </p>
-                      {ctx.warnings.map((w) => (
-                        <p key={w} className="font-semibold text-warn">
-                          ⚠ {w}
-                        </p>
-                      ))}
+                <p className="text-xs text-ink/60">Gửi {viDateTime(r.createdAt)}</p>
+                {kind === "EDIT" ? (
+                  t ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[300px] overflow-hidden rounded-lg bg-white text-sm ring-1 ring-[#dbe6fb]">
+                        <thead>
+                          <tr className="bg-[#eaf1fe] text-left">
+                            <th className="px-2 py-1.5 font-semibold"></th>
+                            <th className="px-2 py-1.5 font-semibold">App đang ghi</th>
+                            <th className="px-2 py-1.5 font-semibold">Nhân viên xin</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t border-[#e3ebfa]">
+                            <td className="px-2 py-1.5 text-ink/70">Giờ vào</td>
+                            <td className="px-2 py-1.5">{hm(t.checkInAt, t.storeId)}</td>
+                            <td className={`px-2 py-1.5 font-bold ${hm(t.checkInAt, t.storeId) !== r.checkInTime ? "text-warn" : ""}`}>{r.checkInTime}</td>
+                          </tr>
+                          <tr className="border-t border-[#e3ebfa]">
+                            <td className="px-2 py-1.5 text-ink/70">Giờ ra</td>
+                            <td className="px-2 py-1.5">{t.checkOutAt ? hm(t.checkOutAt, t.storeId) : <Badge tone="red">Quên check-out</Badge>}</td>
+                            <td className={`px-2 py-1.5 font-bold ${(t.checkOutAt ? hm(t.checkOutAt, t.storeId) : "") !== r.checkOutTime ? "text-warn" : ""}`}>{r.checkOutTime}</td>
+                          </tr>
+                          <tr className="border-t border-[#e3ebfa]">
+                            <td className="px-2 py-1.5 text-ink/70">Giờ công</td>
+                            <td className="px-2 py-1.5">{hoursShort(t.roundedHours ?? 0)}</td>
+                            <td className="px-2 py-1.5 font-bold">{ctx.reqHours != null ? hoursShort(ctx.reqHours) : "—"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
-                  );
-                })()}
+                  ) : (
+                    <p className="font-semibold text-danger">Lượt chấm công nhân viên xin sửa đã bị xoá – hãy Từ chối yêu cầu này.</p>
+                  )
+                ) : kind === "MISSING" ? (
+                  <p>
+                    Thêm lượt mới: vào <b>{r.checkInTime}</b> → ra <b>{r.checkOutTime}</b>
+                    {ctx.reqHours != null && <b> = {hoursShort(ctx.reqHours)}</b>}
+                    {ctx.shift ? ` · ${ctx.shift.a.shiftName} ${ctx.shift.a.startTime}–${ctx.shift.a.endTime}` : ""}
+                  </p>
+                ) : (
+                  <p>
+                    NV xin ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b>
+                  </p>
+                )}
+                <p className="text-ink/70">Lý do: {r.reason}</p>
+                <div className="space-y-0.5 text-xs">
+                  {kind === "EDIT" && ctx.changedSince && r.before && (
+                    <p className="font-semibold text-danger">
+                      ⚠ Lượt này đã bị thay đổi sau khi nhân viên gửi (lúc gửi: vào {hm(r.before.checkInAt, r.storeId)} → ra {r.before.checkOutAt ? hm(r.before.checkOutAt, r.storeId) : "quên"}) – xem lại trước khi duyệt
+                    </p>
+                  )}
+                  {kind === "MISSING" &&
+                    (ctx.clash ? (
+                      <p className="font-semibold text-danger">
+                        ⚠ Trùng lượt đã có: {ctx.clash.shiftLabel ?? "Ngoài ca"} {attText(ctx.clash, ctx.tz)} – sửa giờ cho khỏi trùng hoặc Từ chối
+                      </p>
+                    ) : (
+                      <p className="font-semibold text-secondary-dark">
+                        {ctx.shift ? "Đúng ca được xếp" : "Không có ca được xếp → sau khi duyệt thành lượt ngoài ca (chờ xác nhận làm ngoài giờ)"} · không trùng lượt nào
+                        {ctx.list.length ? ` (ngày này app đã có: ${ctx.list.map((a) => `${a.shiftLabel ?? "Ngoài ca"} ${attText(a, ctx.tz)}`).join("; ")})` : ""}
+                      </p>
+                    ))}
+                  {!kind && <p className="font-semibold text-ink/70">App đang ghi ngày này: {ctx.list.length ? `${ctx.list.length} lượt` : "không có lượt nào"}</p>}
+                  {ctx.warnings.map((w) => (
+                    <p key={w} className="font-semibold text-warn">
+                      ⚠ {w}
+                    </p>
+                  ))}
+                </div>
                 <Who storeId={r.storeId} perm={APPROVE_PERM.adjustment} />
                 {canAdj && (
-                <ApproveRejectForm action={resolveAdjustment} approveLabel="Duyệt & ghi nhận">
+                <ApproveRejectForm action={resolveAdjustment} approveLabel={kind === "EDIT" ? "Duyệt – sửa lượt này" : kind === "MISSING" ? "Duyệt – thêm lượt" : "Duyệt & ghi nhận"}>
                   <input type="hidden" name="id" value={String(r._id)} />
-                  {/* chọn lượt sẽ sửa (ngày làm 2 ca có nhiều lượt) – máy chọn sẵn theo giờ, admin đổi được */}
+                  {/* yêu cầu kiểu cũ: chọn lượt sẽ sửa (ngày làm 2 ca có nhiều lượt) – máy chọn sẵn theo giờ, admin đổi được */}
                   {(() => {
-                    const ctx = adjCtx.get(String(r._id));
-                    if (!ctx) return null;
+                    if (kind) return null;
                     return (
                       <fieldset className="space-y-1 rounded-lg bg-cream p-2 text-xs ring-1 ring-[#f1e6c8]">
                         <legend className="px-1 font-semibold text-accent">Duyệt sẽ sửa lượt:</legend>
@@ -263,14 +344,16 @@ export default async function RequestsPage() {
                       </fieldset>
                     );
                   })()}
-                  <div className="flex gap-2">
-                    <TimeInput name="inTime" defaultValue={r.checkInTime} className="flex-1" title="Giờ vào" />
-                    <TimeInput name="outTime" defaultValue={r.checkOutTime} className="flex-1" title="Giờ ra" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {kind && <span className="text-xs font-semibold text-ink/70">Admin chốt (sửa được):</span>}
+                    <TimeInput name="inTime" defaultValue={r.checkInTime} className="flex-1" title="Giờ vào" required={!!kind} />
+                    <TimeInput name="outTime" defaultValue={r.checkOutTime} className="flex-1" title="Giờ ra" required={!!kind} />
                   </div>
                 </ApproveRejectForm>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {done.length > 0 && (
@@ -279,7 +362,12 @@ export default async function RequestsPage() {
             <ul className="mt-2 space-y-1">
               {done.map((r) => (
                 <li key={String(r._id)}>
-                  <Badge tone={r.status === "APPROVED" ? "green" : "red"}>{r.status === "APPROVED" ? "Duyệt" : "Từ chối"}</Badge> {users.get(String(r.userId))} · {r.workDate && viDate(r.workDate)} · {r.adminName} {r.adminReply && `– ${r.adminReply}`}
+                  <Badge tone={r.status === "APPROVED" ? "green" : r.status === "CANCELLED" ? "gray" : "red"}>
+                    {r.status === "APPROVED" ? "Duyệt" : r.status === "CANCELLED" ? "NV huỷ" : "Từ chối"}
+                  </Badge>{" "}
+                  {r.kind === "EDIT" ? "Sửa giờ · " : r.kind === "MISSING" ? "Chấm bù · " : ""}
+                  {users.get(String(r.userId))} · {r.workDate && viDate(r.workDate)} · {r.checkInTime || "--"} → {r.checkOutTime || "--"}
+                  {r.status !== "CANCELLED" && ` · ${r.adminName ?? ""}`} {r.adminReply && `– ${r.adminReply}`}
                 </li>
               ))}
             </ul>

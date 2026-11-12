@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSafeAction } from "@/components/useSafeAction";
 import { Pencil, X } from "lucide-react";
 import { Alert, Button, Field, Input, Textarea } from "@/components/ui";
 import { editAttendance } from "../../actions/ops";
@@ -26,14 +27,11 @@ export default function QuickEdit({
   extraHours?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(editAttendance, null);
-  const formRef = useRef<HTMLFormElement>(null);
+  // lỗi → giữ nguyên giờ đã nhập; thành công → đóng + reset
+  const { state, pending, formRef, onSubmit } = useSafeAction(editAttendance, null);
 
   useEffect(() => {
-    if (state?.ok) {
-      setOpen(false);
-      formRef.current?.reset();
-    }
+    if (state?.ok) setOpen(false);
   }, [state]);
 
   return (
@@ -53,7 +51,7 @@ export default function QuickEdit({
             <span className="text-sm font-bold text-accent">Sửa giờ chấm công</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="Đóng"><X size={16} /></button>
           </div>
-          <form ref={formRef} action={action} className="space-y-2">
+          <form ref={formRef} onSubmit={onSubmit} className="space-y-2">
             <input type="hidden" name="id" value={id} />
             <Field label="Ngày"><Input type="date" name="date" defaultValue={date} /></Field>
             <div className="grid grid-cols-2 gap-2">

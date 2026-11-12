@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSafeAction } from "@/components/useSafeAction";
 import { Pencil, X } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { PAY_TYPES, type PayType } from "@/lib/salary";
@@ -26,7 +27,7 @@ export default function EditEmployeeButton({
   today: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(quickEditEmployee, null);
+  const { state, pending, formRef, onSubmit } = useSafeAction(quickEditEmployee, null);
   const [type, setType] = useState<PayType>(payType);
   const [wage, setWage] = useState(String(hourlyWage || ""));
   const [salary, setSalary] = useState(String(monthlySalary || ""));
@@ -62,7 +63,7 @@ export default function EditEmployeeButton({
                 <X size={16} />
               </button>
             </div>
-            <form action={action} className="space-y-3">
+            <form ref={formRef} onSubmit={onSubmit} className="space-y-3">
               <input type="hidden" name="userId" value={id} />
               <Field label="Họ tên">
                 <Input name="name" defaultValue={name} required autoFocus />

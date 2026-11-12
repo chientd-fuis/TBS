@@ -25,7 +25,7 @@ import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf
 import { addDays, localDate, localMonth, zonedToDate } from "@/lib/time";
 import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
-import { dayAttendances, pickTarget, requestWindow } from "@/lib/adjustment";
+import { attendancesNear, attText, dayAttendances, findOverlap, pickTarget, requestWindow } from "@/lib/adjustment";
 import { flagOvertime } from "@/lib/overtime";
 import { after } from "next/server";
 import { errMsg, num, str, type FormState } from "./types";
@@ -617,30 +617,50 @@ export async function resolveAdjustment(_: FormState, fd: FormData): Promise<For
       if (op === "approve") {
         const inTime = str(fd.get("inTime")) || req.checkInTime || "";
         const outTime = str(fd.get("outTime")) || req.checkOutTime || "";
-        const date = req.workDate || "";
+        let date = req.workDate || "";
         const tz = await storeTz(req.storeId);
-        // ngày có thể có nhiều lượt (2 ca cách nhau) → sửa ĐÚNG lượt: admin chọn ở form, hoặc tự chọn theo giờ (lib/adjustment.ts)
-        const list = date ? await dayAttendances(req.userId, date) : [];
-        const pick = str(fd.get("targetId"));
         let targetId: string | undefined;
-        if (pick === "new") targetId = undefined;
-        else if (pick && pick !== "auto") {
-          if (!list.some((a) => String(a._id) === pick)) throw new Error("Lượt chấm công đã chọn không còn – tải lại trang"); // chỉ lượt của chính người gửi, đúng ngày
-          targetId = pick;
-        } else {
+        if (req.kind === "EDIT") {
+          // Sửa giờ: ĐÚNG lượt nhân viên đã chọn khi gửi
+          const att = await Attendance.findOne({ _id: req.attendanceId, userId: req.userId }).select("workDate").lean();
+          if (!att) throw new Error("Lượt chấm công nhân viên xin sửa không còn (đã bị xoá) – hãy Từ chối yêu cầu này");
+          if (!inTime || !outTime) throw new Error("Nhập đủ giờ vào và giờ ra");
+          targetId = String(att._id);
+          date = att.workDate;
+        } else if (req.kind === "MISSING") {
+          // Chấm bù cả ca: luôn THÊM lượt mới – không được chồng lên lượt đã có (có thể vừa được chấm hộ / tự chấm sau khi gửi)
+          if (!inTime || !outTime) throw new Error("Nhập đủ giờ vào và giờ ra");
           const { reqIn, reqOut } = requestWindow(date, inTime, outTime, tz);
-          targetId = pickTarget(list, reqIn, reqOut)?._id.toString();
+          const clash = reqIn && reqOut ? findOverlap(await attendancesNear(req.userId, reqIn, reqOut), reqIn, reqOut) : null;
+          if (clash) throw new Error(`Trùng lượt đã có: ${clash.shiftLabel ? `${clash.shiftLabel} ` : ""}${attText(clash, tz)} – sửa giờ cho khỏi trùng hoặc Từ chối`);
+        } else {
+          // yêu cầu kiểu cũ: ngày có thể có nhiều lượt → admin chọn ở form, hoặc tự chọn theo giờ (lib/adjustment.ts)
+          const list = date ? await dayAttendances(req.userId, date) : [];
+          const pick = str(fd.get("targetId"));
+          if (pick === "new") targetId = undefined;
+          else if (pick && pick !== "auto") {
+            if (!list.some((a) => String(a._id) === pick)) throw new Error("Lượt chấm công đã chọn không còn – tải lại trang"); // chỉ lượt của chính người gửi, đúng ngày
+            targetId = pick;
+          } else {
+            const { reqIn, reqOut } = requestWindow(date, inTime, outTime, tz);
+            targetId = pickTarget(list, reqIn, reqOut)?._id.toString();
+          }
         }
-        const saved = await upsertAttendance(admin, {
+        let saved = await upsertAttendance(admin, {
           id: targetId,
           userId: String(req.userId),
           date,
           inTime,
           outTime,
-          reason: `Yêu cầu NV: ${req.reason}`,
+          reason: `${req.kind === "EDIT" ? "Yêu cầu sửa giờ" : req.kind === "MISSING" ? "Yêu cầu chấm bù" : "Yêu cầu NV"}: ${req.reason}`,
           source: "REQUEST",
         });
-        // giờ ra quá giờ hết ca > 30 phút → gắn làm thêm chờ xác nhận (giống tự bấm check-out)
+        // sửa giờ: bỏ kết quả làm ngoài giờ / chốt công ca tối của giờ cũ → xét lại theo giờ mới
+        if (req.kind === "EDIT" && saved && (saved.overtime || saved.actualCheckOutAt)) {
+          await Attendance.updateOne({ _id: saved._id }, { $unset: { overtime: 1, actualCheckOutAt: 1 } });
+          saved = await Attendance.findById(saved._id);
+        }
+        // làm ngoài giờ (ra muộn > 30 phút / vào sớm / ngoài ca) → gắn chờ xác nhận (giống tự bấm check-out)
         if (outTime && saved?.status === "COMPLETED" && !saved.overtime?.status) {
           const [u, st] = await Promise.all([User.findById(req.userId).select("name email").lean(), Store.findById(saved.storeId).select("name").lean()]);
           const ot = await flagOvertime(saved._id, await storeTz(saved.storeId), { employeeName: u?.name || u?.email || "?", storeId: saved.storeId, storeName: st?.name || "" });

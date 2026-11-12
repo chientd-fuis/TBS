@@ -1,6 +1,7 @@
 "use client";
 import { SHEET_LAYOUTS } from "@/lib/revenue";
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeAction } from "@/components/useSafeAction";
 import { Crosshair, MapPinned, Wifi } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { currentPublicIp, saveStore } from "../../actions/ops";
@@ -8,7 +9,8 @@ import { currentPublicIp, saveStore } from "../../actions/ops";
 type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramGoodsChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
 
 export default function StoreForm({ store }: { store: S | null }) {
-  const [state, action, pending] = useActionState(saveStore, null);
+  // lỗi → giữ nguyên dữ liệu đã nhập; lưu xong không xoá form (đang sửa cơ sở)
+  const { state, pending, formRef, onSubmit } = useSafeAction(saveStore, null, { resetOnOk: false });
   const [lat, setLat] = useState(store?.lat?.toString() ?? "");
   const [lng, setLng] = useState(store?.lng?.toString() ?? "");
   const [locErr, setLocErr] = useState("");
@@ -47,7 +49,7 @@ export default function StoreForm({ store }: { store: S | null }) {
     }
   };
   return (
-    <form action={action} className="space-y-3">
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-3">
       <input type="hidden" name="id" value={store?.id ?? ""} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Mã cơ sở"><Input name="code" defaultValue={store?.code ?? "TBS-"} required /></Field>

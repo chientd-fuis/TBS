@@ -381,12 +381,20 @@ const AdjustmentRequestSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    // MISSING = quên chấm công (chấm bù cả ca, thêm lượt mới) · EDIT = sửa giờ 1 lượt đã chấm (attendanceId)
+    // trống = yêu cầu cũ (trước khi tách 2 loại) – admin tự chọn lượt khi duyệt
+    kind: { type: String, enum: ["MISSING", "EDIT"] },
     attendanceId: { type: Schema.Types.ObjectId, ref: "Attendance" },
+    // EDIT: giờ app đang ghi lúc nhân viên gửi (so sánh / phát hiện lượt đã bị sửa trước khi duyệt)
+    before: {
+      type: new Schema({ checkInAt: Date, checkOutAt: Date, status: String, shiftLabel: String, roundedHours: Number }, { _id: false }),
+      default: undefined,
+    },
     workDate: String,
     checkInTime: String, // HH:mm
     checkOutTime: String,
     reason: { type: String, required: true },
-    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"], default: "PENDING" },
     adminName: String,
     adminReply: String,
     resolvedAt: Date,

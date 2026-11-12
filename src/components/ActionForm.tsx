@@ -1,7 +1,8 @@
 "use client";
-import { useActionState, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Alert, Button } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useSafeAction } from "@/components/useSafeAction";
 
 type State = { ok?: boolean; error?: string } | null;
 
@@ -30,22 +31,22 @@ export function ActionForm({
   /** class thêm cho nút gửi (VD w-full để các nút cùng cột rộng bằng nhau) */
   buttonClassName?: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
-  const formRef = useRef<HTMLFormElement>(null);
+  // lỗi → giữ nguyên dữ liệu đã nhập (không để React tự xoá form); thành công → reset như cũ
+  const { state, pending, formRef, submit } = useSafeAction(action, null);
   const confirmed = useRef(false);
   const [asking, setAsking] = useState(false);
   return (
     <form
       ref={formRef}
-      action={formAction}
       className={className ?? "space-y-3"}
       onSubmit={(e) => {
+        e.preventDefault();
         if (confirm && !confirmed.current) {
-          e.preventDefault();
           setAsking(true);
           return;
         }
         confirmed.current = false;
+        submit(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
       }}
     >
       {children}

@@ -36,6 +36,27 @@ export async function dayAttendances(userId: unknown, workDate: string) {
     .lean()) as unknown as DayAtt[];
 }
 
+/** Lượt chấm công của nhân viên có thể chạm khoảng [from, to] (lùi 1 ngày cho ca qua đêm) */
+export async function attendancesNear(userId: unknown, from: Date, to: Date) {
+  return (await Attendance.find({ userId, checkInAt: { $gte: new Date(from.getTime() - 24 * 3600_000), $lte: to } })
+    .select("checkInAt checkOutAt actualCheckOutAt status autoCheckout shiftLabel roundedHours storeId workDate")
+    .sort({ checkInAt: 1 })
+    .lean()) as unknown as (DayAtt & { workDate: string })[];
+}
+
+/** Lượt (khác exceptId) chồng lên khoảng [s, e): lượt quên check-out chỉ có giờ vào, lượt đang mở tính tới bây giờ */
+export function findOverlap<T extends DayAtt>(list: T[], s: Date, e: Date, exceptId?: string): T | null {
+  return (
+    list.find((a) => {
+      if (exceptId && String(a._id) === exceptId) return false;
+      const as = a.checkInAt.getTime();
+      const ae = a.checkOutAt ? a.checkOutAt.getTime() : a.status === "OPEN" ? Date.now() : as;
+      if (ae <= as) return as >= s.getTime() && as < e.getTime();
+      return Math.min(ae, e.getTime()) - Math.max(as, s.getTime()) > 0;
+    }) ?? null
+  );
+}
+
 /** Giờ xin (HH:mm) → Date; giờ ra ≤ giờ vào = qua đêm */
 export function requestWindow(workDate: string, inTime: string | null | undefined, outTime: string | null | undefined, tz: string) {
   const reqIn = inTime ? zonedToDate(workDate, inTime, tz) : null;
@@ -99,6 +120,9 @@ export async function notifyAdjustment(r: {
   checkInTime?: string | null;
   checkOutTime?: string | null;
   reason: string;
+  /** MISSING = chấm bù cả ca · EDIT = sửa giờ lượt attendanceId · trống = yêu cầu kiểu cũ */
+  kind?: "MISSING" | "EDIT";
+  attendanceId?: unknown;
 }) {
   try {
     if (!telegramConfigured()) return;
@@ -109,19 +133,43 @@ export async function notifyAdjustment(r: {
     const tz = store.timezone || DEFAULT_TZ;
     const list = await dayAttendances(r.userId, r.workDate);
     const { reqIn, reqOut } = requestWindow(r.workDate, r.checkInTime, r.checkOutTime, tz);
-    const target = pickTarget(list, reqIn, reqOut);
+    // sửa giờ: đúng lượt nhân viên đã chọn · chấm bù: không có lượt (thêm mới) · kiểu cũ: đoán theo giờ
+    const target = r.kind === "EDIT" ? (list.find((a) => String(a._id) === String(r.attendanceId)) ?? null) : r.kind === "MISSING" ? null : pickTarget(list, reqIn, reqOut);
     const admins = await responsibleAdminNames(r.storeId, APPROVE_PERM.adjustment);
-    const text = [
-      "📝 YÊU CẦU ĐIỀU CHỈNH CHẤM CÔNG",
-      `🏪 Cơ sở: ${store.name.replace(/^TBS\s+/i, "")}`,
-      `👤 Nhân viên: ${r.employeeName}`,
-      `📅 Ngày: ${viDate(r.workDate).slice(0, 5)} (${weekdayVi(r.workDate)})`,
-      `✍️ Xin: vào ${r.checkInTime || "--"} → ra ${r.checkOutTime || "--"}`,
-      `📱 App ghi: ${target ? `${target.shiftLabel ? `${target.shiftLabel} · ` : ""}${attText(target, tz)}` : list.length ? `${list.length} lượt khác giờ – sẽ thêm lượt mới` : "không có lượt nào"}`,
-      ...compareWarnings(target, reqIn, reqOut).map((w) => `⚠️ ${w}`),
-      `💬 Lý do: ${r.reason}`,
-      `👉 Cần admin ${admins.join(", ")} xác nhận: vào Yêu cầu để Duyệt / Từ chối.`,
-    ].join("\n");
+    const day = `📅 Ngày: ${viDate(r.workDate).slice(0, 5)} (${weekdayVi(r.workDate)})`;
+    const head = [`🏪 Cơ sở: ${store.name.replace(/^TBS\s+/i, "")}`, `👤 Nhân viên: ${r.employeeName}`];
+    const tail = [`💬 Lý do: ${r.reason}`, `👉 Cần admin ${admins.join(", ")} xác nhận: vào Yêu cầu để Duyệt / Từ chối.`];
+    const appDay = list.length ? list.map((a) => `${a.shiftLabel ? `${a.shiftLabel} · ` : ""}${attText(a, tz)}`).join("; ") : "không có lượt nào";
+    const text = (
+      r.kind === "EDIT"
+        ? [
+            "✏️ YÊU CẦU SỬA GIỜ CHẤM CÔNG",
+            ...head,
+            `${day}${target?.shiftLabel ? ` · ${target.shiftLabel}` : ""}`,
+            `📱 App ghi: ${target ? attText(target, tz) : "lượt không còn"}`,
+            `✍️ Xin sửa: vào ${r.checkInTime || "--"} → ra ${r.checkOutTime || "--"}`,
+            ...(target ? compareWarnings(target, reqIn, reqOut).map((w) => `⚠️ ${w}`) : []),
+            ...tail,
+          ]
+        : r.kind === "MISSING"
+          ? [
+              "🆕 YÊU CẦU CHẤM BÙ CA (quên chấm công)",
+              ...head,
+              day,
+              `✍️ Xin thêm lượt: vào ${r.checkInTime} → ra ${r.checkOutTime}`,
+              `📱 Ngày này app đã có: ${appDay}`,
+              ...tail,
+            ]
+          : [
+              "📝 YÊU CẦU ĐIỀU CHỈNH CHẤM CÔNG",
+              ...head,
+              day,
+              `✍️ Xin: vào ${r.checkInTime || "--"} → ra ${r.checkOutTime || "--"}`,
+              `📱 App ghi: ${target ? `${target.shiftLabel ? `${target.shiftLabel} · ` : ""}${attText(target, tz)}` : list.length ? `${list.length} lượt khác giờ – sẽ thêm lượt mới` : "không có lượt nào"}`,
+              ...compareWarnings(target, reqIn, reqOut).map((w) => `⚠️ ${w}`),
+              ...tail,
+            ]
+    ).join("\n");
     await sendTelegramText(chatId, text);
   } catch (e) {
     console.error("[notifyAdjustment]", (e as Error).message);

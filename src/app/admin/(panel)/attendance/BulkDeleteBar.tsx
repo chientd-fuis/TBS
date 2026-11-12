@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSafeAction } from "@/components/useSafeAction";
 import { Loader2, Trash2 } from "lucide-react";
 import { Alert, Button, Input } from "@/components/ui";
 import { bulkDeleteAttendance } from "../../actions/ops";
@@ -24,7 +25,7 @@ export function SelectAllBox({ formId }: { formId: string }) {
 
 /** Thanh xoá hàng loạt: đếm số lượt đã tích, lý do (tuỳ chọn), xác nhận rồi xoá. */
 export default function BulkDeleteBar({ formId }: { formId: string }) {
-  const [state, action, pending] = useActionState(bulkDeleteAttendance, null);
+  const { state, pending, submit } = useSafeAction(bulkDeleteAttendance, null, { resetOnOk: false });
   const [n, setN] = useState(0);
   useEffect(() => {
     const count = () => setN(boxes(formId).filter((b) => b.checked).length);
@@ -47,9 +48,10 @@ export default function BulkDeleteBar({ formId }: { formId: string }) {
   return (
     <form
       id={formId}
-      action={action}
       onSubmit={(e) => {
-        if (!n || !window.confirm(`Xoá ${n} lượt chấm công đã tích? Không khôi phục được (vẫn lưu trong lịch sử chỉnh sửa).`)) e.preventDefault();
+        e.preventDefault();
+        if (!n || !window.confirm(`Xoá ${n} lượt chấm công đã tích? Không khôi phục được (vẫn lưu trong lịch sử chỉnh sửa).`)) return;
+        submit(e.currentTarget);
       }}
       className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#fdeaea] p-2 text-sm"
     >

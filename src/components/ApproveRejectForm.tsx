@@ -1,6 +1,7 @@
 "use client";
-import { useActionState, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Input } from "@/components/ui";
+import { useSafeAction } from "@/components/useSafeAction";
 
 type State = { ok?: boolean; error?: string } | null;
 
@@ -19,7 +20,8 @@ export function ApproveRejectForm({
   placeholder?: string;
   children?: ReactNode;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
+  // lỗi → giữ nguyên giờ / ghi chú admin đã nhập
+  const { state, pending, formRef, onSubmit } = useSafeAction(action, null);
   const op = useRef<HTMLInputElement>(null);
   const [clicked, setClicked] = useState<"approve" | "reject">("approve");
   const pick = (v: "approve" | "reject") => () => {
@@ -27,7 +29,7 @@ export function ApproveRejectForm({
     setClicked(v);
   };
   return (
-    <form action={formAction} className="mt-2 max-w-xl space-y-2">
+    <form ref={formRef} onSubmit={onSubmit} className="mt-2 max-w-xl space-y-2">
       <input ref={op} type="hidden" name="op" defaultValue="approve" />
       {children}
       <Input name="reply" placeholder={placeholder} maxLength={200} />

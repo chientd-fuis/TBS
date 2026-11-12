@@ -3,6 +3,7 @@ import { formatDuration } from "@/lib/calc";
 import { hoursVi } from "@/lib/format";
 import { localTime, viDate } from "@/lib/time";
 import { Badge, Empty } from "@/components/ui";
+import AttEditButton from "@/components/user/AttEditButton";
 
 export type AttRow = {
   _id: unknown;
@@ -38,6 +39,7 @@ export function AttendanceTable({
   staffView = false,
   select,
   totals = false,
+  staffEdit,
 }: {
   rows: AttRow[];
   tz: string;
@@ -48,6 +50,8 @@ export function AttendanceTable({
   select?: { formId: string; header?: ReactNode; disabled?: boolean };
   /** dòng tổng cuối bảng: tổng giờ thực tế · tổng giờ tính công · chênh */
   totals?: boolean;
+  /** trang nhân viên: lượt bấm được để gửi yêu cầu sửa giờ (nhãn Quên check-out / Muộn / Sớm) · lượt đã gửi, chờ duyệt */
+  staffEdit?: { editable: Set<string>; pending: Set<string> };
 }) {
   if (!rows.length) return <Empty>Chưa có dữ liệu chấm công</Empty>;
   return (
@@ -100,9 +104,25 @@ export function AttendanceTable({
                 </td>
                 <td className="whitespace-nowrap text-xs">{r.shiftLabel || (r.outOfShift ? <Badge>Ngoài ca</Badge> : "")}</td>
                 <td className="space-x-1 whitespace-nowrap">
-                  {!!r.lateMinutes && <Badge tone="orange">Muộn {r.lateMinutes}&apos;</Badge>}
-                  {!!r.earlyMinutes && <Badge tone="orange">Sớm {r.earlyMinutes}&apos;</Badge>}
-                  {r.status === "MISSING_CHECKOUT" && <Badge tone="red">Quên check-out</Badge>}
+                  {(() => {
+                    const warn = !!r.lateMinutes || !!r.earlyMinutes || r.status === "MISSING_CHECKOUT";
+                    const badges = (
+                      <>
+                        {!!r.lateMinutes && <Badge tone="orange">Muộn {r.lateMinutes}&apos;</Badge>}
+                        {!!r.earlyMinutes && <Badge tone="orange">Sớm {r.earlyMinutes}&apos;</Badge>}
+                        {r.status === "MISSING_CHECKOUT" && <Badge tone="red">Quên check-out</Badge>}
+                      </>
+                    );
+                    // nhân viên: bấm nhãn cảnh báo → popup gửi yêu cầu sửa giờ đúng lượt này
+                    if (staffEdit?.pending.has(id))
+                      return (
+                        <>
+                          {badges} <Badge tone="yellow">Đã gửi sửa · chờ duyệt</Badge>
+                        </>
+                      );
+                    if (warn && staffEdit?.editable.has(id)) return <AttEditButton id={id}>{badges}</AttEditButton>;
+                    return badges;
+                  })()}
                   {r.status === "OPEN" && <Badge tone="yellow">Đang trong ca</Badge>}
                 </td>
                 <td className="whitespace-nowrap text-xs">
