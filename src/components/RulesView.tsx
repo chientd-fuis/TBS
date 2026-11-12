@@ -7,9 +7,9 @@ const B = ({ text }: { text: string }) => (
 );
 
 /** Hiển thị nội quy đã định dạng (thẻ đánh số, ý nhỏ, khung lưu ý) – dùng ở popup nhân viên và xem trước cho admin. */
-export default function RulesView({ text }: { text: string }) {
+export default function RulesView({ text, empty }: { text: string; empty?: string }) {
   const blocks = parseRules(text);
-  if (!blocks.length) return <p className="py-6 text-center text-sm text-ink/60">Chưa có nội quy – admin cập nhật ở Cài đặt → AI → Nội quy, quy định.</p>;
+  if (!blocks.length) return <p className="py-6 text-center text-sm text-ink/60">{empty ?? "Chưa có nội quy – admin cập nhật ở Cài đặt → AI → Nội quy, quy định."}</p>;
   return (
     <div className="space-y-2.5 text-[15px] leading-relaxed">
       {blocks.map((b, i) =>

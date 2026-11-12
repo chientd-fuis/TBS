@@ -24,6 +24,55 @@ body {
   color: var(--color-ink);
 }
 
+/* Vạch tiến trình chuyển trang (components/NavProgress.tsx) – nằm ở mép dưới header */
+.tbs-navbar {
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 4px;
+  width: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  z-index: 40;
+  pointer-events: none;
+  animation: tbs-navbar-go 12s cubic-bezier(0.08, 0.75, 0.2, 1) forwards;
+}
+.tbs-navbar-done {
+  width: 100%;
+  opacity: 0;
+  animation: none;
+  transition: width 0.15s ease-out, opacity 0.3s ease 0.15s;
+}
+@keyframes tbs-navbar-go {
+  0% { width: 0; }
+  8% { width: 35%; }
+  100% { width: 92%; }
+}
+/* header nền tối (admin điện thoại – xanh đậm) → vạch màu vàng cho dễ thấy */
+.tbs-navbar-on-dark .tbs-navbar {
+  background: var(--color-primary);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 60%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tbs-navbar { animation-duration: 20s; }
+}
+
+/* Nhân viên THỬ VIỆC (lib/probation.ts): app nhân viên chủ đạo hồng tím – ghi đè token màu trong vùng app */
+.theme-trial {
+  --color-primary: #e3b5f0;
+  --color-primary-dark: #c98ae0;
+  --color-primary-light: #f8ecfc;
+  --color-secondary: #a855c7;
+  --color-secondary-dark: #7e3a9c;
+  --color-accent: #7a2e8e;
+  --color-ink: #4a2453;
+  --color-cream: #fcf5fd;
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
 body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;

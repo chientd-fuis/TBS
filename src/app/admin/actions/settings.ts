@@ -6,6 +6,7 @@ import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { dec, errMsg, num, type FormState } from "./types";
+import { localDate } from "@/lib/time";
 
 /** Cấu hình chấm công (làm tròn, ngưỡng muộn/sớm…) – Admin Tổng. */
 export async function saveConfig(_: FormState, fd: FormData): Promise<FormState> {
@@ -105,16 +106,52 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
   }
 }
 
+/** Phạt tự động khi đi muộn / bỏ ca / quên chấm công – Admin Tổng. Lưu xong chạy đối soát ngay. */
+export async function saveAutoPenalty(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
+    await connectDB();
+    const money = (k: string) => Math.max(0, Math.round(num(fd.get(k), 0)));
+    const on = fd.get("autoPenaltyOn") === "on";
+    let from = String(fd.get("autoPenaltyFrom") ?? "").trim();
+    if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Ngày áp dụng không hợp lệ" };
+    if (on && !from) from = localDate(new Date());
+    const data = {
+      autoPenaltyOn: on,
+      autoPenaltyFrom: from,
+      penaltyLateVnd: money("penaltyLateVnd"),
+      penaltyLatePerMinVnd: money("penaltyLatePerMinVnd"),
+      penaltyNoShowVnd: money("penaltyNoShowVnd"),
+      penaltyMissingOutVnd: money("penaltyMissingOutVnd"),
+      penaltyMissingInVnd: money("penaltyMissingInVnd"),
+    };
+    if (on && !data.penaltyLateVnd && !data.penaltyLatePerMinVnd && !data.penaltyNoShowVnd && !data.penaltyMissingOutVnd && !data.penaltyMissingInVnd)
+      return { error: "Nhập ít nhất 1 mức phạt (> 0đ)" };
+    const before = await Settings.findOne({ key: "main" }).lean();
+    await Settings.updateOne({ key: "main" }, { $set: data }, { upsert: true });
+    await audit(adminActor(admin), "settings.autoPenalty", { type: "Settings" }, before, data);
+    if (on) {
+      const { runAutoPenalties } = await import("@/lib/auto-penalty");
+      await runAutoPenalties();
+    }
+    revalidatePath("/admin", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
 /** Admin Tổng: cho admin / chính Admin Tổng (có hồ sơ nhân viên) vào app nhân viên. */
 export async function saveUserAppAccess(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
     await connectDB();
-    const adminUserApp = fd.get("adminUserApp") === "on";
+    // quyền vào app nhân viên của từng admin: đặt ở Quản lý admin (AdminAccount.userApp); ở đây chỉ còn Admin Tổng
     const ownerUserApp = fd.get("ownerUserApp") === "on";
-    await Settings.updateOne({ key: "main" }, { $set: { adminUserApp, ownerUserApp } }, { upsert: true });
-    await audit(adminActor(admin), "settings.userAppAccess", { type: "Settings" }, null, { adminUserApp, ownerUserApp });
+    await Settings.updateOne({ key: "main" }, { $set: { ownerUserApp } }, { upsert: true });
+    await audit(adminActor(admin), "settings.userAppAccess", { type: "Settings" }, null, { ownerUserApp });
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {

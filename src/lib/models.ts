@@ -44,6 +44,16 @@ const SettingsSchema = new Schema(
     // App nhân viên cho Gmail admin (có hồ sơ nhân viên): mặc định chặn – đăng nhập luôn vào trang quản lý
     adminUserApp: { type: Boolean, default: false }, // admin (AdminAccount) được vào app nhân viên
     ownerUserApp: { type: Boolean, default: false }, // Admin Tổng được vào app nhân viên
+    // Help (nút "?" app nhân viên – lib/help.ts): hướng dẫn app, quy trình theo vị trí, thông tin quán, tình huống hay gặp
+    help: { type: Schema.Types.Mixed, default: {} },
+    // Phạt tự động (lib/auto-penalty.ts) – mức 0đ = không phạt loại đó
+    autoPenaltyOn: { type: Boolean, default: false },
+    autoPenaltyFrom: { type: String, default: "" }, // YYYY-MM-DD: chỉ phạt sự kiện từ ngày này
+    penaltyLateVnd: { type: Number, default: 0 }, // đi muộn: mức / lượt
+    penaltyLatePerMinVnd: { type: Number, default: 0 }, // đi muộn: cộng thêm / phút muộn
+    penaltyNoShowVnd: { type: Number, default: 0 }, // bỏ ca: có lịch, không chấm công
+    penaltyMissingOutVnd: { type: Number, default: 0 }, // quên check-out
+    penaltyMissingInVnd: { type: Number, default: 0 }, // quên check-in: admin chấm hộ / duyệt yêu cầu bổ sung chấm công
   },
   { timestamps: true },
 );
@@ -104,6 +114,12 @@ const UserSchema = new Schema(
     paidLeaveDays: { type: Number, default: 0 }, // full-time: số ngày nghỉ có lương / tháng
     // hồ sơ nhân viên của 1 admin (cùng Gmail) – để admin có dòng trong bảng lương
     adminStaff: { type: Boolean, default: false },
+    // Thử việc (lib/probation.ts): lương 20k/h, không Chốt ca / Nhận hàng / Tồn kho, app màu hồng tím.
+    // Hết 1 tháng: làm ≥ 10 ca → tự chuyển chính thức 22k/h; chưa đủ → probationReview (admin xem xét)
+    probation: { type: Boolean, default: false },
+    probationStart: String, // YYYY-MM-DD bắt đầu thử việc
+    probationReview: { type: Boolean, default: false },
+    probationEndedAt: Date,
     status: { type: String, enum: USER_STATUS, default: "NEW" },
     rejectReason: String,
     storeId: { type: Schema.Types.ObjectId, ref: "Store" },
@@ -272,6 +288,7 @@ const AttendanceSchema = new Schema(
     createdByAdminName: String,
     manualReason: String,
     status: { type: String, enum: ["OPEN", "COMPLETED", "MISSING_CHECKOUT"], default: "OPEN" },
+    missedCheckout: { type: Boolean, default: false }, // đã từng bị đánh dấu quên check-out (giữ lại kể cả khi admin bổ sung giờ ra) → phạt tự động
     note: String, // ghi chú nội bộ (admin xem): "Sửa bởi …"
     staffNote: String, // ghi chú admin để lại cho nhân viên – hiện ở Lịch sử chấm công của nhân viên
     photosPurgedAt: Date, // ảnh check-in/out đã bị xoá khi dọn dữ liệu cũ
@@ -632,12 +649,43 @@ const BonusPenaltySchema = new Schema(
     content: { type: String, required: true },
     createdBy: String,
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" }, // nhân viên được cấp quyền tạo → chỉ người đó sửa / xoá được
+    // phạt tự động (lib/auto-penalty.ts): khoá sự kiện "late:<attId>" | "out:<attId>" | "in:<attId>" | "noshow:<shiftAssignmentId>"
+    autoKey: String,
+    autoEdited: { type: Boolean, default: false }, // admin đã sửa tay → không tự cập nhật / xoá nữa
   },
   { timestamps: true },
 );
 BonusPenaltySchema.index({ userId: 1, date: 1 });
 BonusPenaltySchema.index({ storeId: 1, month: 1 });
+BonusPenaltySchema.index({ autoKey: 1 }, { unique: true, partialFilterExpression: { autoKey: { $type: "string" } } });
 export const BonusPenalty = getModel("BonusPenalty", BonusPenaltySchema);
+
+/**
+ * Menu Doanh thu: đánh dấu đã LẤY doanh thu (tiền) của cơ sở ngày đó – chỉ là đã lấy, CHƯA đếm
+ * (khác chức năng đếm tiền mặt ở Sổ quỹ). 1 bản ghi / cơ sở / ngày; bỏ đánh dấu = xoá.
+ */
+const RevenuePickupSchema = new Schema(
+  {
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true }, // YYYY-MM-DD
+    month: { type: String, required: true },
+    by: String, // tên admin đánh dấu
+  },
+  { timestamps: true },
+);
+RevenuePickupSchema.index({ storeId: 1, date: 1 }, { unique: true });
+RevenuePickupSchema.index({ month: 1 });
+export const RevenuePickup = getModel("RevenuePickup", RevenuePickupSchema);
+
+/** Phạt tự động admin đã xoá (miễn phạt) → không tạo lại. */
+const AutoPenaltyWaiverSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    by: String,
+  },
+  { timestamps: true },
+);
+export const AutoPenaltyWaiver = getModel("AutoPenaltyWaiver", AutoPenaltyWaiverSchema);
 
 const PayrollSchema = new Schema(
   {
@@ -766,6 +814,8 @@ const AdminAccountSchema = new Schema(
     name: { type: String, required: true }, // tên hiển thị trong lịch sử thao tác
     status: { type: String, enum: ["PENDING", "ACTIVE", "BLOCKED"], default: "PENDING" },
     perms: { type: [String], default: [] }, // lib/permissions.ts ADMIN_PERMS
+    // được vào app nhân viên (cần có hồ sơ nhân viên cùng Gmail). Chưa đặt (bản ghi cũ) → theo Settings.adminUserApp
+    userApp: { type: Boolean },
     devices: { type: [AdminDeviceSchema], default: [] },
     note: String,
     approvedBy: String,

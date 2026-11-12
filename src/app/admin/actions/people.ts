@@ -11,6 +11,7 @@ import { encrypt } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
 import { localDate, localMonth } from "@/lib/time";
 import { dec, errMsg, num, str, type FormState } from "./types";
+import { makeOfficial, PROBATION_WAGE } from "@/lib/probation";
 
 /* ===== Duyệt đăng ký (spec 3.1) ===== */
 export async function approveUser(_: FormState, fd: FormData): Promise<FormState> {
@@ -19,17 +20,64 @@ export async function approveUser(_: FormState, fd: FormData): Promise<FormState
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user || user.status !== "PENDING") return { error: "Đăng ký không còn ở trạng thái chờ duyệt" };
-    const wage = num(fd.get("hourlyWage"));
+    // thử việc: lương trống → mặc định 20.000đ/giờ; hết 1 tháng tự xét chuyển chính thức (lib/probation.ts)
+    const probation = fd.get("probation") === "on";
+    const wage = num(fd.get("hourlyWage")) || (probation ? PROBATION_WAGE : 0);
+    const today = localDate(new Date());
     user.status = "ACTIVE";
     user.joinedAt = user.joinedAt ?? new Date();
     if (wage > 0) user.hourlyWage = wage;
+    if (probation) user.set({ probation: true, probationStart: today, probationReview: false });
     await user.save();
-    if (wage > 0) await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: localDate(new Date()), createdBy: admin.name });
+    if (wage > 0) await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: today, createdBy: admin.name });
     // duyệt luôn thiết bị đầu tiên
     const devs = await Device.find({ userId: user._id, status: "PENDING" }).sort({ firstSeenAt: -1 }).limit(1);
     for (const d of devs) await approveDevice(String(d._id), admin.name);
-    await audit(adminActor(admin), "user.approve", { type: "User", id: String(user._id) }, null, { hourlyWage: wage });
+    await audit(adminActor(admin), "user.approve", { type: "User", id: String(user._id) }, null, { hourlyWage: wage, probation });
     revalidatePath("/admin", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/**
+ * Thử việc của 1 nhân viên:
+ *  - start: đặt thử việc từ hôm nay (lương giờ trống → 20.000đ)
+ *  - official: chuyển chính thức ngay (lương trống → 22.000đ, giữ lương cao hơn nếu đang cao hơn)
+ *  - extend: gia hạn thử việc thêm 1 tháng từ hôm nay (bỏ "cần xem xét")
+ *  - stop: bỏ thử việc, giữ nguyên lương
+ */
+export async function probationAction(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    await connectDB();
+    const user = await User.findById(str(fd.get("userId")));
+    if (!user) return { error: "Không tìm thấy nhân viên" };
+    const op = str(fd.get("op"));
+    const by = adminActor(admin).name;
+    const today = localDate(new Date());
+    const wage = Math.round(num(fd.get("hourlyWage")));
+    if (op === "start") {
+      const w = wage > 0 ? wage : PROBATION_WAGE;
+      const raise = w !== user.hourlyWage;
+      user.set({ probation: true, probationStart: today, probationReview: false, hourlyWage: w });
+      await user.save();
+      if (raise) await WageHistory.create({ userId: user._id, hourlyWage: w, effectiveFrom: today, createdBy: by });
+    } else if (op === "official") {
+      if (!user.probation) return { error: "Nhân viên không ở chế độ thử việc" };
+      await makeOfficial(user._id, today, by, wage > 0 ? wage : undefined);
+    } else if (op === "extend") {
+      if (!user.probation) return { error: "Nhân viên không ở chế độ thử việc" };
+      user.set({ probationStart: today, probationReview: false });
+      await user.save();
+    } else if (op === "stop") {
+      user.set({ probation: false, probationReview: false, probationEndedAt: new Date() });
+      await user.save();
+    } else return { error: "Thao tác không hợp lệ" };
+    await audit(adminActor(admin), `user.probation.${op}`, { type: "User", id: String(user._id) }, null, { wage: wage || undefined });
+    revalidatePath("/admin/employees", "layout");
+    revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {
     return errMsg(e);

@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
+import { isProbation, PROBATION_OFF } from "@/lib/probation";
 import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { cleanInputs, cleanPhotos, getGoodsCatalog, GOODS_OFF, goodsEnabled, notifyGoodsSaved, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
@@ -11,6 +12,7 @@ export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string }
 export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "STOCK"; photos?: string[] }): Promise<GoodsSaveResult> {
   try {
     const user = await requireActiveUser();
+    if (isProbation(user)) return { error: PROBATION_OFF };
     if (!(await goodsEnabled())) return { error: GOODS_OFF };
     const kind = input?.kind === "STOCK" ? "STOCK" : "RECEIVE";
     if (kind === "STOCK" && !(await stockEnabled())) return { error: STOCK_OFF };

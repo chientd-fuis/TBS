@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isProbation, PROBATION_OFF } from "@/lib/probation";
 import { z } from "zod";
 import { getAdmin } from "@/lib/admin-session";
 import { getCurrentUser } from "@/lib/guards";
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       const user = await getCurrentUser();
       if (!user) throw new HttpError(401, "Chưa đăng nhập");
       if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");
+      if (isProbation(user)) throw new HttpError(403, PROBATION_OFF);
       const ctx = await resolveClosingContext(user);
       if (!ctx) throw new HttpError(400, "Bạn chưa thuộc cơ sở nào");
       actor = `user:${user._id}`;

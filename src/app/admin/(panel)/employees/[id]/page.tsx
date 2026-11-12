@@ -10,7 +10,8 @@ import { PayTermsFields } from "@/components/PayTermsFields";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { DeviceActions } from "../../devices/DeviceActions";
-import { setPayTerms, setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
+import { probationAction, setPayTerms, setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
+import { OFFICIAL_WAGE, PROBATION_MIN_SHIFTS, PROBATION_WAGE, probationEnd, probationShifts } from "@/lib/probation";
 import { STAFF_PERMS } from "@/lib/permissions";
 import TransferAccount from "./TransferAccount";
 
@@ -40,6 +41,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
   const startDay = seniorityStart([u.joinedAt ? localDate(new Date(u.joinedAt)) : null, u.firstWorkDate, firstAtt?.workDate]);
   const workDays = (archived[0]?.days ?? 0) + liveDays.length;
   const fulltime = u.payType === "FULLTIME";
+  const probShifts = u.probation && u.probationStart ? await probationShifts(u._id, u.probationStart) : 0;
   const rank = (st: string) => (st === "NEW" ? 0 : st === "PENDING" ? 1 : st === "REJECTED" ? 2 : 3);
   const candidates = others
     .sort((a, b) => rank(a.status) - rank(b.status))
@@ -91,6 +93,57 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
               </Field>
             </div>
           </ActionForm>
+        </Card>
+        <Card
+          title={u.probation ? (u.probationReview ? "🟣 Thử việc · cần xem xét" : "🟣 Đang thử việc") : "Thử việc"}
+          className={u.probation ? "ring-2 ring-[#d9a8ec]" : undefined}
+        >
+          {u.probation && u.probationStart ? (
+            <div className="space-y-3 text-sm">
+              <p>
+                Bắt đầu <b>{viDate(u.probationStart)}</b> · hết thử việc <b>{viDate(probationEnd(u.probationStart))}</b> · đã làm{" "}
+                <b className={probShifts >= PROBATION_MIN_SHIFTS ? "text-secondary-dark" : "text-warn"}>
+                  {probShifts}/{PROBATION_MIN_SHIFTS} ca
+                </b>
+                . Lương hiện tại {vnd(u.hourlyWage)}/giờ.
+              </p>
+              {u.probationReview ? (
+                <Alert tone="red">
+                  Hết tháng thử việc nhưng mới làm {probShifts} ca (cần {PROBATION_MIN_SHIFTS}) – chưa tự lên chính thức. Chọn chuyển chính thức hoặc gia hạn thử việc.
+                </Alert>
+              ) : (
+                <p className="text-xs text-ink/60">
+                  Hết thử việc: đủ {PROBATION_MIN_SHIFTS} ca → tự chuyển chính thức, lương {vnd(OFFICIAL_WAGE)}/giờ từ ngày đó; chưa đủ → báo “cần xem xét”. Đang thử việc: không dùng
+                  Chốt ca / Nhận hàng / Tồn kho, app màu hồng tím.
+                </p>
+              )}
+              <div className="flex flex-wrap items-end gap-2">
+                <ActionForm action={probationAction} submitLabel="Chuyển chính thức" variant="secondary" successText="Đã chuyển chính thức" className="flex items-end gap-2">
+                  <input type="hidden" name="userId" value={String(u._id)} />
+                  <input type="hidden" name="op" value="official" />
+                  <Field label="Lương giờ chính thức">
+                    <Input name="hourlyWage" inputMode="numeric" placeholder={String(Math.max(OFFICIAL_WAGE, u.hourlyWage || 0))} className="w-32" />
+                  </Field>
+                </ActionForm>
+                <ActionForm action={probationAction} submitLabel="Gia hạn thử việc 1 tháng" variant="outline" successText="Đã gia hạn" confirm={`Gia hạn thử việc cho ${u.name} thêm 1 tháng từ hôm nay?`}>
+                  <input type="hidden" name="userId" value={String(u._id)} />
+                  <input type="hidden" name="op" value="extend" />
+                </ActionForm>
+                <ActionForm action={probationAction} submitLabel="Bỏ thử việc (giữ lương)" variant="ghost" successText="Đã bỏ thử việc" confirm={`Bỏ thử việc cho ${u.name}, giữ nguyên lương ${vnd(u.hourlyWage)}/giờ?`}>
+                  <input type="hidden" name="userId" value={String(u._id)} />
+                  <input type="hidden" name="op" value="stop" />
+                </ActionForm>
+              </div>
+            </div>
+          ) : (
+            <ActionForm action={probationAction} submitLabel="Đặt thử việc từ hôm nay" variant="outline" successText="Đã đặt thử việc" className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="userId" value={String(u._id)} />
+              <input type="hidden" name="op" value="start" />
+              <Field label="Lương giờ thử việc" hint={`Trống = ${vnd(PROBATION_WAGE)}`}>
+                <Input name="hourlyWage" inputMode="numeric" placeholder={String(PROBATION_WAGE)} className="w-32" />
+              </Field>
+            </ActionForm>
+          )}
         </Card>
         <Card title={fulltime ? `Full-time · lương cứng ${vnd(u.monthlySalary)} / tháng · nghỉ có lương ${u.paidLeaveDays || 0} ngày` : "Hình thức lương: Part-time (lương giờ)"}>
           <p className="mb-2 text-xs text-ink/70">

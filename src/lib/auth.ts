@@ -19,16 +19,22 @@ export async function isAdminEmail(email?: string | null) {
 
 /**
  * Gmail admin có bị chặn khỏi app nhân viên không (kể cả khi có hồ sơ nhân viên adminStaff để có dòng bảng lương).
- * Admin Tổng bật ở Cài đặt: "Admin được vào app nhân viên" (adminUserApp) / "Admin Tổng được vào…" (ownerUserApp).
+ *  - Admin: tick riêng từng tài khoản ở Quản lý admin (AdminAccount.userApp); tài khoản cũ chưa đặt → theo Settings.adminUserApp.
+ *  - Admin Tổng: Cài đặt → "Cho phép chính Admin Tổng vào app nhân viên" (Settings.ownerUserApp).
  * Nhân viên cần quản lý dùng role quản lý ở app User.
  */
 export async function userAppBlocked(email?: string | null) {
   if (!email) return false;
-  const owner = isOwnerEmail(email);
-  if (!owner && !(await isAdminEmail(email))) return false;
   await connectDB();
-  const s = await Settings.findOne({ key: "main" }).select("adminUserApp ownerUserApp").lean();
-  return owner ? s?.ownerUserApp !== true : s?.adminUserApp !== true;
+  if (isOwnerEmail(email)) {
+    const s = await Settings.findOne({ key: "main" }).select("ownerUserApp").lean();
+    return s?.ownerUserApp !== true;
+  }
+  const acc = await AdminAccount.findOne({ email: email.toLowerCase(), status: "ACTIVE" }).select("userApp").lean();
+  if (!acc) return false; // không phải admin đang hoạt động → nhân viên bình thường
+  if (typeof acc.userApp === "boolean") return !acc.userApp;
+  const s = await Settings.findOne({ key: "main" }).select("adminUserApp").lean();
+  return s?.adminUserApp !== true;
 }
 
 export const authOptions: NextAuthOptions = {

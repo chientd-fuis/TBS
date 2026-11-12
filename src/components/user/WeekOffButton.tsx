@@ -2,6 +2,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { declareWeekOff } from "@/app/(user)/schedule/actions";
+import { Spinner } from "@/components/ui";
 
 /** Nhân viên báo nghỉ cả tuần (đóng yêu cầu đăng ký ca của admin). */
 export default function WeekOffButton({ weekStart }: { weekStart: string }) {
@@ -11,7 +12,7 @@ export default function WeekOffButton({ weekStart }: { weekStart: string }) {
     <button
       type="button"
       disabled={pending}
-      className="text-xs text-ink/70 underline disabled:opacity-50"
+      className="inline-flex items-center gap-1 text-xs text-ink/70 underline disabled:opacity-60"
       onClick={() => {
         if (!confirm("Báo admin là bạn KHÔNG đi làm tuần này?")) return;
         start(async () => {
@@ -21,7 +22,8 @@ export default function WeekOffButton({ weekStart }: { weekStart: string }) {
         });
       }}
     >
-      Tuần này tôi nghỉ
+      {pending && <Spinner className="h-3 w-3 border-2" />}
+      {pending ? "Đang gửi…" : "Tuần này tôi nghỉ"}
     </button>
   );
 }

@@ -1,6 +1,8 @@
 import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireActiveUser } from "@/lib/guards";
+import { isProbation } from "@/lib/probation";
 import { ShiftClosing } from "@/lib/models";
 import { addDays, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
@@ -16,6 +18,7 @@ const TG = { SENT: ["Đã gửi Telegram", "green"], FAILED: ["Gửi lỗi – �
 /** Chốt ca: nhập số liệu cuối ca → gửi nhóm Telegram */
 export default async function ClosingPage() {
   const user = await requireActiveUser();
+  if (isProbation(user)) redirect("/"); // nhân viên thử việc không chốt ca
   const ctx = await resolveClosingContext(user);
   const tz = ctx?.tz || "Asia/Ho_Chi_Minh";
   const att = ctx?.att;

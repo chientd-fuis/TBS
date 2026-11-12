@@ -1,5 +1,5 @@
 import { requireOwner } from "@/lib/guards";
-import { AdminAccount, AdminLoginLog, AdminLoginSession } from "@/lib/models";
+import { AdminAccount, AdminLoginLog, AdminLoginSession, Settings } from "@/lib/models";
 import { parseUA } from "@/lib/device";
 import { ADMIN_PERMS } from "@/lib/permissions";
 import { viDateTime } from "@/lib/time";
@@ -40,6 +40,8 @@ function PermBoxes({ value = [] }: { value?: readonly string[] }) {
 export default async function AdminsPage() {
   await requireOwner();
   const list = await AdminAccount.find().sort({ status: 1, lastLoginAt: -1, createdAt: -1 }).lean();
+  // tài khoản cũ chưa đặt riêng "Cho vào app nhân viên" → mặc định theo cài đặt chung trước đây
+  const settings = await Settings.findOne({ key: "main" }).select("adminUserApp").lean();
   const now = Date.now();
   const [sessions, logs] = await Promise.all([
     AdminLoginSession.find({ accountId: { $in: list.map((a) => a._id) }, revokedAt: null, expiresAt: { $gt: new Date() } }).lean(),
@@ -97,6 +99,16 @@ export default async function AdminsPage() {
                   <Field label="Ghi chú"><Input name="note" defaultValue={a.note ?? ""} placeholder="VD Quản lý CS1" /></Field>
                 </div>
                 <PermBoxes value={a.perms ?? []} />
+                <label className="flex items-start gap-2 rounded-xl bg-cream px-3 py-2 text-sm ring-1 ring-[#f1e6c8]">
+                  <input type="checkbox" name="userApp" defaultChecked={a.userApp ?? settings?.adminUserApp === true} className="mt-0.5 h-4 w-4" />
+                  <span>
+                    <b>Cho vào app nhân viên</b>
+                    <span className="block text-xs text-ink/60">
+                      Gmail này cần có hồ sơ nhân viên (Nhân viên → hồ sơ cho admin). Tick → thấy nút “📱 App nhân viên” trên trang quản lý để chấm công, xem lương. Không tick → đăng nhập
+                      luôn vào trang quản lý.
+                    </span>
+                  </span>
+                </label>
               </ActionForm>
 
               {devs.length > 0 && (

@@ -5,7 +5,8 @@ import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
+import { disconnectDrive, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
+import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
 
@@ -39,6 +40,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <p className="text-sm text-ink/70">
               Bật / tắt và giới hạn từng chức năng AI (kiểm soát token), nội dung Trợ lý cửa hàng, ngưỡng phát hiện bất thường.{" "}
               <Link className="text-accent underline" href="/admin/settings/ai">Mở Cài đặt AI →</Link>
+            </p>
+          </Card>
+        )}
+
+        {isOwner && (
+          <Card title="❓ Help – Trợ giúp nhân viên">
+            <p className="text-sm text-ink/70">
+              Nội dung nút “?” trên app nhân viên: hướng dẫn sử dụng app (nhập từ file Word), quy trình làm việc theo vị trí (Bếp / Thu ngân / Ship / Đa năng), thông tin
+              quán, các tình huống hay gặp (hỏi – đáp). Có xem trước.{" "}
+              <Link className="text-accent underline" href="/admin/settings/help">Mở Cài đặt Help →</Link>
             </p>
           </Card>
         )}
@@ -78,15 +89,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </p>
             <ActionForm action={saveUserAppAccess} submitLabel="Lưu" successText="Đã lưu" className="mt-3 space-y-3 border-t border-[#f1e6c8] pt-3">
               <p className="text-xs text-ink/60">
-                Gmail admin đăng nhập luôn vào trang quản lý. Mặc định admin <b>không</b> vào được app nhân viên (kể cả có hồ sơ nhân viên Full-time / part-time để có dòng bảng lương) – nhân viên cần quản lý dùng role quản lý ở app nhân viên.
+                Gmail admin đăng nhập luôn vào trang quản lý. Cho từng admin vào app nhân viên: tick “Cho vào app nhân viên” ở từng tài khoản trong{" "}
+                <Link className="text-accent underline" href="/admin/admins">Quản lý admin</Link>. Nhân viên cần quản lý dùng role quản lý ở app nhân viên.
               </p>
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="adminUserApp" defaultChecked={s.adminUserApp === true} className="mt-0.5 h-4 w-4" />
-                <span>
-                  <b>Cho phép admin vào app nhân viên</b>
-                  <span className="block text-xs text-ink/60">Admin có hồ sơ nhân viên sẽ thấy nút “App nhân viên” trên trang quản lý để chấm công, xem lương…</span>
-                </span>
-              </label>
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" name="ownerUserApp" defaultChecked={s.ownerUserApp === true} className="mt-0.5 h-4 w-4" />
                 <span>
@@ -147,6 +152,30 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </label>
             )}
             {!isOwner && <p className="text-xs text-ink/60">Chỉ Admin Tổng được thay đổi cấu hình.</p>}
+          </ActionForm>
+
+          <ActionForm action={saveAutoPenalty} submitLabel="Lưu phạt tự động" successText="Đã lưu – đã tính phạt theo dữ liệu hiện tại" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+            <fieldset disabled={!isOwner} className="space-y-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="autoPenaltyOn" defaultChecked={s.autoPenaltyOn === true} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Tự động phạt tiền</b> khi đi muộn, bỏ ca, quên chấm công
+                  <span className="block text-xs text-ink/60">
+                    Khoản phạt tự tạo ở Thưởng / phạt (ghi “phạt tự động”), tính vào bảng lương. Chạy mỗi giờ. Admin sửa giờ / duyệt bổ sung chấm công → khoản phạt tự cập nhật hoặc
+                    xoá. Xoá một khoản phạt tự động = miễn phạt (không tạo lại). Tháng đã trả lương không bị đụng. Mức 0đ = không phạt loại đó.
+                  </span>
+                  {s.autoPenaltyOn && autoPenaltySummary(s) && <span className="mt-1 block text-xs font-semibold text-danger">Đang phạt: {autoPenaltySummary(s)}</span>}
+                </span>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Áp dụng cho sự kiện từ ngày" hint="Trống = từ ngày bật. Tối đa 40 ngày gần nhất"><Input type="date" name="autoPenaltyFrom" defaultValue={s.autoPenaltyFrom ?? ""} /></Field>
+                <Field label="Đi muộn (đ / lượt)" hint={`Muộn quá ngưỡng ${s.lateThresholdMinutes} phút so với giờ bắt đầu ca`}><Input name="penaltyLateVnd" inputMode="numeric" defaultValue={s.penaltyLateVnd || 0} /></Field>
+                <Field label="Đi muộn – cộng thêm (đ / phút muộn)" hint="VD 1000 → muộn 15' thêm 15.000đ"><Input name="penaltyLatePerMinVnd" inputMode="numeric" defaultValue={s.penaltyLatePerMinVnd || 0} /></Field>
+                <Field label="Bỏ ca (đ / ca)" hint="Có lịch ca đã duyệt nhưng không chấm công – xét sau khi ca kết thúc 2 giờ"><Input name="penaltyNoShowVnd" inputMode="numeric" defaultValue={s.penaltyNoShowVnd || 0} /></Field>
+                <Field label="Quên check-out (đ / lượt)" hint={`Quá ${s.missingCheckoutHours} giờ / hết ca + 4 giờ chưa check-out`}><Input name="penaltyMissingOutVnd" inputMode="numeric" defaultValue={s.penaltyMissingOutVnd || 0} /></Field>
+                <Field label="Quên check-in (đ / lượt)" hint="Lượt do admin chấm hộ / duyệt yêu cầu bổ sung chấm công"><Input name="penaltyMissingInVnd" inputMode="numeric" defaultValue={s.penaltyMissingInVnd || 0} /></Field>
+              </div>
+            </fieldset>
           </ActionForm>
         </Card>
 

@@ -1,21 +1,9 @@
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
 import { connectDB } from "@/lib/db";
-import { CashTransfer, DayRevenue, ShiftClosing, Store } from "@/lib/models";
-import {
-  closingSum,
-  dayRevenueFromClosings,
-  revenueDiff,
-  shiftDeltas,
-  type Revenue,
-} from "@/lib/revenue";
-import {
-  localDate,
-  localMonth,
-  localTime,
-  monthRange,
-  weekdayVi,
-} from "@/lib/time";
+import { Store } from "@/lib/models";
+import { loadDailyRevenueRows } from "@/lib/daily-revenue-rows";
+import { localDate, localMonth, monthRange } from "@/lib/time";
 import { MonthPicker } from "@/components/MonthPicker";
 import { Badge, Card, Field, Input, Select } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
@@ -44,135 +32,18 @@ export default async function DailyRevenuePage({
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "")
     ? sp.month!
     : localMonth(new Date());
-  const { first, last } = monthRange(month);
+  const { last } = monthRange(month);
   const stores = await Store.find({ active: { $ne: false } })
     .sort({ createdAt: 1 })
     .lean();
   const shown = sp.store
     ? stores.filter((s) => String(s._id) === sp.store)
     : stores;
-  const ids = shown.map((s) => s._id);
   const owner = admin.kind === "OWNER";
-  const [closings, days, transfers] = await Promise.all([
-    ShiftClosing.find({
-      workDate: { $gte: first, $lte: last },
-      storeId: { $in: ids },
-      "revenue.tm": { $ne: null },
-    })
-      .select(
-        "storeId workDate shiftName employeeName createdAt revenue staffTotal",
-      )
-      .lean(),
-    DayRevenue.find({
-      date: { $gte: first, $lte: last },
-      storeId: { $in: ids },
-    })
-      .select("storeId date sheet")
-      .lean(),
-    // phiếu nộp TM → TK / rút TK → TM của cơ sở trong tháng (phiếu rút lãi / bổ sung vốn ở trang Sổ quỹ không tính ở đây)
-    CashTransfer.find({
-      month,
-      storeId: { $in: ids },
-      kind: { $in: ["DEPOSIT", "WITHDRAW"] },
-    })
-      .sort({ date: -1, createdAt: -1 })
-      .lean(),
-  ]);
-  const tzOf = new Map(
-    stores.map((s) => [String(s._id), s.timezone || "Asia/Ho_Chi_Minh"]),
-  );
-  const nameOf = new Map(
-    stores.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]),
-  );
-
-  // gom theo ngày × cơ sở
-  const groups = new Map<string, typeof closings>();
-  for (const c of closings) {
-    const k = `${c.workDate}|${c.storeId}`;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(c);
-  }
-  // số ngày lấy từ CÙNG hàm với Lãi lỗ (dayRevenueFromClosings) → tổng luôn khớp
-  const dayRev = new Map(
-    dayRevenueFromClosings(closings).map((d) => [`${d.date}|${d.storeId}`, d]),
-  );
-  const rows: DayRow[] = [...groups.entries()].map(([k, list]) => {
-    const [date, storeId] = k.split("|");
-    const deltas = shiftDeltas(list);
-    const lastC = deltas[deltas.length - 1].closing;
-    const r = dayRev.get(k) as unknown as Partial<Revenue>;
-    const sheet = days.find(
-      (d) => d.date === date && String(d.storeId) === storeId,
-    )?.sheet;
-    const fig = (x: Partial<Revenue>) => ({
-      tk: x.tk ?? 0,
-      tm: x.tm ?? 0,
-      sg: (x.grab ?? 0) + (x.shopee ?? 0),
-      ket: x.cp ?? 0,
-      thu:
-        (x.tk ?? 0) +
-        (x.tm ?? 0) +
-        (x.grab ?? 0) +
-        (x.shopee ?? 0) +
-        (x.cp ?? 0), // DT thật = TK + TM + Grab + Shopee + két
-      dtm: x.dt ?? null,
-      diff: x.dt != null ? revenueDiff(x) : null,
-    });
-    return {
-      key: k,
-      date,
-      dateLabel: `${weekdayVi(date).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} ${date.slice(8)}/${date.slice(5, 7)}`,
-      storeId,
-      storeName: nameOf.get(storeId) ?? "?",
-      ...fig(r),
-      done: ["Sáng", "Chiều", "Tối"].filter((n) =>
-        list.some((c) => c.shiftName === n),
-      ),
-      final: lastC.shiftName === "Tối",
-      sheet: sheet
-        ? {
-            status: sheet.status ?? "PENDING",
-            error: sheet.error ?? "",
-            range: sheet.range ?? "",
-          }
-        : null,
-      shifts: deltas.map(({ closing: c, own }) => {
-        const cr = (c.revenue ?? {}) as Partial<Revenue>;
-        const sum = closingSum(cr);
-        return {
-          name: c.shiftName ?? "Ngoài ca",
-          at: c.createdAt
-            ? localTime(new Date(c.createdAt), tzOf.get(storeId)).slice(0, 5)
-            : "",
-          who: c.employeeName ?? "",
-          ...fig(cr),
-          own: own.tm + own.tk + own.grab + own.shopee + own.cp,
-          staffTotal: c.staffTotal ?? null,
-          totalOk: c.staffTotal == null ? null : c.staffTotal === sum,
-        };
-      }),
-    };
-  });
-  rows.sort(
-    (a, b) =>
-      b.date.localeCompare(a.date) || a.storeName.localeCompare(b.storeName),
-  );
-
-  // Admin khác (quyền xem) chỉ thấy số SAU CÙNG: phiếu nộp / rút cộng thẳng vào TK / TM của ngày ghi phiếu.
-  // Admin Tổng thấy số ban đầu theo chốt ca + dòng "sau chuyển" ở thẻ tổng.
+  // dòng bảng dùng chung với menu Doanh thu (lib/daily-revenue-rows) → 2 nơi luôn khớp số
+  const { rows, transfers, nameOf } = await loadDailyRevenueRows({ month, stores, shown, owner });
   const net = (t: { kind: string; amount: number }) =>
     t.kind === "DEPOSIT" ? t.amount : -t.amount; // TK tăng bao nhiêu
-  if (!owner) {
-    for (const t of transfers) {
-      const r = rows.find(
-        (x) => x.date === t.date && x.storeId === String(t.storeId),
-      );
-      if (r) {
-        r.tk += net(t);
-        r.tm -= net(t);
-      }
-    }
-  }
 
   // tổng hợp theo cơ sở
   const sumOf = (rs: DayRow[]) => ({

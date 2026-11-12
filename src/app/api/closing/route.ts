@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { isProbation, PROBATION_OFF } from "@/lib/probation";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
     const user = await getCurrentUser();
     if (!user) throw new HttpError(401, "Chưa đăng nhập");
     if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");
+    if (isProbation(user)) throw new HttpError(403, PROBATION_OFF);
     const parsed = Body.safeParse(await req.json());
     if (!parsed.success) throw new HttpError(400, "Số liệu chốt ca chưa hợp lệ");
     // bắt buộc: Tiền mặt, Tài khoản (kể cả 0). Doanh thu máy không bắt buộc (admin cấp, có thì nhập)

@@ -51,8 +51,8 @@ export function ActionForm({
       {children}
       {state?.error && <Alert tone="red">{state.error}</Alert>}
       {state?.ok && successText && <Alert tone="green">{successText}</Alert>}
-      <Button type="submit" variant={variant} disabled={pending} className={buttonClassName}>
-        {pending ? "Đang xử lý…" : submitLabel}
+      <Button type="submit" variant={variant} loading={pending} loadingText="Đang xử lý…" className={buttonClassName}>
+        {submitLabel}
       </Button>
       {confirm && (
         <ConfirmDialog

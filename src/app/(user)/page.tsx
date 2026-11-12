@@ -6,6 +6,7 @@ import { Badge, Card } from "@/components/ui";
 import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
+import { isProbation, PROBATION_MIN_SHIFTS, probationEnd } from "@/lib/probation";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,9 @@ export default async function HomePage() {
   const candIds = open ? [String(open.storeId)] : [String(user.storeId), ...shifts.map((s) => String(s.storeId))];
   const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace checkGps checkWifi wifiName").lean();
   const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
-  const goodsOn = await goodsEnabled();
+  // nhân viên thử việc: không Chốt ca / Nhận hàng / Tồn kho
+  const trial = isProbation(user);
+  const goodsOn = !trial && (await goodsEnabled());
   const stockOn = goodsOn && (await stockEnabled());
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
 
@@ -49,6 +52,15 @@ export default async function HomePage() {
               : undefined
         }
       />
+      {trial ? (
+        <div className="rounded-2xl bg-primary-light p-4 text-sm ring-1 ring-primary">
+          <span className="block font-bold text-accent">🌱 Bạn đang thử việc</span>
+          <span className="text-xs text-ink/70">
+            Làm đủ {PROBATION_MIN_SHIFTS} ca trong tháng thử việc{user.probationStart ? ` (đến ${viDate(probationEnd(user.probationStart))})` : ""} để lên nhân viên chính thức. Chốt ca, nhận
+            hàng, tồn kho do nhân viên chính thức làm.
+          </span>
+        </div>
+      ) : (
       <Link
         href="/closing"
         className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
@@ -59,6 +71,7 @@ export default async function HomePage() {
         </span>
         <span className="text-xl text-accent">›</span>
       </Link>
+      )}
       {goodsOn && (
       <Link
         href="/receive"

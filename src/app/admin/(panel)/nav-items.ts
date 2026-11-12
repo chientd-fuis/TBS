@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   Store,
+  TrendingUp,
   Users,
   Wallet,
   type LucideIcon,
@@ -42,6 +43,7 @@ export const NAV: NavGroup[] = [
     ],
   },
   { label: "Yêu cầu", icon: Inbox, links: [{ href: "/admin/requests", label: "Yêu cầu", badge: "requests" }] },
+  { label: "Doanh thu", icon: TrendingUp, links: [{ href: "/admin/revenue", label: "Doanh thu", perm: ["revenue"] }] },
   { label: "Tài chính", icon: PiggyBank, links: [{ href: "/admin/finance", label: "Tài chính", perm: ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.revenue", "finance.cashbook", "finance.settings"] }] },
   { label: "Chốt ca", icon: Receipt, links: [{ href: "/admin/closings", label: "Chốt ca" }] },
   {

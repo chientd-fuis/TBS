@@ -5,6 +5,8 @@ import { requireActiveUser } from "@/lib/guards";
 import { STAFF_PERMS } from "@/lib/permissions";
 import { Logo } from "@/components/Logo";
 import ManageTabs from "./ManageTabs";
+import NavProgress from "@/components/NavProgress";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,9 @@ export default async function ManageLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-primary px-4 py-2 shadow-sm">
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         <Link href="/" className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold hover:bg-white/40">
           <ArrowLeft size={16} /> App
         </Link>

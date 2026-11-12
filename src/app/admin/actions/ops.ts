@@ -7,6 +7,7 @@ import {
   AdjustmentRequest,
   Attendance,
   AttendanceAdjustment,
+  AutoPenaltyWaiver,
   BonusPenalty,
   Payroll,
   PayrollItem,
@@ -21,7 +22,7 @@ import { assertAdmin, assertPerm } from "@/lib/guards";
 import { adminActor, type AdminSession } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf, storeTz } from "@/lib/attendance";
-import { addDays, localMonth, zonedToDate } from "@/lib/time";
+import { addDays, localDate, localMonth, zonedToDate } from "@/lib/time";
 import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
 import { errMsg, num, str, type FormState } from "./types";
@@ -110,14 +111,58 @@ export async function saveShiftTemplate(_: FormState, fd: FormData): Promise<For
     if (!data.storeId || !data.name) return { error: "Chọn cơ sở và nhập tên ca" };
     if (!TIME_RE.test(data.startTime) || !TIME_RE.test(data.endTime)) return { error: "Giờ không hợp lệ (HH:mm)" };
     if (data.startTime === data.endTime) return { error: "Giờ bắt đầu và kết thúc phải khác nhau" };
-    if (id) await ShiftTemplate.updateOne({ _id: id }, { $set: data });
-    else await ShiftTemplate.create(data);
-    await audit(adminActor(admin), id ? "shift.template.update" : "shift.template.create", { type: "ShiftTemplate", id }, null, data);
+    let synced = { shifts: 0, attendances: 0 };
+    if (id) {
+      await ShiftTemplate.updateOne({ _id: id }, { $set: data });
+      // ca đã xếp lưu sẵn bản sao giờ / tên ca → cập nhật các ca đã xếp còn lệch với ca mẫu từ ngày áp dụng
+      // (bấm Lưu lại không đổi gì vẫn sửa được dữ liệu cũ đã lệch)
+      const from = DATE_RE.test(str(fd.get("applyFrom"))) ? str(fd.get("applyFrom")) : localDate(new Date(), await storeTz(data.storeId));
+      synced = await syncTemplateAssignments(id, from);
+    } else await ShiftTemplate.create(data);
+    await audit(adminActor(admin), id ? "shift.template.update" : "shift.template.create", { type: "ShiftTemplate", id }, null, { ...data, ...synced });
     revalidatePath("/admin/shifts");
+    revalidatePath("/admin/attendance");
     return { ok: true };
   } catch (e) {
     return errMsg(e);
   }
+}
+
+/**
+ * Ca mẫu đổi giờ / tên → cập nhật các ca đã xếp của ca mẫu đó từ ngày `from`, rồi tính lại đi muộn / về sớm
+ * cho các lượt chấm công liên quan (bỏ qua tháng đã trả lương).
+ */
+async function syncTemplateAssignments(tplId: string, from: string) {
+  const tpl = await ShiftTemplate.findById(tplId).lean();
+  if (!tpl) return { shifts: 0, attendances: 0 };
+  const list = await ShiftAssignment.find({
+    shiftTemplateId: tpl._id,
+    date: { $gte: from },
+    $or: [{ startTime: { $ne: tpl.startTime } }, { endTime: { $ne: tpl.endTime } }, { shiftName: { $ne: tpl.name } }],
+  })
+    .select("_id userId date")
+    .lean();
+  if (!list.length) return { shifts: 0, attendances: 0 };
+  await ShiftAssignment.updateMany(
+    { _id: { $in: list.map((a) => a._id) } },
+    { $set: { startTime: tpl.startTime, endTime: tpl.endTime, shiftName: tpl.name } },
+  );
+  // lượt chấm công gắn với các ca này, hoặc với ca liền kề cùng ngày (khối ca liền: ca 1 + ca 2)
+  const atts = await Attendance.find({
+    userId: { $in: [...new Set(list.map((a) => String(a.userId)))] },
+    workDate: { $gte: addDays(from, -1) },
+    shiftAssignmentId: { $ne: null },
+  }).select("storeId homeStoreId userId month shiftAssignmentId checkInAt checkOutAt extraHours lateMinutes earlyMinutes shiftLabel").lean();
+  let n = 0;
+  for (const a of atts) {
+    if (await isMonthLocked(payStoreOf(a), a.month, a.userId)) continue;
+    const f = await computeFields({ storeId: a.storeId, shiftAssignmentId: a.shiftAssignmentId, checkInAt: a.checkInAt, checkOutAt: a.checkOutAt, extraHours: a.extraHours });
+    const set = { lateMinutes: f.lateMinutes ?? 0, earlyMinutes: f.earlyMinutes ?? 0, shiftLabel: f.shiftLabel ?? a.shiftLabel ?? null };
+    if (set.lateMinutes === (a.lateMinutes ?? 0) && set.earlyMinutes === (a.earlyMinutes ?? 0) && set.shiftLabel === (a.shiftLabel ?? null)) continue;
+    await Attendance.updateOne({ _id: a._id }, { $set: set });
+    n++;
+  }
+  return { shifts: list.length, attendances: n };
 }
 
 /** Xếp ca hàng loạt: nhiều nhân viên × khoảng ngày × thứ trong tuần. */
@@ -174,11 +219,14 @@ export async function copyPrevWeek(_: FormState, fd: FormData): Promise<FormStat
     const storeId = str(fd.get("storeId"));
     const weekStart = str(fd.get("weekStart"));
     const prev = await ShiftAssignment.find({ storeId, date: { $gte: addDays(weekStart, -7), $lt: weekStart }, ...APPROVED_SHIFT }).lean();
+    // lấy giờ / tên theo ca mẫu HIỆN TẠI (ca tuần trước có thể còn giờ cũ trước khi sửa ca mẫu)
+    const tpls = new Map((await ShiftTemplate.find({ _id: { $in: prev.map((a) => a.shiftTemplateId) } }).lean()).map((t) => [String(t._id), t]));
     let n = 0;
     for (const a of prev) {
+      const t = tpls.get(String(a.shiftTemplateId));
       const r = await ShiftAssignment.updateOne(
         { userId: a.userId, date: addDays(a.date, 7), shiftTemplateId: a.shiftTemplateId },
-        { $setOnInsert: { storeId, startTime: a.startTime, endTime: a.endTime, shiftName: a.shiftName, status: "APPROVED", source: "BULK" } },
+        { $setOnInsert: { storeId, startTime: t?.startTime ?? a.startTime, endTime: t?.endTime ?? a.endTime, shiftName: t?.name ?? a.shiftName, status: "APPROVED", source: "BULK" } },
         { upsert: true },
       );
       n += r.upsertedCount;
@@ -386,7 +434,8 @@ export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<Fo
     await assertNotLocked(bp.storeId, bp.month, bp.userId); // tháng cũ
     await assertNotLocked(bp.storeId, date.slice(0, 7), bp.userId); // tháng mới (nếu đổi ngày)
     const before = bp.toObject();
-    bp.set({ kind: str(fd.get("kind")) === "BONUS" ? "BONUS" : "PENALTY", date, month: date.slice(0, 7), amountVnd, content });
+    // phạt tự động bị sửa tay → giữ nguyên theo admin, không tự cập nhật / xoá nữa
+    bp.set({ kind: str(fd.get("kind")) === "BONUS" ? "BONUS" : "PENALTY", date, month: date.slice(0, 7), amountVnd, content, ...(bp.autoKey ? { autoEdited: true } : {}) });
     await bp.save();
     await audit(adminActor(admin), "bonusPenalty.update", { type: "BonusPenalty", id: String(bp._id) }, before, bp.toObject());
     revalidatePath("/admin/bonus-penalty");
@@ -403,6 +452,8 @@ export async function deleteBonusPenalty(_: FormState, fd: FormData): Promise<Fo
     if (!bp) return { error: "Không tìm thấy" };
     await assertNotLocked(bp.storeId, bp.month, bp.userId);
     await audit(adminActor(admin), "bonusPenalty.delete", { type: "BonusPenalty", id: String(bp._id) }, bp.toObject(), null);
+    // xoá phạt tự động = miễn phạt → không tự tạo lại
+    if (bp.autoKey) await AutoPenaltyWaiver.updateOne({ key: bp.autoKey }, { $setOnInsert: { key: bp.autoKey, by: adminActor(admin).name } }, { upsert: true });
     await bp.deleteOne();
     revalidatePath("/admin/bonus-penalty");
     return { ok: true };

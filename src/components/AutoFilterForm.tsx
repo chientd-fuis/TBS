@@ -1,6 +1,7 @@
 "use client";
 import { useRef, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { startNavProgress } from "@/components/NavProgress";
 
 /**
  * Form lọc tự áp dụng: đổi ô chọn là lọc ngay (không cần nút "Lọc").
@@ -29,6 +30,8 @@ export function AutoFilterForm({
     fd.forEach((v, k) => {
       if (typeof v === "string" && v.trim() !== "") sp.set(k, v.trim());
     });
+    // lọc = chuyển trang bằng code → bật loading (vạch dưới header / vòng xoay theo chuột) nếu query thật sự đổi
+    if (sp.toString() !== window.location.search.replace(/^\?/, "")) startNavProgress();
     router.replace(`${path}?${sp.toString()}`, { scroll: false });
   };
 

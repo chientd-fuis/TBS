@@ -7,7 +7,12 @@ import BottomNav from "@/components/user/BottomNav";
 import RegRequestAlert from "@/components/user/RegRequestAlert";
 import UserNotices from "@/components/user/UserNotices";
 import RulesButton from "@/components/user/RulesButton";
+import HelpButton from "@/components/user/HelpButton";
+import NavProgress from "@/components/NavProgress";
+import { Suspense } from "react";
 import { getAiConfig, roleAllowed, rulesShown, userAiRole } from "@/lib/ai";
+import { isProbation } from "@/lib/probation";
+import { cn } from "@/lib/format";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -18,14 +23,24 @@ export default async function UserLayout({ children }: { children: React.ReactNo
   const ai = await getAiConfig().catch(() => null);
   const rules = ai ? rulesShown(ai) : "";
   const showAssistant = !!ai && ai.enabled && ai.features.assistant.enabled && roleAllowed(ai, "assistant", userAiRole(user));
+  // thử việc → cả app (kể cả thanh menu dưới) đổi sang màu hồng tím
+  const trial = isProbation(user);
   return (
+    <div className={cn("min-h-screen", trial && "theme-trial")}>
     <div className="mx-auto min-h-screen max-w-lg pb-24">
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-primary px-4 py-2 shadow-sm">
+        {/* vạch tiến trình chuyển trang – mép dưới header */}
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         {/* bấm logo / tên → về trang chủ chấm công */}
         <Link href="/" aria-label="Về trang chủ chấm công" className="flex min-w-0 flex-1 items-center gap-3">
           <Logo size={36} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold">{user.name}</span>
+            <span className="flex items-center gap-1.5 truncate text-sm font-bold">
+              <span className="truncate">{user.name}</span>
+              {trial && <span className="shrink-0 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-accent">Thử việc</span>}
+            </span>
             <span className="block truncate text-xs">{store?.name}</span>
           </span>
         </Link>
@@ -34,6 +49,8 @@ export default async function UserLayout({ children }: { children: React.ReactNo
             <Sparkles size={15} /> Hỏi trợ lý
           </Link>
         )}
+        {/* "?" Trợ giúp: hướng dẫn app, quy trình theo vị trí, thông tin quán, tình huống hay gặp */}
+        <HelpButton />
         {/* quản lý: nút "Quản lý"; nhân viên: nút "Nội quy" (badge NEW khi admin cập nhật) */}
         {user.managerPerms?.length ? (
           <Link href="/manage" className="flex items-center gap-1 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30">
@@ -49,6 +66,7 @@ export default async function UserLayout({ children }: { children: React.ReactNo
         {children}
       </main>
       <BottomNav />
+    </div>
     </div>
   );
 }

@@ -11,10 +11,32 @@ const variants: Record<Variant, string> = {
   ghost: "text-accent hover:bg-primary-light",
 };
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition active:scale-[.97] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed";
 
-export function Button({ variant = "primary", className, ...p }: ComponentProps<"button"> & { variant?: Variant }) {
-  return <button className={cn(base, variants[variant], className)} {...p} />;
+/** Vòng xoay nhỏ dùng trong nút (kế thừa màu chữ của nút) */
+export function Spinner({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-[2.5px] border-current border-r-transparent", className)} />;
+}
+
+/**
+ * Nút dùng chung. loading = đang xử lý (phương án D): hiện vòng xoay + loadingText (mặc định giữ chữ cũ), khoá không bấm lại.
+ * Khi chạm: nút lún nhẹ (active:scale).
+ */
+export function Button({
+  variant = "primary",
+  className,
+  loading = false,
+  loadingText,
+  children,
+  disabled,
+  ...p
+}: ComponentProps<"button"> & { variant?: Variant; loading?: boolean; loadingText?: ReactNode }) {
+  return (
+    <button className={cn(base, variants[variant], loading && "disabled:opacity-80 disabled:cursor-wait", className)} disabled={disabled || loading} aria-busy={loading || undefined} {...p}>
+      {loading && <Spinner />}
+      {loading && loadingText !== undefined ? loadingText : children}
+    </button>
+  );
 }
 export function LinkButton({
   variant = "primary",

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireActiveUser } from "@/lib/guards";
+import { isProbation } from "@/lib/probation";
 import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { getGoodsCatalog, GOODS_OFF, goodsEnabled, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
@@ -18,6 +20,7 @@ const TG = { SENT: ["Đã báo nhóm", "green"], FAILED: ["Báo nhóm lỗi", "r
 /** Nhận hàng / tồn kho: nhân viên ghi đồ cơ sở vừa nhận / số còn cuối ngày → báo nhóm Telegram */
 export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
   const user = await requireActiveUser();
+  if (isProbation(user)) redirect("/"); // nhân viên thử việc không nhận hàng / tồn kho
   const stock = kind === "STOCK";
   if (!(await goodsEnabled())) return <Alert tone="yellow">{GOODS_OFF}.</Alert>;
   if (stock && !(await stockEnabled())) return <Alert tone="yellow">{STOCK_OFF}.</Alert>;

@@ -8,6 +8,8 @@ import { SignOutButton } from "@/components/user/AuthButtons";
 import { adminLogout } from "../actions/auth";
 import AdminNav from "./AdminNav";
 import MobileMenu from "./MobileMenu";
+import NavProgress from "@/components/NavProgress";
+import { Suspense } from "react";
 import SectionTabs from "./SectionTabs";
 import AskAiPanel from "./AskAiPanel";
 import { aiAllowed, aiRemaining } from "@/lib/ai";
@@ -68,7 +70,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:static lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none">
+        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:static lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none tbs-navbar-on-dark">
+          {/* loading chuyển trang / lọc (chỉ điện thoại): vạch vàng dưới header. Menu có vòng xoay riêng (data-no-navbar), nút có loading trong nút */}
+          <Suspense fallback={null}>
+            <NavProgress mobileOnly />
+          </Suspense>
           <MobileMenu
             nav={nav}
             account={

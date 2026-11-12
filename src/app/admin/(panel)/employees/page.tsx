@@ -10,7 +10,8 @@ import { PayTermsFields } from "@/components/PayTermsFields";
 import { isOwnerEmail } from "@/lib/auth";
 import EditEmployeeButton from "./EditEmployeeButton";
 import EmployeeColumns from "./EmployeeColumns";
-import { localDate, localMonth } from "@/lib/time";
+import { localDate, localMonth, viDate } from "@/lib/time";
+import { probationEnd } from "@/lib/probation";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 
 export const dynamic = "force-dynamic";
@@ -75,10 +76,16 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                   <tr key={String(u._id)}>
                     <td className="font-semibold">
                       {u.name || u.googleName}
-                      {(u.adminStaff || u.payType === "FULLTIME") && (
+                      {(u.adminStaff || u.payType === "FULLTIME" || u.probation) && (
                         <span className="mt-0.5 flex flex-wrap gap-1">
                           {u.adminStaff && <Badge tone="pink">Admin</Badge>}
                           {u.payType === "FULLTIME" && <Badge tone="blue">Full-time</Badge>}
+                          {u.probation && (
+                            <span className="rounded-full bg-[#f3e1fa] px-2 py-0.5 text-xs font-semibold text-[#7e3a9c]">
+                              Thử việc{u.probationStart ? ` đến ${viDate(probationEnd(u.probationStart))}` : ""}
+                            </span>
+                          )}
+                          {u.probation && u.probationReview && <Badge tone="red">Cần xem xét</Badge>}
                         </span>
                       )}
                     </td>

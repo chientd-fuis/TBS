@@ -57,6 +57,10 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
                     <option value="on">Dùng</option>
                     <option value="off">Ẩn</option>
                   </Select>
+                  <label className="flex flex-col text-xs text-ink/60" title="Đổi giờ / tên ca → cập nhật các ca đã xếp từ ngày này + tính lại đi muộn / về sớm (bỏ qua tháng đã trả lương)">
+                    Áp dụng từ
+                    <Input type="date" name="applyFrom" defaultValue={localDate(new Date(), tz)} className="w-36" />
+                  </label>
                 </ActionForm>
                 {t.endTime < t.startTime && <Badge tone="pink">Qua đêm</Badge>}
               </li>

@@ -4,6 +4,9 @@ import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
 import { approveUser, rejectUser } from "../../actions/people";
+import { OFFICIAL_WAGE, PROBATION_MIN_SHIFTS, PROBATION_WAGE } from "@/lib/probation";
+
+const vnd = (n: number) => n.toLocaleString("vi-VN");
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +48,16 @@ export default async function ApprovalsPage() {
                 {!dev.length && <span className="text-danger">chưa ghi nhận</span>}
               </div>
               <div className="mt-3 grid gap-2">
-                <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
+                <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex flex-wrap items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
                   <input type="hidden" name="userId" value={String(u._id)} />
-                  <Input name="hourlyWage" inputMode="numeric" placeholder="Lương giờ (VND)" className="flex-1" />
+                  <Input name="hourlyWage" inputMode="numeric" placeholder={`Lương giờ (thử việc: ${vnd(PROBATION_WAGE)})`} className="min-w-0 flex-1" />
+                  <label className="flex w-full items-start gap-2 rounded-lg bg-[#f6e8fb] px-2 py-1.5 text-xs text-[#6b2d86] ring-1 ring-[#e3c6f0]">
+                    <input type="checkbox" name="probation" defaultChecked className="mt-0.5 h-4 w-4 accent-[#a855c7]" />
+                    <span>
+                      <b>Thử việc</b> – lương mặc định {vnd(PROBATION_WAGE)}đ/giờ (nếu để trống ô lương), không dùng Chốt ca / Nhận hàng / Tồn kho. Sau 1 tháng làm đủ{" "}
+                      {PROBATION_MIN_SHIFTS} ca → tự lên chính thức {vnd(OFFICIAL_WAGE)}đ/giờ; chưa đủ → admin xem xét.
+                    </span>
+                  </label>
                 </ActionForm>
                 <ActionForm action={rejectUser} submitLabel="Từ chối" successText="Đã từ chối" variant="outline" className="flex items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
                   <input type="hidden" name="userId" value={String(u._id)} />
