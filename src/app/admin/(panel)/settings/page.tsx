@@ -198,39 +198,42 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 check-out, vẫn tính “quên check-out” như cũ. Sau khi tự check-out: nút chấm công mờ 2 tiếng kèm thông báo “Bạn đã được tự động check-out”.
               </span>
             </div>
-            <fieldset disabled={!isOwner} className="divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
+            {/* mỗi cơ sở 2 dòng: [tick + tên] / [Check-out lúc __:__ · gợi ý] – không ép chung 1 hàng (điện thoại bị đè chữ) */}
+            <fieldset disabled={!isOwner} className="min-w-0 divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
               {acStores.map((st) => {
                 const id = String(st._id);
                 return (
-                  <div key={id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                  <div key={id} className="space-y-1.5 px-3 py-2.5">
                     <input type="hidden" name="storeIds" value={id} />
-                    <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-                      <input type="checkbox" name={`ac_on_${id}`} defaultChecked={st.autoCheckoutOn === true} className="h-4 w-4" />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name={`ac_on_${id}`} defaultChecked={st.autoCheckoutOn === true} className="h-4 w-4 shrink-0" />
                       <span className="font-semibold">{st.name}</span>
                     </label>
-                    <label className="flex items-center gap-1.5 text-xs text-ink/70">
-                      Check-out lúc
-                      <Input type="time" name={`ac_time_${id}`} defaultValue={st.autoCheckoutTime || lastShiftEnd.get(id) || "23:00"} className="w-28" />
-                    </label>
-                    {lastShiftEnd.get(id) && <span className="text-[11px] text-ink/50">ca muộn nhất kết thúc {lastShiftEnd.get(id)}</span>}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-ink/70">
+                      <label htmlFor={`ac_time_${id}`} className="shrink-0 whitespace-nowrap">
+                        Check-out lúc
+                      </label>
+                      <Input id={`ac_time_${id}`} type="time" name={`ac_time_${id}`} defaultValue={st.autoCheckoutTime || lastShiftEnd.get(id) || "23:00"} className="w-28 shrink-0" />
+                      {lastShiftEnd.get(id) && <span className="text-[11px] text-ink/50">ca muộn nhất kết thúc {lastShiftEnd.get(id)}</span>}
+                    </div>
                   </div>
                 );
               })}
             </fieldset>
-            <fieldset disabled={!isOwner} className="flex flex-wrap items-center gap-3 rounded-xl bg-cream px-3 py-2 ring-1 ring-[#f1e6c8]">
-              <label className="flex min-w-0 flex-1 items-start gap-2 text-sm">
-                <input type="checkbox" name="quietCheckinOn" defaultChecked={s.quietCheckinOn !== false} className="mt-0.5 h-4 w-4" />
+            <fieldset disabled={!isOwner} className="min-w-0 space-y-2 rounded-xl bg-cream px-3 py-2.5 ring-1 ring-[#f1e6c8]">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="quietCheckinOn" defaultChecked={s.quietCheckinOn !== false} className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   <b>Giờ cấm check-in</b> (mọi cơ sở)
                   <span className="block text-xs text-ink/60">Trong khoảng này nút CHECK-IN mờ, không chấm công vào được. Check-out vẫn bấm được.</span>
                 </span>
               </label>
-              <label className="flex items-center gap-1.5 text-xs text-ink/70">
-                Từ <Input type="time" name="quietCheckinFrom" defaultValue={s.quietCheckinFrom || "01:00"} className="w-28" />
-              </label>
-              <label className="flex items-center gap-1.5 text-xs text-ink/70">
-                đến <Input type="time" name="quietCheckinTo" defaultValue={s.quietCheckinTo || "06:00"} className="w-28" />
-              </label>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-ink/70">
+                <label htmlFor="quietCheckinFrom" className="shrink-0">Từ</label>
+                <Input id="quietCheckinFrom" type="time" name="quietCheckinFrom" defaultValue={s.quietCheckinFrom || "01:00"} className="w-28 shrink-0" />
+                <label htmlFor="quietCheckinTo" className="shrink-0">đến</label>
+                <Input id="quietCheckinTo" type="time" name="quietCheckinTo" defaultValue={s.quietCheckinTo || "06:00"} className="w-28 shrink-0" />
+              </div>
             </fieldset>
           </ActionForm>
         </Card>
