@@ -25,6 +25,9 @@ import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf
 import { addDays, localDate, localMonth, zonedToDate } from "@/lib/time";
 import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
+import { dayAttendances, pickTarget, requestWindow } from "@/lib/adjustment";
+import { flagOvertime } from "@/lib/overtime";
+import { after } from "next/server";
 import { errMsg, num, str, type FormState } from "./types";
 import { extractSheetId } from "@/lib/revenue";
 import { normalizeIp, parseIpList } from "@/lib/checkin-methods";
@@ -612,22 +615,37 @@ export async function resolveAdjustment(_: FormState, fd: FormData): Promise<For
     const reply = str(fd.get("reply"));
     try {
       if (op === "approve") {
-        let target = req.attendanceId ? await Attendance.findById(req.attendanceId).lean() : null;
-        // chỉ sửa lượt của CHÍNH người gửi yêu cầu
-        if (target && String(target.userId) !== String(req.userId)) target = null;
-        if (!target && req.workDate) {
-          // lượt cùng ngày đang thiếu giờ ra
-          target = await Attendance.findOne({ userId: req.userId, workDate: req.workDate, status: { $in: ["OPEN", "MISSING_CHECKOUT"] } }).lean();
+        const inTime = str(fd.get("inTime")) || req.checkInTime || "";
+        const outTime = str(fd.get("outTime")) || req.checkOutTime || "";
+        const date = req.workDate || "";
+        const tz = await storeTz(req.storeId);
+        // ngày có thể có nhiều lượt (2 ca cách nhau) → sửa ĐÚNG lượt: admin chọn ở form, hoặc tự chọn theo giờ (lib/adjustment.ts)
+        const list = date ? await dayAttendances(req.userId, date) : [];
+        const pick = str(fd.get("targetId"));
+        let targetId: string | undefined;
+        if (pick === "new") targetId = undefined;
+        else if (pick && pick !== "auto") {
+          if (!list.some((a) => String(a._id) === pick)) throw new Error("Lượt chấm công đã chọn không còn – tải lại trang"); // chỉ lượt của chính người gửi, đúng ngày
+          targetId = pick;
+        } else {
+          const { reqIn, reqOut } = requestWindow(date, inTime, outTime, tz);
+          targetId = pickTarget(list, reqIn, reqOut)?._id.toString();
         }
-        await upsertAttendance(admin, {
-          id: target ? String(target._id) : undefined,
+        const saved = await upsertAttendance(admin, {
+          id: targetId,
           userId: String(req.userId),
-          date: req.workDate || (target?.workDate ?? ""),
-          inTime: str(fd.get("inTime")) || req.checkInTime || "",
-          outTime: str(fd.get("outTime")) || req.checkOutTime || "",
+          date,
+          inTime,
+          outTime,
           reason: `Yêu cầu NV: ${req.reason}`,
           source: "REQUEST",
         });
+        // giờ ra quá giờ hết ca > 30 phút → gắn làm thêm chờ xác nhận (giống tự bấm check-out)
+        if (outTime && saved?.status === "COMPLETED" && !saved.overtime?.status) {
+          const [u, st] = await Promise.all([User.findById(req.userId).select("name email").lean(), Store.findById(saved.storeId).select("name").lean()]);
+          const ot = await flagOvertime(saved._id, await storeTz(saved.storeId), { employeeName: u?.name || u?.email || "?", storeId: saved.storeId, storeName: st?.name || "" });
+          if (ot) after(ot.notify);
+        }
         req.status = "APPROVED";
       } else {
         req.status = "REJECTED";

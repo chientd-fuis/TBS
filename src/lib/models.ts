@@ -297,9 +297,14 @@ const AttendanceSchema = new Schema(
     manualReason: String,
     status: { type: String, enum: ["OPEN", "COMPLETED", "MISSING_CHECKOUT"], default: "OPEN" },
     missedCheckout: { type: Boolean, default: false }, // đã từng bị đánh dấu quên check-out (giữ lại kể cả khi admin bổ sung giờ ra) → phạt tự động
-    autoCheckout: { type: Boolean, default: false }, // hệ thống tự check-out lúc hết ca tối (lib/auto-checkout.ts)
-    // quá giờ check-out cuối ngày (cơ sở bật tự check-out) mà không được xếp ca tối → hệ thống ghi QUÊN CHECK-OUT lúc này
+    autoCheckout: { type: Boolean, default: false }, // (cũ) hệ thống tự check-out lúc hết ca tối – nay không dùng nữa, nhân viên phải tự check-out
+    // bấm check-out sau giờ chốt công ca tối (VD 23:20 > 23:00) → checkOutAt = 23:00 (chỉ tính công tới đó), giờ bấm thật lưu ở đây
+    actualCheckOutAt: Date,
+    // quá hạn check-out (cơ sở bật chốt công ca tối): ca khác 23:00, ca tối 23:00 + 2 tiếng → hệ thống ghi QUÊN CHECK-OUT lúc này
     cutoffMissingAt: Date,
+    // lượt quên check-out chờ báo nhóm chấm công: false = chưa báo (gom báo 1 tin lúc giờ chốt + 2 tiếng, VD 01:00), true = đã báo.
+    // Không có default: lượt cũ (trước khi có trường này) không bị báo lại.
+    missedNotified: Boolean,
     // Làm thêm giờ (lib/overtime.ts): check-out quá giờ hết ca được xếp > 30 phút → chờ admin duyệt.
     // Từ chối → giờ ra = giờ hết ca (chỉ tính công trong ca), giờ ra thật lưu ở actualOutAt
     overtime: {

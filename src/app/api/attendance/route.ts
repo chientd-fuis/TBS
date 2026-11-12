@@ -13,7 +13,7 @@ import { audit } from "@/lib/audit";
 import { savePhoto } from "@/lib/drive";
 import { addDays, localDate, localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
-import { checkinLock, runAutoCheckout } from "@/lib/auto-checkout";
+import { checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 import { flagOvertime } from "@/lib/overtime";
 
 const Body = z.object({
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     const now = new Date(); // giờ server
     let open = await openAttendance(user._id);
     // Lượt mở từ hôm trước bị quên check-out (cron chưa kịp chạy) → đóng lại, lần bấm này là CHECK-IN mới
-    // Cơ sở bật tự check-out ca tối: lượt đang mở đã quá giờ → hệ thống check-out trước (đúng giờ cài đặt)
+    // Cơ sở bật chốt công ca tối: lượt đang mở đã quá hạn check-out (ca tối 23:00 + 2 tiếng, ca khác 23:00) → ghi quên check-out trước
     if (open) {
       const st = await Store.findById(open.storeId).select("autoCheckoutOn").lean();
       if (st?.autoCheckoutOn) {
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       }
     }
     if (open && (await isStaleOpen(open, settings.missingCheckoutHours, now.getTime()))) {
-      await Attendance.updateOne({ _id: open._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT", missedCheckout: true } });
+      await Attendance.updateOne({ _id: open._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT", missedCheckout: true, missedNotified: false } });
       open = null;
     }
     // Không có lượt mở → kiểm tra khoá: vừa được tự check-out (2 tiếng) / giờ cấm check-in (mặc định 01:00–06:00)
@@ -177,6 +177,9 @@ export async function POST(req: Request) {
           code: "TOO_SOON",
         });
       await assertNotLocked(payStoreOf(open), open.month, open.userId);
+      // cơ sở bật chốt công ca tối: bấm check-out sau giờ chốt (VD 23:20) → chỉ tính công tới giờ chốt (23:00), lưu giờ bấm thật
+      const capInfo = await checkoutCap(open, now);
+      const outAt = capInfo?.cap ?? now;
       const photo = photoBuf
         ? await savePhoto(photoBuf, {
             storeId: String(store._id),
@@ -191,7 +194,7 @@ export async function POST(req: Request) {
         storeId: open.storeId,
         shiftAssignmentId: open.shiftAssignmentId,
         checkInAt: open.checkInAt,
-        checkOutAt: now,
+        checkOutAt: outAt,
         extraHours: open.extraHours,
       });
       const updated = await Attendance.findOneAndUpdate(
@@ -199,7 +202,15 @@ export async function POST(req: Request) {
         {
           $set: {
             ...fields,
-            checkOutAt: now,
+            checkOutAt: outAt,
+            ...(capInfo
+              ? {
+                  actualCheckOutAt: now,
+                  note: [open.note, `Bấm check-out ${localTime(now, tz).slice(0, 5)} – chỉ tính công tới ${capInfo.time} (chốt ca tối)`]
+                    .filter(Boolean)
+                    .join(" | "),
+                }
+              : {}),
             checkOutLat: b.lat,
             checkOutLng: b.lng,
             checkOutDistanceM: distance,
@@ -228,7 +239,8 @@ export async function POST(req: Request) {
             tz,
             workDate: updated.workDate,
             checkInAt: updated.checkInAt,
-            checkOutAt: now,
+            checkOutAt: outAt,
+            actualCheckOutAt: capInfo ? now : null,
             shiftLabel: updated.shiftLabel,
             outOfShift: updated.outOfShift,
             lateMinutes: updated.lateMinutes,
@@ -242,7 +254,10 @@ export async function POST(req: Request) {
       );
       return NextResponse.json({
         action: "CHECK_OUT",
-        time: localTime(now, tz),
+        time: localTime(outAt, tz),
+        // bấm sau giờ chốt ca tối: giờ bấm thật + giờ chốt (app báo "chỉ tính công tới 23:00")
+        cappedAt: capInfo ? capInfo.time : null,
+        pressedAt: capInfo ? localTime(now, tz) : null,
         totalHours: updated.totalHours,
         roundedHours: updated.roundedHours,
         earlyMinutes: updated.earlyMinutes,

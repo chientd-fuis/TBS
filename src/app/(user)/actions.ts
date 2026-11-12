@@ -2,6 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { AdjustmentRequest, PayrollFeedback, PayrollItem } from "@/lib/models";
+import { after } from "next/server";
+import { notifyAdjustment } from "@/lib/adjustment";
 
 export type FormState = { ok?: boolean; error?: string } | null;
 
@@ -24,6 +26,10 @@ export async function submitAdjustment(_: FormState, fd: FormData): Promise<Form
     checkOutTime,
     reason,
   });
+  // báo nhóm chấm công: giờ xin + giờ app đang ghi + admin cần xác nhận (chạy sau khi trả kết quả cho nhân viên)
+  after(() =>
+    notifyAdjustment({ userId: user._id, storeId: user.storeId, employeeName: user.name || user.email, workDate, checkInTime, checkOutTime, reason }),
+  );
   revalidatePath("/history");
   return { ok: true };
 }

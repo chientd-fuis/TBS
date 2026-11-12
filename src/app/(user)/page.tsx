@@ -7,7 +7,7 @@ import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
 import { isProbation, PROBATION_MIN_SHIFTS, probationEnd } from "@/lib/probation";
-import { checkinLock, runAutoCheckout } from "@/lib/auto-checkout";
+import { AUTO_LOCK_MS, checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +16,17 @@ export default async function HomePage() {
   const store = await Store.findById(user.storeId).lean();
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   let open = await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean();
-  // đang trong ca ở cơ sở bật tự check-out ca tối → đã quá giờ thì đóng lượt ngay, trước khi hiện nút
+  // đang trong ca ở cơ sở bật chốt công ca tối → quá hạn check-out thì ghi quên check-out ngay, trước khi hiện nút
   if (open && (await Store.exists({ _id: open.storeId, autoCheckoutOn: true }))) {
     await runAutoCheckout();
     open = await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean();
   }
-  // không có lượt mở: vừa được tự check-out (khoá 2 tiếng) / giờ cấm check-in → nút mờ + lý do
+  // vẫn đang trong ca nhưng đã quá giờ chốt ca tối → nhắc: công chỉ tính tới giờ chốt, check-out trước hạn
+  const cap = open ? await checkoutCap(open) : null;
+  const capNote = cap
+    ? `Đã quá giờ chốt ca tối ${cap.time} – công chỉ tính tới ${cap.time}. Hãy CHECK-OUT trước ${localTime(new Date(cap.cap.getTime() + AUTO_LOCK_MS), tz).slice(0, 5)}, quá giờ sẽ ghi QUÊN CHECK-OUT (không tính công).`
+    : undefined;
+  // không có lượt mở: vừa bị ghi quên check-out / vừa check-out sau giờ chốt (khoá 2 tiếng) / giờ cấm check-in → nút mờ + lý do
   const lock = open ? null : await checkinLock(user._id, tz);
   const today = localDate(new Date(), tz);
   const shifts = await ShiftAssignment.find({ userId: user._id, date: today, ...APPROVED_SHIFT }).sort({ startTime: 1 }).lean();
@@ -52,6 +57,7 @@ export default async function HomePage() {
         wifiNames={wifiNames}
         openSince={open ? localTime(open.checkInAt, tz) : null}
         lock={lock}
+        capNote={capNote}
         storeName={(open && supportOf(open.storeId)) || store?.name || ""}
         supportNote={
           open && supportOf(open.storeId)

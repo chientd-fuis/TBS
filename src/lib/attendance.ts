@@ -190,7 +190,7 @@ export async function markMissingCheckouts() {
   let n = 0;
   for (const a of opens) {
     if (await isStaleOpen(a, settings.missingCheckoutHours)) {
-      await Attendance.updateOne({ _id: a._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT", missedCheckout: true } });
+      await Attendance.updateOne({ _id: a._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT", missedCheckout: true, missedNotified: false } });
       n++;
     }
   }

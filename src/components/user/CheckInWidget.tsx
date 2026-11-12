@@ -23,6 +23,9 @@ type Result = {
   support?: boolean;
   /** check-out quá giờ hết ca > 30 phút → làm thêm chờ admin duyệt */
   overtimeMinutes?: number | null;
+  /** bấm check-out sau giờ chốt ca tối: giờ chốt ("23:00") + giờ bấm thật */
+  cappedAt?: string | null;
+  pressedAt?: string | null;
 };
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -38,10 +41,13 @@ export default function CheckInWidget({
   methods = { face: true, gps: true, wifi: false },
   wifiNames = [],
   lock = null,
+  capNote,
 }: {
   openSince: string | null;
   storeName: string;
   supportNote?: string;
+  /** đang trong ca mà đã quá giờ chốt ca tối → nhắc check-out (công chỉ tính tới giờ chốt) */
+  capNote?: string;
   /** cách xác thực cơ sở bật: chụp mặt / vị trí / WiFi */
   methods?: CheckMethods;
   wifiNames?: string[];
@@ -120,8 +126,9 @@ export default function CheckInWidget({
         "ok",
         res.action === "CHECK_IN"
           ? `Check-in thành công lúc ${res.time}${where}${res.shiftLabel ? ` · Ca ${res.shiftLabel}` : ""}`
-          : `Check-out thành công lúc ${res.time}${where} · ${res.roundedHours ?? 0}h tính công`,
+          : `Check-out thành công lúc ${res.pressedAt ?? res.time}${where} · ${res.roundedHours ?? 0}h tính công`,
       );
+      if (res.cappedAt) toast("warn", `Quá giờ chốt ca tối – chỉ tính công tới ${res.cappedAt}.`);
       if (res.action === "CHECK_IN" && res.outOfShift) toast("warn", "Bạn đang chấm công ngoài ca (không có ca được xếp) – giờ làm vẫn được ghi nhận, nhớ CHECK-OUT khi về.");
       if (res.action === "CHECK_IN" && res.lateMinutes) toast("warn", `Đi muộn ${res.lateMinutes} phút`);
       if (res.earlyMinutes) toast("warn", `Về sớm ${res.earlyMinutes} phút`);
@@ -185,6 +192,7 @@ export default function CheckInWidget({
           <div className="space-y-3 text-center">
             <p className="text-sm text-ink/70">{storeName}</p>
             {supportNote && <Alert tone="blue">⇄ {supportNote}</Alert>}
+            {capNote && openNow && <Alert tone="yellow">⏰ {capNote}</Alert>}
             {locked ? (
               <Alert tone={locked.kind === "auto" ? "blue" : "yellow"}>
                 {locked.kind === "auto" ? "🤖 " : "🌙 "}

@@ -5,7 +5,7 @@ import { runAutoCheckout } from "@/lib/auto-checkout";
 export const preferredRegion = "sin1";
 export const maxDuration = 60;
 
-/** Tự động check-out nhân viên ca tối còn trong ca (cơ sở bật ở Cài đặt) – cron khoảng 23h giờ VN (vercel.json). */
+/** Chốt công ca tối (cơ sở bật ở Cài đặt): ghi quên check-out người không làm ca tối còn trong ca – cron khoảng 23h giờ VN (vercel.json). Ca tối quá hạn + tin báo gộp lúc 01:00 do cron đêm xử lý. */
 export async function GET(req: Request) {
   if (!isCronAuthorized(req)) return new NextResponse("Unauthorized", { status: 401 });
   return NextResponse.json(await runAutoCheckout());

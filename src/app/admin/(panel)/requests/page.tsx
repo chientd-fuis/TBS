@@ -4,6 +4,7 @@ import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, Store, Us
 import { resolveOvertime } from "../../actions/overtime";
 import { durVi, OVERTIME_GRACE_MIN } from "@/lib/overtime";
 import { adminDirectory, APPROVE_PERM } from "@/lib/admin-stores";
+import { attText, compareWarnings, dayAttendances, pickTarget, requestWindow } from "@/lib/adjustment";
 import { localTime } from "@/lib/time";
 import { resolveCover } from "../../actions/cover";
 import { weekdayVi } from "@/lib/time";
@@ -39,6 +40,18 @@ export default async function RequestsPage() {
   const stores = new Map(storeList.map((s) => [String(s._id), s.name]));
   const tzOf = new Map(storeList.map((s) => [String(s._id), s.timezone || "Asia/Ho_Chi_Minh"]));
   const hm = (d: Date | null | undefined, storeId: unknown) => (d ? localTime(d, tzOf.get(String(storeId))).slice(0, 5) : "—");
+  // yêu cầu chấm công bù: các lượt app đã ghi trong ngày + lượt sẽ sửa (chọn sẵn theo giờ) + cảnh báo so với giờ app ghi
+  const adjCtx = new Map(
+    await Promise.all(
+      reqs.map(async (r) => {
+        const tz = tzOf.get(String(r.storeId)) || "Asia/Ho_Chi_Minh";
+        const list = r.workDate ? await dayAttendances(r.userId, r.workDate) : [];
+        const { reqIn, reqOut } = r.workDate ? requestWindow(r.workDate, r.checkInTime, r.checkOutTime, tz) : { reqIn: null, reqOut: null };
+        const target = pickTarget(list, reqIn, reqOut);
+        return [String(r._id), { tz, list, targetId: target ? String(target._id) : null, warnings: compareWarnings(target, reqIn, reqOut) }] as const;
+      }),
+    ),
+  );
   // ai cần xác nhận (admin quản lý cơ sở có quyền duyệt) – yêu cầu của chính người đang xem thì tô cam
   const who = await adminDirectory();
   const me = admin.kind === "OWNER" ? "Admin Tổng" : admin.name;
@@ -175,12 +188,57 @@ export default async function RequestsPage() {
                 <p>
                   <b>{users.get(String(r.userId))}</b> · {stores.get(String(r.storeId))} · gửi {viDateTime(r.createdAt)}
                 </p>
-                <p>Ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b></p>
+                <p>
+                  NV xin ngày {r.workDate && viDate(r.workDate)}: vào <b>{r.checkInTime || "--"}</b> · ra <b>{r.checkOutTime || "--"}</b>
+                </p>
                 <p className="text-ink/70">Lý do: {r.reason}</p>
+                {(() => {
+                  const ctx = adjCtx.get(String(r._id));
+                  if (!ctx) return null;
+                  return (
+                    <div className="mt-1 space-y-1 rounded-lg bg-white/70 p-2 text-xs ring-1 ring-[#f1e6c8]">
+                      <p className="font-semibold text-ink/70">
+                        App đang ghi ngày này: {ctx.list.length ? `${ctx.list.length} lượt` : "không có lượt nào"}
+                      </p>
+                      {ctx.warnings.map((w) => (
+                        <p key={w} className="font-semibold text-warn">
+                          ⚠ {w}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <Who storeId={r.storeId} perm={APPROVE_PERM.adjustment} />
                 {canAdj && (
                 <ApproveRejectForm action={resolveAdjustment} approveLabel="Duyệt & ghi nhận">
                   <input type="hidden" name="id" value={String(r._id)} />
+                  {/* chọn lượt sẽ sửa (ngày làm 2 ca có nhiều lượt) – máy chọn sẵn theo giờ, admin đổi được */}
+                  {(() => {
+                    const ctx = adjCtx.get(String(r._id));
+                    if (!ctx) return null;
+                    return (
+                      <fieldset className="space-y-1 rounded-lg bg-cream p-2 text-xs ring-1 ring-[#f1e6c8]">
+                        <legend className="px-1 font-semibold text-accent">Duyệt sẽ sửa lượt:</legend>
+                        {ctx.list.map((a) => (
+                          <label key={String(a._id)} className="flex items-start gap-2">
+                            <input type="radio" name="targetId" value={String(a._id)} defaultChecked={String(a._id) === ctx.targetId} className="mt-0.5 accent-[#3c9c54]" />
+                            <span>
+                              {a.shiftLabel ? <b>{a.shiftLabel}</b> : <b>Ngoài ca</b>}: {attText(a, ctx.tz)}
+                              {stores.get(String(a.storeId)) && String(a.storeId) !== String(r.storeId) && <span className="text-ink/50"> · {stores.get(String(a.storeId))}</span>}
+                              {String(a._id) === ctx.targetId && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-bold text-white">chọn sẵn</span>}
+                            </span>
+                          </label>
+                        ))}
+                        <label className="flex items-start gap-2">
+                          <input type="radio" name="targetId" value="new" defaultChecked={!ctx.targetId} className="mt-0.5 accent-[#3c9c54]" />
+                          <span>
+                            <b>Thêm lượt mới</b> (quên cả check-in lẫn check-out ca này)
+                            {!ctx.targetId && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-bold text-white">chọn sẵn</span>}
+                          </span>
+                        </label>
+                      </fieldset>
+                    );
+                  })()}
                   <div className="flex gap-2">
                     <TimeInput name="inTime" defaultValue={r.checkInTime} className="flex-1" title="Giờ vào" />
                     <TimeInput name="outTime" defaultValue={r.checkOutTime} className="flex-1" title="Giờ ra" />

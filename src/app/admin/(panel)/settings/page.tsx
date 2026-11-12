@@ -189,13 +189,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </fieldset>
           </ActionForm>
 
-          <ActionForm action={saveAutoCheckout} submitLabel="Lưu tự động check-out" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+          <ActionForm action={saveAutoCheckout} submitLabel="Lưu chốt công ca tối" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
             <div className="text-sm">
-              <b>Tự động check-out khi hết ca tối</b> – bật riêng từng cơ sở
+              <b>Chốt giờ công ca tối</b> – bật riêng từng cơ sở
               <span className="block text-xs text-ink/60">
-                Tới giờ đặt (VD 23:00) mà nhân viên <b>được xếp ca tối</b> (Tối, hoặc Chiều + Tối liền) vẫn chưa check-out → hệ thống tự check-out <b>đúng giờ đó</b> và báo
-                nhóm chấm công Telegram: “Có … nhân viên được tự động check-out”. Người không được xếp ca tối (VD ca Sáng + Chiều, ca Chiều) quên check-out → KHÔNG tự
-                check-out, vẫn tính “quên check-out” như cũ. Sau khi tự check-out: nút chấm công mờ 2 tiếng kèm thông báo “Bạn đã được tự động check-out”.
+                Hệ thống <b>không check-out hộ</b> – nhân viên vẫn phải tự bấm CHECK-OUT. Người <b>được xếp ca tối</b> (Tối, hoặc Chiều + Tối liền): check-out sau giờ chốt (VD
+                23:20) → <b>chỉ tính công tới giờ chốt (23:00)</b>, giờ bấm thật vẫn lưu; tới giờ chốt + 2 tiếng (01:00) vẫn chưa check-out → ghi <b>QUÊN CHECK-OUT</b>, không
+                tính công lượt đó (nhân viên gửi yêu cầu điều chỉnh). Người không được xếp ca tối (VD ca Sáng + Chiều, ca Chiều) còn trong ca lúc giờ chốt → ghi QUÊN CHECK-OUT
+                ngay (không check-out được nữa). Nhóm chấm công Telegram nhận <b>1 tin gộp lúc giờ chốt + 2 tiếng (01:00)</b> liệt kê tất cả người quên check-out trong
+                ngày; người bị ghi thì nút chấm công mờ 2 tiếng kèm lý do.
               </span>
             </div>
             {/* mỗi cơ sở 2 dòng: [tick + tên] / [Check-out lúc __:__ · gợi ý] – không ép chung 1 hàng (điện thoại bị đè chữ) */}
@@ -211,7 +213,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     </label>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-ink/70">
                       <label htmlFor={`ac_time_${id}`} className="shrink-0 whitespace-nowrap">
-                        Check-out lúc
+                        Chốt công lúc
                       </label>
                       <Input id={`ac_time_${id}`} type="time" name={`ac_time_${id}`} defaultValue={st.autoCheckoutTime || lastShiftEnd.get(id) || "23:00"} className="w-28 shrink-0" />
                       {lastShiftEnd.get(id) && <span className="text-[11px] text-ink/50">ca muộn nhất kết thúc {lastShiftEnd.get(id)}</span>}

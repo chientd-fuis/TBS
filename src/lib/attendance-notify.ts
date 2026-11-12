@@ -19,6 +19,8 @@ export type AttendanceNotice = {
   totalHours?: number | null;
   roundedHours?: number | null;
   supportFrom?: string | null; // nhân viên cơ sở khác sang hỗ trợ
+  /** check-out sau giờ chốt công ca tối: giờ bấm thật (checkOutAt = giờ chốt) */
+  actualCheckOutAt?: Date | null;
 };
 
 const hhmm = (d: Date, tz: string) => localTime(d, tz).slice(0, 5);
@@ -31,6 +33,8 @@ export function formatAttendanceCaption(n: AttendanceNotice) {
   if (n.action === "CHECK_OUT" && n.earlyMinutes) warn.push(`⚠️ Về sớm ${n.earlyMinutes} phút`);
   if (n.action === "CHECK_OUT" && n.lateMinutes) warn.push(`(Vào muộn ${n.lateMinutes} phút)`);
   if (n.outOfShift) warn.push("⚠️ Ngoài ca (không có ca được xếp)");
+  if (n.action === "CHECK_OUT" && n.actualCheckOutAt && n.checkOutAt)
+    warn.push(`⏱️ Bấm check-out lúc ${hhmm(n.actualCheckOutAt, n.tz)} – chỉ tính công tới ${hhmm(n.checkOutAt, n.tz)} (giờ chốt ca tối)`);
   return [
     n.action === "CHECK_IN" ? "✅ CHECK-IN" : "🏁 CHECK-OUT",
     `🏪 Cơ sở: ${n.storeName.replace(/^TBS\s+/i, "")}`,
