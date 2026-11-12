@@ -3,15 +3,17 @@
  *  - "Mới đến":      vào trong khoảng 30 phút trước → 15 phút sau giờ bắt đầu ca (hiện trong 30 phút đầu sau khi vào)
  *  - "Làm thêm giờ": vào sớm hơn giờ bắt đầu ca > 30 phút, hoặc đã quá giờ hết ca (ca cuối liền mạch) > 30 phút
  *  - "Sắp hết ca":   còn ≤ 45 phút là hết ca và ca kế tiếp không có lịch làm tiếp
- * Hàm thuần – có unit test.
+ * Hàm thuần – có unit test. Số phút ≥ 60 hiện dạng giờ: 90 → "1h30'".
  */
+import { minutesVi } from "./format";
 
 /** khung giờ ca (ms) */
 export type Win = { start: number; end: number };
 export type LiveBadge = { kind: "new" | "ending" | "overtime"; text: string };
 
 const MIN = 60_000;
-const mins = (ms: number) => Math.max(1, Math.round(ms / MIN));
+/** ms → "45'" / "1h30'" (từ 60 phút đổi sang giờ) */
+const mins = (ms: number) => minutesVi(Math.max(1, Math.round(ms / MIN)));
 
 /**
  * @param assigned ca được xếp hôm nay của nhân viên ở cơ sở này
@@ -29,10 +31,10 @@ export function liveBadges(checkIn: number, now: number, assigned: Win[], templa
 
   const out: LiveBadge[] = [];
   const early = target.start - checkIn;
-  if (early > 30 * MIN) out.push({ kind: "overtime", text: `Làm thêm giờ · đến sớm ${mins(early)}'` });
+  if (early > 30 * MIN) out.push({ kind: "overtime", text: `Làm thêm giờ · đến sớm ${mins(early)}` });
   else if (early >= -15 * MIN && now - checkIn <= 30 * MIN) out.push({ kind: "new", text: "Mới đến" });
   const left = end - now;
-  if (left > 0 && left <= 45 * MIN) out.push({ kind: "ending", text: `Sắp hết ca · còn ${mins(left)}'` });
-  if (-left > 30 * MIN) out.push({ kind: "overtime", text: `Làm thêm giờ · quá ca ${mins(-left)}'` });
+  if (left > 0 && left <= 45 * MIN) out.push({ kind: "ending", text: `Sắp hết ca · còn ${mins(left)}` });
+  if (-left > 30 * MIN) out.push({ kind: "overtime", text: `Làm thêm giờ · quá ca ${mins(-left)}` });
   return out;
 }
