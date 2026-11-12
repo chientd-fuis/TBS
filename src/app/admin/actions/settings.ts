@@ -106,6 +106,41 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
   }
 }
 
+/** Tự động check-out khi hết ca tối – bật / giờ riêng từng cơ sở (Admin Tổng). Lưu xong chạy ngay 1 lần. */
+export async function saveAutoCheckout(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
+    await connectDB();
+    const { Store } = await import("@/lib/models");
+    const { isAutoCheckoutTime, runAutoCheckout } = await import("@/lib/auto-checkout");
+    const ids = fd.getAll("storeIds").map(String).filter((x) => /^[a-f\d]{24}$/i.test(x));
+    const changes: Record<string, { on: boolean; time: string }> = {};
+    for (const id of ids) {
+      const on = fd.get(`ac_on_${id}`) === "on";
+      const time = String(fd.get(`ac_time_${id}`) ?? "").trim() || "23:00";
+      if (!isAutoCheckoutTime(time)) return { error: `Giờ tự check-out không hợp lệ (HH:mm): ${time}` };
+      await Store.updateOne({ _id: id }, { $set: { autoCheckoutOn: on, autoCheckoutTime: time } });
+      changes[id] = { on, time };
+    }
+    // giờ cấm check-in (mọi cơ sở) – mặc định 01:00–06:00
+    const quiet = {
+      quietCheckinOn: fd.get("quietCheckinOn") === "on",
+      quietCheckinFrom: String(fd.get("quietCheckinFrom") ?? "").trim() || "01:00",
+      quietCheckinTo: String(fd.get("quietCheckinTo") ?? "").trim() || "06:00",
+    };
+    if (!isAutoCheckoutTime(quiet.quietCheckinFrom) || !isAutoCheckoutTime(quiet.quietCheckinTo)) return { error: "Giờ cấm check-in không hợp lệ (HH:mm)" };
+    if (quiet.quietCheckinOn && quiet.quietCheckinFrom === quiet.quietCheckinTo) return { error: "Giờ cấm check-in: giờ bắt đầu và kết thúc phải khác nhau" };
+    await Settings.updateOne({ key: "main" }, { $set: quiet }, { upsert: true });
+    await audit(adminActor(admin), "settings.autoCheckout", { type: "Settings" }, null, { stores: changes, ...quiet });
+    if (Object.values(changes).some((c) => c.on)) await runAutoCheckout();
+    revalidatePath("/admin", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
 /** Phạt tự động khi đi muộn / bỏ ca / quên chấm công – Admin Tổng. Lưu xong chạy đối soát ngay. */
 export async function saveAutoPenalty(_: FormState, fd: FormData): Promise<FormState> {
   try {

@@ -40,6 +40,8 @@ export type AdminSession = {
   accountId?: string;
   /** quyền được Admin Tổng cấp (Admin Tổng: rỗng – luôn có mọi quyền, xem lib/permissions.ts can()) */
   perms: string[];
+  /** cơ sở admin quản lý (rỗng / không có = mọi cơ sở) – dùng gửi đúng người xác nhận làm thêm giờ (lib/admin-stores.ts) */
+  storeIds?: string[];
 };
 
 /** Tạo phiên admin (lưu DB để Admin Tổng xem / đăng xuất từng phiên) + cookie. */
@@ -83,7 +85,7 @@ const loadSession = cache(async (sid: string) => {
   await connectDB();
   const s = await AdminLoginSession.findOne({ sid }).select("revokedAt lastSeenAt expiresAt accountId").lean();
   if (!s || s.revokedAt || s.expiresAt < new Date() || !s.accountId) return null;
-  const acc = await AdminAccount.findById(s.accountId).select("email name status perms").lean();
+  const acc = await AdminAccount.findById(s.accountId).select("email name status perms storeIds").lean();
   if (!acc || acc.status !== "ACTIVE") return null;
   // cập nhật "hoạt động lần cuối" tối đa 2 phút / lần
   if (!s.lastSeenAt || Date.now() - s.lastSeenAt.getTime() > 120_000) await AdminLoginSession.updateOne({ sid }, { $set: { lastSeenAt: new Date() } }).catch(() => null);
@@ -121,7 +123,15 @@ export async function getAdmin(): Promise<AdminSession | null> {
     const s = payload.sid ? await loadSession(String(payload.sid)) : null;
     // phiên phải thuộc đúng Gmail đang đăng nhập (đổi tài khoản Google → phải vào lại)
     if (!s || s.account.email !== email) return null;
-    return { kind: "ADMIN", name: s.account.name, email, sid: String(payload.sid), accountId: String(s.account._id), perms: [...(s.account.perms ?? [])] };
+    return {
+      kind: "ADMIN",
+      name: s.account.name,
+      email,
+      sid: String(payload.sid),
+      accountId: String(s.account._id),
+      perms: [...(s.account.perms ?? [])],
+      storeIds: (s.account.storeIds ?? []).map(String),
+    };
   } catch {
     return null;
   }

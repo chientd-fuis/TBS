@@ -1,5 +1,5 @@
 import { requireOwner } from "@/lib/guards";
-import { AdminAccount, AdminLoginLog, AdminLoginSession, Settings } from "@/lib/models";
+import { AdminAccount, AdminLoginLog, AdminLoginSession, Settings, Store } from "@/lib/models";
 import { parseUA } from "@/lib/device";
 import { ADMIN_PERMS } from "@/lib/permissions";
 import { viDateTime } from "@/lib/time";
@@ -36,12 +36,35 @@ function PermBoxes({ value = [] }: { value?: readonly string[] }) {
   );
 }
 
+/** Chọn cơ sở admin quản lý (nhiều cơ sở; không chọn = mọi cơ sở) */
+function StoreBoxes({ stores, value = [] }: { stores: { id: string; name: string }[]; value?: readonly string[] }) {
+  return (
+    <div className="rounded-xl bg-cream p-2.5">
+      <p className="mb-1 text-xs font-semibold text-accent">Cơ sở quản lý</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {stores.map((s) => (
+          <label key={s.id} className="flex items-center gap-1.5">
+            <input type="checkbox" name="storeIds" value={s.id} defaultChecked={value.includes(s.id)} className="accent-[#3c9c54]" />
+            {s.name}
+          </label>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-ink/55">
+        Chọn được nhiều cơ sở. Không chọn = quản lý <b>mọi cơ sở</b>. Yêu cầu làm thêm giờ / đổi ca / chấm công bù của cơ sở nào sẽ ghi tên admin quản lý cơ sở đó (Tổng quan,
+        Yêu cầu, tin Telegram) để gắn trách nhiệm – admin khác được cấp quyền vẫn thấy và duyệt được.
+      </p>
+    </div>
+  );
+}
+
 /** Admin Tổng: danh sách admin (đăng nhập Gmail) – thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
 export default async function AdminsPage() {
   await requireOwner();
   const list = await AdminAccount.find().sort({ status: 1, lastLoginAt: -1, createdAt: -1 }).lean();
   // tài khoản cũ chưa đặt riêng "Cho vào app nhân viên" → mặc định theo cài đặt chung trước đây
   const settings = await Settings.findOne({ key: "main" }).select("adminUserApp").lean();
+  const stores = (await Store.find({ active: { $ne: false } }).select("name").sort({ name: 1 }).lean()).map((s) => ({ id: String(s._id), name: s.name }));
+  const storeName = new Map(stores.map((s) => [s.id, s.name]));
   const now = Date.now();
   const [sessions, logs] = await Promise.all([
     AdminLoginSession.find({ accountId: { $in: list.map((a) => a._id) }, revokedAt: null, expiresAt: { $gt: new Date() } }).lean(),
@@ -61,6 +84,7 @@ export default async function AdminsPage() {
             <Field label="Tên hiển thị" hint="Ghi vào lịch sử thao tác"><Input name="name" required placeholder="VD Lan – Văn Phú" /></Field>
           </div>
           <PermBoxes />
+          <StoreBoxes stores={stores} />
         </ActionForm>
       </Card>
 
@@ -90,6 +114,10 @@ export default async function AdminsPage() {
                 {a.lastUserAgent && ` · ${devName(a.lastUserAgent)}`} · {mine.length} phiên đang mở
                 {a.approvedAt && ` · duyệt ${viDateTime(a.approvedAt)}`}
               </p>
+              <p className="mb-2 text-xs">
+                🏪 Quản lý:{" "}
+                <b>{(a.storeIds ?? []).length ? (a.storeIds ?? []).map((s: unknown) => storeName.get(String(s)) ?? "?").join(", ") : "Mọi cơ sở"}</b>
+              </p>
 
               <ActionForm action={saveAdminAccount} submitLabel={a.status === "PENDING" ? "Duyệt & lưu quyền" : "Lưu"} successText="Đã lưu" className="space-y-2">
                 <input type="hidden" name="id" value={id} />
@@ -99,6 +127,7 @@ export default async function AdminsPage() {
                   <Field label="Ghi chú"><Input name="note" defaultValue={a.note ?? ""} placeholder="VD Quản lý CS1" /></Field>
                 </div>
                 <PermBoxes value={a.perms ?? []} />
+                <StoreBoxes stores={stores} value={(a.storeIds ?? []).map(String)} />
                 <label className="flex items-start gap-2 rounded-xl bg-cream px-3 py-2 text-sm ring-1 ring-[#f1e6c8]">
                   <input type="checkbox" name="userApp" defaultChecked={a.userApp ?? settings?.adminUserApp === true} className="mt-0.5 h-4 w-4" />
                   <span>

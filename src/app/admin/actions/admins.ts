@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { AdminAccount, AdminLoginSession, User } from "@/lib/models";
+import { AdminAccount, AdminLoginSession, Store, User } from "@/lib/models";
 import { assertOwner } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
@@ -13,6 +13,11 @@ import { errMsg, str, type FormState } from "./types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const permsOf = (fd: FormData) => fd.getAll("perms").map(String).filter(isAdminPerm);
+/** cơ sở quản lý (chọn nhiều; không chọn = mọi cơ sở) – chỉ nhận id cơ sở có thật */
+async function storesOf(fd: FormData) {
+  const ids = [...new Set(fd.getAll("storeIds").map(String).filter((x) => /^[a-f\d]{24}$/i.test(x)))];
+  return ids.length ? (await Store.find({ _id: { $in: ids } }).select("_id").lean()).map((s) => s._id) : [];
+}
 
 /** Đăng xuất mọi phiên của 1 tài khoản (hoặc 1 thiết bị). */
 async function revoke(accountId: unknown, by: string, deviceId?: string) {
@@ -49,10 +54,11 @@ export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormS
     if (name.length < 2) return { error: "Nhập tên hiển thị" };
     if (await AdminAccount.exists({ email })) return { error: "Gmail này đã có trong danh sách" };
     const perms = permsOf(fd);
+    const storeIds = await storesOf(fd);
     // admin mới: mặc định không vào app nhân viên (tick sau ở thẻ tài khoản)
-    const acc = await AdminAccount.create({ email, name, perms, status: "ACTIVE", approvedBy: owner.email, approvedAt: new Date(), userApp: false });
+    const acc = await AdminAccount.create({ email, name, perms, storeIds, status: "ACTIVE", approvedBy: owner.email, approvedAt: new Date(), userApp: false });
     await dropEmptyUser(email);
-    await audit(adminActor(owner), "admin.account.approve", { type: "AdminAccount", id: String(acc._id) }, null, { email, name, perms });
+    await audit(adminActor(owner), "admin.account.approve", { type: "AdminAccount", id: String(acc._id) }, null, { email, name, perms, storeIds: storeIds.map(String) });
     return done();
   } catch (e) {
     return errMsg(e);
@@ -69,11 +75,18 @@ export async function saveAdminAccount(_: FormState, fd: FormData): Promise<Form
     const before = { name: acc.name, status: acc.status, perms: [...acc.perms] };
     const approve = str(fd.get("approve")) === "1" && acc.status !== "ACTIVE";
     const userApp = fd.get("userApp") === "on"; // được vào app nhân viên (riêng tài khoản này)
-    acc.set({ name, perms, note: str(fd.get("note")).slice(0, 200), userApp });
+    const storeIds = await storesOf(fd);
+    acc.set({ name, perms, note: str(fd.get("note")).slice(0, 200), userApp, storeIds });
     if (approve) acc.set({ status: "ACTIVE", approvedBy: owner.email, approvedAt: new Date() });
     await acc.save();
     if (approve) await dropEmptyUser(acc.email);
-    await audit(actor, approve ? "admin.account.approve" : "admin.account.update", { type: "AdminAccount", id: String(acc._id) }, before, { name, perms, status: acc.status, userApp });
+    await audit(actor, approve ? "admin.account.approve" : "admin.account.update", { type: "AdminAccount", id: String(acc._id) }, before, {
+      name,
+      perms,
+      status: acc.status,
+      userApp,
+      storeIds: storeIds.map(String),
+    });
     return done();
   } catch (e) {
     return errMsg(e);

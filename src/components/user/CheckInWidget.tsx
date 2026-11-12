@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { CheckinLock } from "@/lib/auto-checkout";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, LogIn, LogOut, MapPin, TriangleAlert, Wifi } from "lucide-react";
 import { Alert, Button, Card } from "@/components/ui";
@@ -20,6 +21,8 @@ type Result = {
   outOfShift?: boolean;
   storeName?: string;
   support?: boolean;
+  /** check-out quá giờ hết ca > 30 phút → làm thêm chờ admin duyệt */
+  overtimeMinutes?: number | null;
 };
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -34,6 +37,7 @@ export default function CheckInWidget({
   supportNote,
   methods = { face: true, gps: true, wifi: false },
   wifiNames = [],
+  lock = null,
 }: {
   openSince: string | null;
   storeName: string;
@@ -41,6 +45,8 @@ export default function CheckInWidget({
   /** cách xác thực cơ sở bật: chụp mặt / vị trí / WiFi */
   methods?: CheckMethods;
   wifiNames?: string[];
+  /** khoá chấm công (vừa được tự check-out 2 tiếng / giờ cấm check-in) – lib/auto-checkout.ts */
+  lock?: CheckinLock | null;
 }) {
   const router = useRouter();
   const device = useDevice();
@@ -56,7 +62,15 @@ export default function CheckInWidget({
   // sau khi chấm xong, cập nhật ngay trạng thái (không chờ trang tải lại)
   const [localOpen, setLocalOpen] = useState<string | null | undefined>(undefined);
   const openNow = localOpen !== undefined ? localOpen : openSince;
-  const isCheckOut = !!openNow;
+  // khoá chỉ áp dụng khi không có lượt đang mở; tới giờ hết khoá → tải lại trạng thái (VD 01:00 đổi sang “cấm check-in”, 06:00 mở)
+  const locked = !openNow ? lock : null;
+  useEffect(() => {
+    if (!locked) return;
+    const ms = new Date(locked.until).getTime() - Date.now() + 1500;
+    const t = window.setTimeout(() => router.refresh(), Math.min(Math.max(ms, 1000), 2_000_000_000));
+    return () => window.clearTimeout(t);
+  }, [locked, router]);
+  const isCheckOut = locked ? locked.button === "CHECK-OUT" : !!openNow;
 
   const start = async () => {
     setError("");
@@ -111,6 +125,8 @@ export default function CheckInWidget({
       if (res.action === "CHECK_IN" && res.outOfShift) toast("warn", "Bạn đang chấm công ngoài ca (không có ca được xếp) – giờ làm vẫn được ghi nhận, nhớ CHECK-OUT khi về.");
       if (res.action === "CHECK_IN" && res.lateMinutes) toast("warn", `Đi muộn ${res.lateMinutes} phút`);
       if (res.earlyMinutes) toast("warn", `Về sớm ${res.earlyMinutes} phút`);
+      if (res.overtimeMinutes)
+        toast("warn", `Bạn làm thêm ${Math.floor(res.overtimeMinutes / 60) ? `${Math.floor(res.overtimeMinutes / 60)} tiếng ` : ""}${res.overtimeMinutes % 60 ? `${res.overtimeMinutes % 60} phút` : ""} sau giờ hết ca – giờ làm thêm chờ admin xác nhận.`);
       setLocalOpen(res.action === "CHECK_IN" ? res.time : null);
       setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();
@@ -169,7 +185,12 @@ export default function CheckInWidget({
           <div className="space-y-3 text-center">
             <p className="text-sm text-ink/70">{storeName}</p>
             {supportNote && <Alert tone="blue">⇄ {supportNote}</Alert>}
-            {isCheckOut ? (
+            {locked ? (
+              <Alert tone={locked.kind === "auto" ? "blue" : "yellow"}>
+                {locked.kind === "auto" ? "🤖 " : "🌙 "}
+                {locked.message}
+              </Alert>
+            ) : isCheckOut ? (
               <p>Bạn đang trong ca từ <b>{openNow}</b></p>
             ) : (
               <p>Bạn chưa check-in</p>
@@ -177,7 +198,9 @@ export default function CheckInWidget({
             <Button
               variant={isCheckOut ? "secondary" : "primary"}
               className="h-20 w-full rounded-2xl text-xl"
-              disabled={!deviceOk || step === "locating" || step === "sending"}
+              disabled={!deviceOk || !!locked || step === "locating" || step === "sending"}
+              aria-disabled={!!locked || undefined}
+              title={locked?.message}
               onClick={start}
             >
               {step === "locating" || step === "sending" ? <Loader2 className="animate-spin" /> : isCheckOut ? <LogOut /> : <LogIn />}

@@ -7,6 +7,7 @@ import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
 import { isProbation, PROBATION_MIN_SHIFTS, probationEnd } from "@/lib/probation";
+import { checkinLock, runAutoCheckout } from "@/lib/auto-checkout";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,14 @@ export default async function HomePage() {
   const user = await requireActiveUser();
   const store = await Store.findById(user.storeId).lean();
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
-  const open = await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean();
+  let open = await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean();
+  // đang trong ca ở cơ sở bật tự check-out ca tối → đã quá giờ thì đóng lượt ngay, trước khi hiện nút
+  if (open && (await Store.exists({ _id: open.storeId, autoCheckoutOn: true }))) {
+    await runAutoCheckout();
+    open = await Attendance.findOne({ userId: user._id, status: "OPEN" }).lean();
+  }
+  // không có lượt mở: vừa được tự check-out (khoá 2 tiếng) / giờ cấm check-in → nút mờ + lý do
+  const lock = open ? null : await checkinLock(user._id, tz);
   const today = localDate(new Date(), tz);
   const shifts = await ShiftAssignment.find({ userId: user._id, date: today, ...APPROVED_SHIFT }).sort({ startTime: 1 }).lean();
   const todayAtts = await Attendance.find({ userId: user._id, workDate: today }).sort({ checkInAt: 1 }).lean();
@@ -43,6 +51,7 @@ export default async function HomePage() {
         methods={methods}
         wifiNames={wifiNames}
         openSince={open ? localTime(open.checkInAt, tz) : null}
+        lock={lock}
         storeName={(open && supportOf(open.storeId)) || store?.name || ""}
         supportNote={
           open && supportOf(open.storeId)

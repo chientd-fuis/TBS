@@ -33,8 +33,10 @@ export default function NavProgress({ mobileOnly = false }: { mobileOnly?: boole
       // an toàn: mạng treo / trang không đổi → tự tắt sau 15 giây
       timers.current.push(window.setTimeout(() => setState("done"), 15_000));
     };
+    // Nghe ở pha CAPTURE (trước React): <Link> của Next luôn preventDefault() trong onClick của nó (để tự chuyển trang),
+    // nghe ở pha bubble sẽ thấy defaultPrevented = true và bỏ qua mọi lần bấm link → vạch không bao giờ chạy.
     const onClick = (e: MouseEvent) => {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const a = (e.target as Element | null)?.closest?.("a");
       if (!a || !a.getAttribute("href") || (a.target && a.target !== "_self") || a.hasAttribute("download")) return;
       const url = new URL(a.href, window.location.href);
@@ -43,10 +45,10 @@ export default function NavProgress({ mobileOnly = false }: { mobileOnly?: boole
       if (a.closest("[data-no-navbar]")) return; // menu admin: loading riêng tại mục bấm
       go();
     };
-    document.addEventListener("click", onClick);
+    document.addEventListener("click", onClick, true);
     window.addEventListener(START, go);
     return () => {
-      document.removeEventListener("click", onClick);
+      document.removeEventListener("click", onClick, true);
       window.removeEventListener(START, go);
       clear();
     };

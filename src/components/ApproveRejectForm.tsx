@@ -1,5 +1,5 @@
 "use client";
-import { useActionState, useRef, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Input } from "@/components/ui";
 
 type State = { ok?: boolean; error?: string } | null;
@@ -21,8 +21,10 @@ export function ApproveRejectForm({
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const op = useRef<HTMLInputElement>(null);
-  const pick = (v: string) => () => {
+  const [clicked, setClicked] = useState<"approve" | "reject">("approve");
+  const pick = (v: "approve" | "reject") => () => {
     if (op.current) op.current.value = v;
+    setClicked(v);
   };
   return (
     <form action={formAction} className="mt-2 max-w-xl space-y-2">
@@ -30,10 +32,11 @@ export function ApproveRejectForm({
       {children}
       <Input name="reply" placeholder={placeholder} maxLength={200} />
       <div className="flex gap-2">
-        <Button type="submit" variant="secondary" disabled={pending} onClick={pick("approve")} className="flex-1 whitespace-nowrap sm:flex-none sm:px-5">
-          {pending ? "Đang xử lý…" : approveLabel}
+        {/* nút vừa bấm hiện vòng xoay, nút còn lại khoá */}
+        <Button type="submit" variant="secondary" disabled={pending} loading={pending && clicked === "approve"} loadingText="Đang xử lý…" onClick={pick("approve")} className="flex-1 whitespace-nowrap sm:flex-none sm:px-5">
+          {approveLabel}
         </Button>
-        <Button type="submit" variant="outline" disabled={pending} onClick={pick("reject")} className="flex-1 whitespace-nowrap sm:flex-none sm:px-5">
+        <Button type="submit" variant="outline" disabled={pending} loading={pending && clicked === "reject"} loadingText="Đang xử lý…" onClick={pick("reject")} className="flex-1 whitespace-nowrap sm:flex-none sm:px-5">
           Từ chối
         </Button>
       </div>

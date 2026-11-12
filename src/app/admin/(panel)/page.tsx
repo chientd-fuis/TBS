@@ -12,6 +12,7 @@ import { getAiConfig } from "@/lib/ai";
 import { goodsEnabled } from "@/lib/goods-server";
 import { hoursVi, vnd } from "@/lib/format";
 import { shiftWindow } from "@/lib/attendance";
+import { adminDirectory, APPROVE_PERM } from "@/lib/admin-stores";
 import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
 import { BellRing, ChevronRight, Package, Receipt } from "lucide-react";
 import ActivityFeed from "./activity/ActivityFeed";
@@ -24,23 +25,37 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const admin = await requireAdmin();
   const { error } = await searchParams;
   const settings = await getSettings();
-  // việc chờ admin duyệt (hiện nổi bật trên điện thoại)
-  const [pCover, pAdj, pFb, pReg, pUsers, pDevices] = await Promise.all([
-    CoverRequest.countDocuments({ status: "PENDING" }),
-    AdjustmentRequest.countDocuments({ status: "PENDING" }),
+  // việc chờ xác nhận: loại theo cơ sở thì ghi rõ cần admin nào (Quản lý admin → Cơ sở quản lý), còn lại là việc chung
+  const [pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames] = await Promise.all([
+    CoverRequest.find({ status: "PENDING" }).select("storeId").lean(),
+    AdjustmentRequest.find({ status: "PENDING" }).select("storeId").lean(),
+    Attendance.find({ "overtime.status": "PENDING" }).select("storeId").lean(),
     PayrollFeedback.countDocuments({ status: "OPEN" }),
     ShiftAssignment.countDocuments({ status: "PENDING", date: { $gte: localDate(new Date()) } }),
     User.countDocuments({ status: "PENDING" }),
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
+    adminDirectory(),
+    Store.find().select("name").lean().then((l) => new Map(l.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]))),
   ]);
-  const todo = [
-    { n: pCover, text: "nhờ làm hộ / đổi ca", href: "/admin/requests" },
-    { n: pAdj, text: "điều chỉnh chấm công", href: "/admin/requests" },
-    { n: pFb, text: "phản hồi bảng lương", href: "/admin/requests" },
-    { n: pReg, text: "đăng ký ca", href: "/admin/schedule" },
-    { n: pUsers, text: "tài khoản mới", href: "/admin/approvals" },
-    { n: pDevices, text: "thiết bị mới", href: "/admin/devices" },
+  const me = admin.kind === "OWNER" ? "Admin Tổng" : admin.name;
+  const byStore = (list: { storeId?: unknown }[]) => {
+    const m = new Map<string, number>();
+    for (const x of list) m.set(String(x.storeId), (m.get(String(x.storeId)) ?? 0) + 1);
+    return [...m.entries()];
+  };
+  type Todo = { key: string; icon: string; n: number; text: string; href: string; store?: string; names?: string[] };
+  const assigned: Todo[] = [
+    ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm thêm giờ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
+    ...byStore(pCovers).map(([sid, n]) => ({ key: `cv${sid}`, icon: "⇄", n, text: "đổi ca / nhờ làm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.cover) })),
+    ...byStore(pAdjs).map(([sid, n]) => ({ key: `aj${sid}`, icon: "🕘", n, text: "chấm công bù / chấm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.adjustment) })),
+  ];
+  const general: Todo[] = [
+    { key: "fb", icon: "💬", n: pFb, text: "phản hồi bảng lương", href: "/admin/requests" },
+    { key: "reg", icon: "📅", n: pReg, text: "đăng ký ca", href: "/admin/schedule" },
+    { key: "usr", icon: "👤", n: pUsers, text: "tài khoản mới", href: "/admin/approvals" },
+    { key: "dev", icon: "📱", n: pDevices, text: "thiết bị mới", href: "/admin/devices" },
   ].filter((x) => x.n > 0);
+  const todo = [...assigned, ...general];
   const todoTotal = todo.reduce((a, x) => a + x.n, 0);
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
@@ -114,23 +129,35 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </div>
       </div>
       {todoTotal > 0 && (
-        <div className="mb-4 overflow-hidden rounded-2xl bg-[#fff4e5] ring-1 ring-warn/40 lg:hidden">
+        <div className="mb-4 overflow-hidden rounded-2xl bg-[#fff4e5] ring-1 ring-warn/40">
           <Link href={todo[0].href} className="flex items-center gap-2 px-4 py-3 text-warn">
             <BellRing size={20} className="shrink-0" />
-            <span className="flex-1 font-bold">Bạn đang có {todoTotal} yêu cầu chưa duyệt</span>
+            <span className="flex-1 font-bold">Việc cần xác nhận: {todoTotal} yêu cầu</span>
             <ChevronRight size={18} />
           </Link>
           <ul className="divide-y divide-warn/15 border-t border-warn/20 bg-white/60 text-sm">
-            {todo.map((x) => (
-              <li key={x.text}>
-                <Link href={x.href} className="flex items-center justify-between px-4 py-2 text-ink">
-                  <span>
-                    <b>{x.n}</b> {x.text}
-                  </span>
-                  <span className="text-xs text-accent">Duyệt ›</span>
-                </Link>
-              </li>
-            ))}
+            {todo.map((x) => {
+              const mine = !!x.names?.includes(me);
+              return (
+                <li key={x.key}>
+                  <Link href={x.href} className={`flex items-center gap-2 px-4 py-2 text-ink ${mine ? "bg-[#ffedd5]" : ""}`}>
+                    <span className="w-5 shrink-0 text-center" aria-hidden>
+                      {x.icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      Có <b>{x.n}</b> yêu cầu {x.text}
+                      {x.store && <span className="text-ink/60"> · {x.store}</span>}
+                      {x.names && (
+                        <span className="block text-xs">
+                          → Cần <b className={mine ? "text-warn" : "text-accent"}>{x.names.join(", ")}</b> xác nhận
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-xs text-accent">Duyệt ›</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

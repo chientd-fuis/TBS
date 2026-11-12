@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { AdminLoginLog, AuditLog, PendingPhoto } from "@/lib/models";
+import { AdminLoginLog, AuditLog, PendingPhoto, ShiftTemplate, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
+import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
 import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
@@ -30,6 +30,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         PendingPhoto.countDocuments(),
       ])
     : [[], [], 0];
+  // Tự động check-out hết ca tối: cơ sở + giờ kết thúc ca muộn nhất (gợi ý giờ check-out)
+  const acStores = await Store.find({ active: { $ne: false } }).select("name autoCheckoutOn autoCheckoutTime").sort({ name: 1 }).lean();
+  const lastShiftEnd = new Map<string, string>();
+  for (const t of await ShiftTemplate.find({ active: true }).select("storeId startTime endTime").lean()) {
+    const k = String(t.storeId);
+    // ca qua đêm (kết thúc < bắt đầu) coi như muộn nhất; còn lại lấy giờ kết thúc lớn nhất
+    const end = t.endTime < t.startTime ? `~${t.endTime}` : t.endTime;
+    const cur = lastShiftEnd.get(k);
+    if (!cur || end > cur) lastShiftEnd.set(k, end);
+  }
+  for (const [k, v] of lastShiftEnd) lastShiftEnd.set(k, v.replace("~", ""));
 
   return (
     <>
@@ -175,6 +186,51 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <Field label="Quên check-out (đ / lượt)" hint={`Quá ${s.missingCheckoutHours} giờ / hết ca + 4 giờ chưa check-out`}><Input name="penaltyMissingOutVnd" inputMode="numeric" defaultValue={s.penaltyMissingOutVnd || 0} /></Field>
                 <Field label="Quên check-in (đ / lượt)" hint="Lượt do admin chấm hộ / duyệt yêu cầu bổ sung chấm công"><Input name="penaltyMissingInVnd" inputMode="numeric" defaultValue={s.penaltyMissingInVnd || 0} /></Field>
               </div>
+            </fieldset>
+          </ActionForm>
+
+          <ActionForm action={saveAutoCheckout} submitLabel="Lưu tự động check-out" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+            <div className="text-sm">
+              <b>Tự động check-out khi hết ca tối</b> – bật riêng từng cơ sở
+              <span className="block text-xs text-ink/60">
+                Tới giờ đặt (VD 23:00) mà nhân viên <b>được xếp ca tối</b> (Tối, hoặc Chiều + Tối liền) vẫn chưa check-out → hệ thống tự check-out <b>đúng giờ đó</b> và báo
+                nhóm chấm công Telegram: “Có … nhân viên được tự động check-out”. Người không được xếp ca tối (VD ca Sáng + Chiều, ca Chiều) quên check-out → KHÔNG tự
+                check-out, vẫn tính “quên check-out” như cũ. Sau khi tự check-out: nút chấm công mờ 2 tiếng kèm thông báo “Bạn đã được tự động check-out”.
+              </span>
+            </div>
+            <fieldset disabled={!isOwner} className="divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
+              {acStores.map((st) => {
+                const id = String(st._id);
+                return (
+                  <div key={id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                    <input type="hidden" name="storeIds" value={id} />
+                    <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                      <input type="checkbox" name={`ac_on_${id}`} defaultChecked={st.autoCheckoutOn === true} className="h-4 w-4" />
+                      <span className="font-semibold">{st.name}</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-ink/70">
+                      Check-out lúc
+                      <Input type="time" name={`ac_time_${id}`} defaultValue={st.autoCheckoutTime || lastShiftEnd.get(id) || "23:00"} className="w-28" />
+                    </label>
+                    {lastShiftEnd.get(id) && <span className="text-[11px] text-ink/50">ca muộn nhất kết thúc {lastShiftEnd.get(id)}</span>}
+                  </div>
+                );
+              })}
+            </fieldset>
+            <fieldset disabled={!isOwner} className="flex flex-wrap items-center gap-3 rounded-xl bg-cream px-3 py-2 ring-1 ring-[#f1e6c8]">
+              <label className="flex min-w-0 flex-1 items-start gap-2 text-sm">
+                <input type="checkbox" name="quietCheckinOn" defaultChecked={s.quietCheckinOn !== false} className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>Giờ cấm check-in</b> (mọi cơ sở)
+                  <span className="block text-xs text-ink/60">Trong khoảng này nút CHECK-IN mờ, không chấm công vào được. Check-out vẫn bấm được.</span>
+                </span>
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-ink/70">
+                Từ <Input type="time" name="quietCheckinFrom" defaultValue={s.quietCheckinFrom || "01:00"} className="w-28" />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-ink/70">
+                đến <Input type="time" name="quietCheckinTo" defaultValue={s.quietCheckinTo || "06:00"} className="w-28" />
+              </label>
             </fieldset>
           </ActionForm>
         </Card>

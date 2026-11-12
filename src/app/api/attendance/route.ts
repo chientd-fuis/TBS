@@ -8,11 +8,13 @@ import { getSettings } from "@/lib/settings";
 import { checkDeviceForAttendance, clientInfo } from "@/lib/device";
 import { ipAllowed, methodsOf } from "@/lib/checkin-methods";
 import { distanceMeters } from "@/lib/calc";
-import { assertNotLocked, computeFields, findShiftFor, isStaleOpen, openAttendance, payStoreOf } from "@/lib/attendance";
+import { assertNotLocked, computeFields, findShiftFor, isStaleOpen, openAttendance, payStoreOf, storeTz } from "@/lib/attendance";
 import { audit } from "@/lib/audit";
 import { savePhoto } from "@/lib/drive";
 import { addDays, localDate, localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
+import { checkinLock, runAutoCheckout } from "@/lib/auto-checkout";
+import { flagOvertime } from "@/lib/overtime";
 
 const Body = z.object({
   // vị trí / ảnh chỉ gửi khi cơ sở bật cách chấm tương ứng
@@ -67,9 +69,22 @@ export async function POST(req: Request) {
     const now = new Date(); // giờ server
     let open = await openAttendance(user._id);
     // Lượt mở từ hôm trước bị quên check-out (cron chưa kịp chạy) → đóng lại, lần bấm này là CHECK-IN mới
+    // Cơ sở bật tự check-out ca tối: lượt đang mở đã quá giờ → hệ thống check-out trước (đúng giờ cài đặt)
+    if (open) {
+      const st = await Store.findById(open.storeId).select("autoCheckoutOn").lean();
+      if (st?.autoCheckoutOn) {
+        await runAutoCheckout(now);
+        open = await openAttendance(user._id);
+      }
+    }
     if (open && (await isStaleOpen(open, settings.missingCheckoutHours, now.getTime()))) {
-      await Attendance.updateOne({ _id: open._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT" } });
+      await Attendance.updateOne({ _id: open._id, status: "OPEN" }, { $set: { status: "MISSING_CHECKOUT", missedCheckout: true } });
       open = null;
+    }
+    // Không có lượt mở → kiểm tra khoá: vừa được tự check-out (2 tiếng) / giờ cấm check-in (mặc định 01:00–06:00)
+    if (!open) {
+      const lock = await checkinLock(user._id, await storeTz(user.storeId!), now);
+      if (lock) throw new HttpError(lock.kind === "auto" ? 409 : 403, lock.message, { code: lock.kind === "auto" ? "AUTO_CHECKED_OUT" : "QUIET_HOURS" });
     }
 
     // 2. Xác định cơ sở chấm công theo cách xác thực của từng cơ sở (vị trí / WiFi) – xem lib/checkin-methods.ts
@@ -199,6 +214,9 @@ export async function POST(req: Request) {
         { returnDocument: "after" },
       );
       if (!updated) throw new HttpError(409, "Lượt chấm công đã được check-out");
+      // check-out quá giờ hết ca được xếp > 30 phút → làm thêm chờ admin duyệt (báo nhóm chấm công sau)
+      const ot = await flagOvertime(updated._id, tz, { employeeName: user.name || user.email, storeId: store._id, storeName: store.name });
+      if (ot) after(ot.notify);
       // thông báo nhóm chấm công (chạy sau khi đã trả kết quả cho nhân viên)
       after(() =>
         notifyAttendance(
@@ -233,6 +251,7 @@ export async function POST(req: Request) {
         outOfShift: updated.outOfShift,
         storeName: store.name,
         support: isSupport,
+        overtimeMinutes: ot?.minutes ?? null,
       });
     }
 

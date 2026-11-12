@@ -44,6 +44,10 @@ const SettingsSchema = new Schema(
     // App nhân viên cho Gmail admin (có hồ sơ nhân viên): mặc định chặn – đăng nhập luôn vào trang quản lý
     adminUserApp: { type: Boolean, default: false }, // admin (AdminAccount) được vào app nhân viên
     ownerUserApp: { type: Boolean, default: false }, // Admin Tổng được vào app nhân viên
+    // Giờ cấm check-in (lib/auto-checkout.ts checkinLock): mặc định bật, 01:00–06:00 giờ cơ sở
+    quietCheckinOn: { type: Boolean, default: true },
+    quietCheckinFrom: { type: String, default: "01:00" },
+    quietCheckinTo: { type: String, default: "06:00" },
     // Help (nút "?" app nhân viên – lib/help.ts): hướng dẫn app, quy trình theo vị trí, thông tin quán, tình huống hay gặp
     help: { type: Schema.Types.Mixed, default: {} },
     // Phạt tự động (lib/auto-penalty.ts) – mức 0đ = không phạt loại đó
@@ -89,6 +93,10 @@ const StoreSchema = new Schema(
     // % phí sàn trừ vào doanh thu khi tính lãi lỗ
     grabFeePct: { type: Number, default: 0 },
     shopeeFeePct: { type: Number, default: 0 },
+    // Tự động check-out khi hết ca tối (lib/auto-checkout.ts): nhân viên còn đang trong ca lúc autoCheckoutTime → hệ thống check-out
+    // đúng giờ đó + báo nhóm chấm công. Bật / tắt riêng từng cơ sở ở Cài đặt → Cấu hình chấm công.
+    autoCheckoutOn: { type: Boolean, default: false },
+    autoCheckoutTime: { type: String, default: "23:00" }, // HH:mm giờ cơ sở
     active: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -289,6 +297,27 @@ const AttendanceSchema = new Schema(
     manualReason: String,
     status: { type: String, enum: ["OPEN", "COMPLETED", "MISSING_CHECKOUT"], default: "OPEN" },
     missedCheckout: { type: Boolean, default: false }, // đã từng bị đánh dấu quên check-out (giữ lại kể cả khi admin bổ sung giờ ra) → phạt tự động
+    autoCheckout: { type: Boolean, default: false }, // hệ thống tự check-out lúc hết ca tối (lib/auto-checkout.ts)
+    // quá giờ check-out cuối ngày (cơ sở bật tự check-out) mà không được xếp ca tối → hệ thống ghi QUÊN CHECK-OUT lúc này
+    cutoffMissingAt: Date,
+    // Làm thêm giờ (lib/overtime.ts): check-out quá giờ hết ca được xếp > 30 phút → chờ admin duyệt.
+    // Từ chối → giờ ra = giờ hết ca (chỉ tính công trong ca), giờ ra thật lưu ở actualOutAt
+    overtime: {
+      type: new Schema(
+        {
+          minutes: Number, // số phút quá giờ hết ca
+          shiftEnd: Date, // giờ hết khối ca được xếp
+          shiftLabel: String,
+          status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"] },
+          actualOutAt: Date,
+          decidedBy: String,
+          decidedAt: Date,
+          reply: String,
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     note: String, // ghi chú nội bộ (admin xem): "Sửa bởi …"
     staffNote: String, // ghi chú admin để lại cho nhân viên – hiện ở Lịch sử chấm công của nhân viên
     photosPurgedAt: Date, // ảnh check-in/out đã bị xoá khi dọn dữ liệu cũ
@@ -301,6 +330,7 @@ AttendanceSchema.index({ homeStoreId: 1, month: 1 });
 AttendanceSchema.index({ userId: 1, month: 1 });
 // Mỗi nhân viên chỉ có 1 lượt đang mở → chống chấm trùng / ghi đồng thời
 AttendanceSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: "OPEN" }, name: "one_open_per_user" });
+AttendanceSchema.index({ "overtime.status": 1 }, { partialFilterExpression: { "overtime.status": "PENDING" }, name: "overtime_pending" });
 export type AttendanceDoc = InferSchemaType<typeof AttendanceSchema> & { _id: Types.ObjectId };
 export const Attendance = getModel("Attendance", AttendanceSchema);
 
@@ -814,6 +844,8 @@ const AdminAccountSchema = new Schema(
     name: { type: String, required: true }, // tên hiển thị trong lịch sử thao tác
     status: { type: String, enum: ["PENDING", "ACTIVE", "BLOCKED"], default: "PENDING" },
     perms: { type: [String], default: [] }, // lib/permissions.ts ADMIN_PERMS
+    // cơ sở quản lý (rỗng = mọi cơ sở) – gắn tên admin chịu trách nhiệm xác nhận yêu cầu của cơ sở (lib/admin-stores.ts), không giới hạn quyền
+    storeIds: { type: [Schema.Types.ObjectId], ref: "Store", default: [] },
     // được vào app nhân viên (cần có hồ sơ nhân viên cùng Gmail). Chưa đặt (bản ghi cũ) → theo Settings.adminUserApp
     userApp: { type: Boolean },
     devices: { type: [AdminDeviceSchema], default: [] },
