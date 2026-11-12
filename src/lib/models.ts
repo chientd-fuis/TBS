@@ -305,15 +305,23 @@ const AttendanceSchema = new Schema(
     // lượt quên check-out chờ báo nhóm chấm công: false = chưa báo (gom báo 1 tin lúc giờ chốt + 2 tiếng, VD 01:00), true = đã báo.
     // Không có default: lượt cũ (trước khi có trường này) không bị báo lại.
     missedNotified: Boolean,
-    // Làm thêm giờ (lib/overtime.ts): check-out quá giờ hết ca được xếp > 30 phút → chờ admin duyệt.
-    // Từ chối → giờ ra = giờ hết ca (chỉ tính công trong ca), giờ ra thật lưu ở actualOutAt
+    // Làm NGOÀI GIỜ (lib/overtime.ts) – mặc định VẪN TÍNH công, chờ admin xác nhận:
+    //  · ra muộn: check-out quá giờ hết ca được xếp > 30 phút (minutes)
+    //  · vào sớm: check-in trước giờ ca làm tăng giờ công (earlyInMinutes)
+    //  · ngoài ca: không có ca được xếp (outOfShift) – cả lượt
+    // Từ chối → bỏ đúng phần đó: giờ vào = đầu ca / giờ ra = hết ca / ngoài ca = 0 giờ; giờ thật lưu ở actualInAt / actualOutAt
     overtime: {
       type: new Schema(
         {
-          minutes: Number, // số phút quá giờ hết ca
+          minutes: Number, // số phút quá giờ hết ca (0 = không ra muộn)
+          earlyInMinutes: Number, // số phút vào sớm trước giờ ca (0 = không)
+          outOfShift: Boolean, // lượt không có ca được xếp
+          deltaHours: Number, // giờ công ngoài giờ đang được tính (từ chối thì trừ)
+          shiftStart: Date, // giờ bắt đầu khối ca được xếp
           shiftEnd: Date, // giờ hết khối ca được xếp
           shiftLabel: String,
           status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"] },
+          actualInAt: Date,
           actualOutAt: Date,
           decidedBy: String,
           decidedAt: Date,

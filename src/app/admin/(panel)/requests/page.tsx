@@ -2,7 +2,7 @@ import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
 import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, Store, User } from "@/lib/models";
 import { resolveOvertime } from "../../actions/overtime";
-import { durVi, OVERTIME_GRACE_MIN } from "@/lib/overtime";
+import { extraKinds, hoursShort, OVERTIME_GRACE_MIN } from "@/lib/overtime";
 import { adminDirectory, APPROVE_PERM } from "@/lib/admin-stores";
 import { attText, compareWarnings, dayAttendances, pickTarget, requestWindow } from "@/lib/adjustment";
 import { localTime } from "@/lib/time";
@@ -28,7 +28,7 @@ export default async function RequestsPage() {
     AdjustmentRequest.find({ status: { $ne: "PENDING" } }).sort({ resolvedAt: -1 }).limit(15).lean(),
     PayrollFeedback.find().sort({ status: 1, createdAt: -1 }).limit(30).lean(),
   ]);
-  // làm thêm giờ (check-out quá giờ hết ca > 30 phút) chờ xác nhận + 10 cái vừa xử lý
+  // làm ngoài giờ (ra muộn > 30 phút / vào sớm / ngoài ca) chờ xác nhận + 10 cái vừa xử lý
   // mọi admin đều thấy; ai có quyền duyệt đều duyệt được – tên admin quản lý cơ sở chỉ để gắn trách nhiệm (dòng "Cần … xác nhận")
   const [ots, otsDone] = await Promise.all([
     Attendance.find({ "overtime.status": "PENDING" }).sort({ checkOutAt: 1 }).lean(),
@@ -62,14 +62,15 @@ export default async function RequestsPage() {
   return (
     <>
       <PageTitle>Yêu cầu từ nhân viên</PageTitle>
-      <Card title={`⏱ Làm thêm giờ chờ xác nhận (${ots.length})`} className="mb-4">
-        <p className="mb-2 text-xs text-ink/60">
-          Nhân viên check-out quá giờ hết ca được xếp hơn {OVERTIME_GRACE_MIN} phút (không được xếp ca sau). <b>Duyệt</b> = tính đủ giờ làm thêm. <b>Từ chối</b> = chỉ tính công tới
-          giờ hết ca, bỏ giờ làm thêm. Mỗi yêu cầu ghi tên admin quản lý cơ sở để gắn trách nhiệm – admin nào được cấp quyền cũng duyệt được.
+      <Card title={`⏱ Làm ngoài giờ chờ xác nhận (${ots.length})`} className="mb-4">
+        <p id="ngoai-gio" className="mb-2 text-xs text-ink/60">
+          Gồm: <b>ra muộn</b> quá giờ hết ca được xếp hơn {OVERTIME_GRACE_MIN} phút · <b>vào sớm</b> trước giờ ca làm tăng giờ công · <b>ngoài ca</b> (không được xếp ca).
+          Mặc định <b>vẫn tính công</b> (đã cộng vào bảng lương). <b>Duyệt</b> = giữ nguyên. <b>Từ chối</b> = bỏ phần ngoài giờ: tính từ đầu ca / tới hết ca, lượt ngoài ca
+          thành 0 giờ. Mỗi yêu cầu ghi tên admin quản lý cơ sở để gắn trách nhiệm – admin nào được cấp quyền cũng duyệt được.
         </p>
         {!canAdj && ots.length > 0 && <p className="mb-2 text-xs text-warn">Cần quyền &quot;Duyệt yêu cầu chấm công bù&quot; để xác nhận – bạn chỉ xem.</p>}
         {ots.length === 0 ? (
-          <Empty>Không có giờ làm thêm chờ xác nhận</Empty>
+          <Empty>Không có giờ làm ngoài giờ chờ xác nhận</Empty>
         ) : (
           <div className="space-y-3">
             {ots.map((a) => (
@@ -78,14 +79,35 @@ export default async function RequestsPage() {
                   <b>{users.get(String(a.userId))}</b> · {stores.get(String(a.storeId))} · {weekdayVi(a.workDate)} {viDate(a.workDate)}
                 </p>
                 <p>
-                  Ca được xếp <b>{a.overtime?.shiftLabel}</b> · vào {hm(a.checkInAt, a.storeId)} → ra <b>{hm(a.checkOutAt, a.storeId)}</b>
+                  {a.overtime?.outOfShift ? (
+                    <>
+                      <b>Không được xếp ca</b>
+                    </>
+                  ) : (
+                    <>
+                      Ca được xếp <b>{a.overtime?.shiftLabel}</b>
+                    </>
+                  )}{" "}
+                  · vào <b>{hm(a.checkInAt, a.storeId)}</b> → ra <b>{hm(a.checkOutAt, a.storeId)}</b>
                 </p>
-                <p className="font-semibold text-warn">
-                  ➕ Làm thêm {durVi(a.overtime?.minutes ?? 0)} sau giờ hết ca {hm(a.overtime?.shiftEnd, a.storeId)} · đang tính {a.roundedHours ?? 0}h công
+                {extraKinds(a.overtime ?? {}).map((k) => (
+                  <p key={k} className="font-semibold text-warn">
+                    ➕ {k}
+                  </p>
+                ))}
+                <p className="text-xs text-ink/70">
+                  Đang tính {a.roundedHours ?? 0}h công
+                  {a.overtime?.deltaHours ? (
+                    <>
+                      {" "}
+                      (gồm <b>+{hoursShort(a.overtime.deltaHours)}</b> ngoài giờ) · Từ chối →{" "}
+                      {a.overtime.outOfShift ? "0 giờ" : `còn ${hoursShort(Math.max(0, (a.roundedHours ?? 0) - a.overtime.deltaHours))}`}
+                    </>
+                  ) : null}
                 </p>
                 <Who storeId={a.storeId} perm={APPROVE_PERM.overtime} />
                 {canAdj && (
-                  <ApproveRejectForm action={resolveOvertime} approveLabel="Duyệt làm thêm" placeholder="Ghi chú (tuỳ chọn)">
+                  <ApproveRejectForm action={resolveOvertime} approveLabel={a.overtime?.outOfShift ? "Duyệt công ngoài ca" : "Duyệt ngoài giờ"} placeholder="Ghi chú (tuỳ chọn)">
                     <input type="hidden" name="id" value={String(a._id)} />
                   </ApproveRejectForm>
                 )}
@@ -99,8 +121,10 @@ export default async function RequestsPage() {
             <ul className="mt-2 space-y-1 text-xs">
               {otsDone.map((a) => (
                 <li key={String(a._id)}>
-                  {users.get(String(a.userId))} · {viDate(a.workDate)} · làm thêm {durVi(a.overtime?.minutes ?? 0)}{" "}
-                  <Badge tone={a.overtime?.status === "APPROVED" ? "green" : "red"}>{a.overtime?.status === "APPROVED" ? "Đã duyệt" : "Từ chối – tính tới hết ca"}</Badge>{" "}
+                  {users.get(String(a.userId))} · {viDate(a.workDate)} · {extraKinds(a.overtime ?? {}).join(" · ") || "làm ngoài giờ"}{" "}
+                  <Badge tone={a.overtime?.status === "APPROVED" ? "green" : "red"}>
+                    {a.overtime?.status === "APPROVED" ? "Đã duyệt" : a.overtime?.outOfShift ? "Từ chối – 0 giờ" : "Từ chối – chỉ tính trong ca"}
+                  </Badge>{" "}
                   {a.overtime?.decidedBy && <span className="text-ink/60">· {a.overtime.decidedBy}</span>}
                   {a.overtime?.reply && <span className="text-ink/60"> – {a.overtime.reply}</span>}
                 </li>

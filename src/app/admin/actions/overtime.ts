@@ -6,13 +6,13 @@ import { assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { assertNotLocked, payStoreOf, storeTz } from "@/lib/attendance";
-import { durVi, rejectOvertimeHours } from "@/lib/overtime";
+import { extraKinds, hoursShort, rejectOvertimeHours } from "@/lib/overtime";
 import { localTime } from "@/lib/time";
 import { errMsg, str, type FormState } from "./types";
 
 /**
- * Làm thêm giờ chờ xác nhận: Duyệt = giữ giờ công (xoá khỏi danh sách chờ);
- * Từ chối = giờ ra = giờ hết ca, chỉ tính công trong ca (bỏ giờ làm thêm). Quyền: duyệt chấm công (adjustments).
+ * Làm ngoài giờ chờ xác nhận (ra muộn / vào sớm / ngoài ca): Duyệt = giữ giờ công (xoá khỏi danh sách chờ);
+ * Từ chối = bỏ phần ngoài giờ (giờ vào = đầu ca / giờ ra = hết ca / ngoài ca = 0 giờ). Quyền: duyệt chấm công (adjustments).
  */
 export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormState> {
   try {
@@ -26,6 +26,7 @@ export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormS
     const tz = await storeTz(a.storeId);
     const hm = (d: Date) => localTime(d, tz).slice(0, 5);
     const approve = str(fd.get("op")) !== "reject";
+    const what = extraKinds(a.overtime).join(" · ") || "làm ngoài giờ";
     if (approve) {
       await Attendance.updateOne(
         { _id: a._id, "overtime.status": "PENDING" },
@@ -35,26 +36,37 @@ export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormS
             "overtime.decidedBy": actor.name,
             "overtime.decidedAt": new Date(),
             "overtime.reply": reply,
-            staffNote: `Admin đã duyệt làm thêm ${durVi(a.overtime.minutes ?? 0)}${reply ? ` – ${reply}` : ""}.`,
+            staffNote: `Admin đã duyệt: ${what}${a.overtime.deltaHours ? ` (+${hoursShort(a.overtime.deltaHours)} công)` : ""}${reply ? ` – ${reply}` : ""}.`,
           },
         },
       );
     } else {
-      const { fields, cap, actualOutAt } = await rejectOvertimeHours(a);
+      const { fields, inAt, outAt } = await rejectOvertimeHours(a);
+      const real = `${hm(a.checkInAt)}–${hm(a.checkOutAt!)}`;
       await Attendance.updateOne(
         { _id: a._id, "overtime.status": "PENDING" },
         {
           $set: {
             ...fields,
-            checkOutAt: cap,
-            earlyMinutes: 0,
+            checkInAt: inAt,
+            checkOutAt: outAt,
             "overtime.status": "REJECTED",
-            "overtime.actualOutAt": actualOutAt,
+            "overtime.actualInAt": a.checkInAt,
+            "overtime.actualOutAt": a.checkOutAt,
             "overtime.decidedBy": actor.name,
             "overtime.decidedAt": new Date(),
             "overtime.reply": reply,
-            note: [a.note, `Không duyệt làm thêm (ra thật ${hm(actualOutAt)}) – tính công tới ${hm(cap)}`].filter(Boolean).join(" | "),
-            staffNote: `Admin không duyệt làm thêm – chỉ tính công tới giờ hết ca ${hm(cap)}${reply ? ` (${reply})` : ""}.`,
+            note: [
+              a.note,
+              a.overtime.outOfShift ? `Không duyệt công ngoài ca (thật ${real}) – 0 giờ` : `Không duyệt ngoài giờ (thật ${real}) – tính ${hm(inAt)}–${hm(outAt)}`,
+            ]
+              .filter(Boolean)
+              .join(" | "),
+            staffNote: `${
+              a.overtime.outOfShift
+                ? `Admin không duyệt công ngoài ca (${real}) – lượt này không tính công`
+                : `Admin không duyệt làm ngoài giờ – chỉ tính công trong ca ${hm(inAt)}–${hm(outAt)}`
+            }${reply ? ` (${reply})` : ""}.`,
           },
         },
       );
@@ -62,6 +74,9 @@ export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormS
     await audit(actor, approve ? "attendance.overtime.approve" : "attendance.overtime.reject", { type: "Attendance", id: String(a._id) }, null, {
       userId: String(a.userId),
       minutes: a.overtime.minutes,
+      earlyInMinutes: a.overtime.earlyInMinutes,
+      outOfShift: a.overtime.outOfShift,
+      deltaHours: a.overtime.deltaHours,
       reply,
     });
     revalidatePath("/admin", "layout");

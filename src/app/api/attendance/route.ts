@@ -225,7 +225,7 @@ export async function POST(req: Request) {
         { returnDocument: "after" },
       );
       if (!updated) throw new HttpError(409, "Lượt chấm công đã được check-out");
-      // check-out quá giờ hết ca được xếp > 30 phút → làm thêm chờ admin duyệt (báo nhóm chấm công sau)
+      // làm ngoài giờ (ra muộn > 30 phút / vào sớm làm tăng giờ công / ngoài ca) → chờ admin xác nhận, mặc định vẫn tính (báo nhóm chấm công sau)
       const ot = await flagOvertime(updated._id, tz, { employeeName: user.name || user.email, storeId: store._id, storeName: store.name });
       if (ot) after(ot.notify);
       // thông báo nhóm chấm công (chạy sau khi đã trả kết quả cho nhân viên)
@@ -266,7 +266,7 @@ export async function POST(req: Request) {
         outOfShift: updated.outOfShift,
         storeName: store.name,
         support: isSupport,
-        overtimeMinutes: ot?.minutes ?? null,
+        overtimeNote: ot?.staffText ?? null,
       });
     }
 

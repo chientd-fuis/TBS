@@ -45,7 +45,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   };
   type Todo = { key: string; icon: string; n: number; text: string; href: string; store?: string; names?: string[] };
   const assigned: Todo[] = [
-    ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm thêm giờ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
+    ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm ngoài giờ / ngoài ca", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
     ...byStore(pCovers).map(([sid, n]) => ({ key: `cv${sid}`, icon: "⇄", n, text: "đổi ca / nhờ làm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.cover) })),
     ...byStore(pAdjs).map(([sid, n]) => ({ key: `aj${sid}`, icon: "🕘", n, text: "chấm công bù / chấm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.adjustment) })),
   ];

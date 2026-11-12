@@ -21,8 +21,8 @@ type Result = {
   outOfShift?: boolean;
   storeName?: string;
   support?: boolean;
-  /** check-out quá giờ hết ca > 30 phút → làm thêm chờ admin duyệt */
-  overtimeMinutes?: number | null;
+  /** làm ngoài giờ (ra muộn / vào sớm / ngoài ca) → chờ admin xác nhận */
+  overtimeNote?: string | null;
   /** bấm check-out sau giờ chốt ca tối: giờ chốt ("23:00") + giờ bấm thật */
   cappedAt?: string | null;
   pressedAt?: string | null;
@@ -132,8 +132,7 @@ export default function CheckInWidget({
       if (res.action === "CHECK_IN" && res.outOfShift) toast("warn", "Bạn đang chấm công ngoài ca (không có ca được xếp) – giờ làm vẫn được ghi nhận, nhớ CHECK-OUT khi về.");
       if (res.action === "CHECK_IN" && res.lateMinutes) toast("warn", `Đi muộn ${res.lateMinutes} phút`);
       if (res.earlyMinutes) toast("warn", `Về sớm ${res.earlyMinutes} phút`);
-      if (res.overtimeMinutes)
-        toast("warn", `Bạn làm thêm ${Math.floor(res.overtimeMinutes / 60) ? `${Math.floor(res.overtimeMinutes / 60)} tiếng ` : ""}${res.overtimeMinutes % 60 ? `${res.overtimeMinutes % 60} phút` : ""} sau giờ hết ca – giờ làm thêm chờ admin xác nhận.`);
+      if (res.overtimeNote) toast("warn", res.overtimeNote);
       setLocalOpen(res.action === "CHECK_IN" ? res.time : null);
       setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();

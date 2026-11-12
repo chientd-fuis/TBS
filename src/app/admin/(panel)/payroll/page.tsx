@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requirePerm } from "@/lib/guards";
-import { BonusPenalty, Payroll, PayrollItem, Store, User, type BpDetail, type ExtrasNote } from "@/lib/models";
+import { Attendance, BonusPenalty, Payroll, PayrollItem, Store, User, type BpDetail, type ExtrasNote } from "@/lib/models";
+import { payStoreFilter } from "@/lib/attendance";
+import { hoursShort } from "@/lib/overtime";
 import { localMonth, prevMonth, viDateTime, viMonth } from "@/lib/time";
 import { hoursVi, vnd } from "@/lib/format";
 import { daysOfMonth } from "@/lib/salary";
@@ -70,6 +72,17 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
     </>
   );
   const exp = (type: string) => `/api/admin/export?type=${type}&store=${store._id}&from=${month}&to=${month}`;
+  // làm ngoài giờ / ngoài ca CHƯA KIỂM DUYỆT: mặc định đang được cộng vào lương → cảnh báo cần duyệt trước khi trả
+  const pendingOts = payroll
+    ? await Attendance.find({ month, status: "COMPLETED", "overtime.status": "PENDING", ...payStoreFilter(store._id) }).select("userId overtime.deltaHours").lean()
+    : [];
+  const otBy = new Map<string, { n: number; h: number }>();
+  for (const a of pendingOts) {
+    const x = otBy.get(String(a.userId)) ?? { n: 0, h: 0 };
+    otBy.set(String(a.userId), { n: x.n + 1, h: x.h + (a.overtime?.deltaHours ?? 0) });
+  }
+  const otHours = Math.round(pendingOts.reduce((s, a) => s + (a.overtime?.deltaHours ?? 0), 0) * 100) / 100;
+  const otWarn = (n: number, h: number) => `${n} lượt làm ngoài giờ chưa kiểm duyệt${h ? ` (đang tính +${hoursShort(h)} công)` : ""}`;
 
   return (
     <>
@@ -108,7 +121,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
             )}
             {payroll?.status === "PUBLISHED" && (
               <>
-                <ActionForm action={payrollAction} submitLabel="Đã trả tất cả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu ĐÃ TRẢ lương tháng ${viMonth(month)} cho tất cả? Bảng lương sẽ bị khoá (mở khoá cần lý do).`}>
+                <ActionForm action={payrollAction} submitLabel="Đã trả tất cả" variant="secondary" successText="" className="inline-block" confirm={`${pendingOts.length ? `⚠️ Còn ${otWarn(pendingOts.length, otHours)}!\n` : ""}Đánh dấu ĐÃ TRẢ lương tháng ${viMonth(month)} cho tất cả? Bảng lương sẽ bị khoá (mở khoá cần lý do).`}>
                   {hidden("paid")}
                 </ActionForm>
                 <ActionForm action={payrollAction} submitLabel="Huỷ công bố" variant="ghost" successText="" className="inline-block" confirm="Ẩn bảng lương khỏi nhân viên?">
@@ -130,6 +143,19 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
           </Alert>
         )}
         {payroll?.status === "PAID" && <Alert tone="green">🔒 Đã trả hết – bảng lương đã khoá. Cần sửa thì mở khoá (nhập lý do) ở cuối trang hoặc từng dòng.</Alert>}
+        {pendingOts.length > 0 && (
+          <Alert tone="red">
+            <b>⚠️ Cần kiểm duyệt: {otWarn(pendingOts.length, otHours)}</b> – vào sớm / ra muộn / ngoài ca, mặc định ĐANG ĐƯỢC CỘNG vào bảng lương này. Duyệt hoặc từ chối
+            trước khi trả lương (đã trả thì tháng bị khoá, không trừ lại được):{" "}
+            {[...otBy]
+              .map(([uid, x]) => `${nameOf(items.find((i) => String(i.userId) === uid) ?? ({ userId: uid } as (typeof items)[number])) || "?"} (${x.n} lượt${x.h ? `, +${hoursShort(x.h)}` : ""})`)
+              .join(" · ")}
+            .{" "}
+            <Link href="/admin/requests#ngoai-gio" className="font-semibold text-accent underline">
+              Kiểm duyệt ở Yêu cầu →
+            </Link>
+          </Alert>
+        )}
         {!payroll ? (
           <Empty>Chưa có dữ liệu tháng này</Empty>
         ) : (
@@ -153,7 +179,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                   const bankAcc = decrypt(i.userName ? i.bankAccountEnc : u?.bankAccountEnc);
                   return (
                     <tr key={String(i._id)} className={paid ? "bg-[#f3faf5]" : ""}>
-                      <td className="font-semibold">{name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}{i.payType === "FULLTIME" && <div className="text-xs font-normal text-[#1e40af]">Full-time · nghỉ có lương {i.paidLeaveDays ?? 0} ngày</div>}</td>
+                      <td className="font-semibold">{name}<div className="text-xs font-normal text-ink/60">{i.workDays} ngày · muộn {i.lateCount} · sớm {i.earlyCount}</div>{!!i.supportHours && <div className="text-xs font-normal text-[#1e40af]">⇄ hỗ trợ: {i.supportNote}</div>}{!!i.holidayHours && <div className="text-xs font-normal text-danger" title="Đã gồm trong lương cơ bản">🎉 Lễ: {i.holidayNote} (+{vnd(i.holidayExtra)})</div>}{i.payType === "FULLTIME" && <div className="text-xs font-normal text-[#1e40af]">Full-time · nghỉ có lương {i.paidLeaveDays ?? 0} ngày</div>}{otBy.has(String(i.userId)) && <Link href="/admin/requests#ngoai-gio" className="block text-xs font-semibold text-danger underline">⏱ {otWarn(otBy.get(String(i.userId))!.n, otBy.get(String(i.userId))!.h)}</Link>}</td>
                       <td className="text-right">{hoursVi(i.totalHours)}</td>
                       <td className="whitespace-nowrap text-right">
                         {i.payType === "FULLTIME" ? <span title="Full-time: lương cơ bản = lương cứng / tháng">{vnd(i.monthlySalary ?? 0)}<div className="text-xs text-[#1e40af]">Full-time / tháng</div></span> : vnd(i.hourlyWage)}
@@ -226,7 +252,7 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
                             </details>
                           </div>
                         ) : (
-                          <ActionForm action={payrollItemAction} submitLabel="Đã trả" variant="secondary" successText="" className="inline-block" confirm={`Đánh dấu đã trả ${vnd(i.netPay)} cho ${name}? Dòng lương sẽ bị khoá (mở khoá cần lý do).`}>
+                          <ActionForm action={payrollItemAction} submitLabel="Đã trả" variant="secondary" successText="" className="inline-block" confirm={`${otBy.has(String(i.userId)) ? `⚠️ ${name} còn ${otWarn(otBy.get(String(i.userId))!.n, otBy.get(String(i.userId))!.h)}!\n` : ""}Đánh dấu đã trả ${vnd(i.netPay)} cho ${name}? Dòng lương sẽ bị khoá (mở khoá cần lý do).`}>
                             <input type="hidden" name="itemId" value={String(i._id)} />
                             <input type="hidden" name="op" value="paid" />
                           </ActionForm>
