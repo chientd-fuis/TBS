@@ -1,9 +1,20 @@
 import { cookies, headers } from "next/headers";
 import { Types } from "mongoose";
-import { Device, LoginLog } from "./models";
+import { Device, LoginLog, User } from "./models";
 import { getSettings } from "./settings";
+import { isAdminEmail } from "./auth";
 
 /* Ràng buộc thiết bị – spec 4.1.1 */
+
+/**
+ * Tài khoản admin (Admin Tổng / admin đang hoạt động, hoặc hồ sơ nhân viên tạo cho admin) vào app nhân viên
+ * → KHÔNG cần admin duyệt thiết bị: thiết bị tự được duyệt, không tính giới hạn số thiết bị.
+ */
+async function isAdminUser(userId: Types.ObjectId) {
+  const u = await User.findById(userId).select("email adminStaff").lean();
+  return !!u && (!!u.adminStaff || (await isAdminEmail(u.email)));
+}
+const AUTO_BY = "Tự động – tài khoản admin";
 
 export const DEVICE_COOKIE = "tbs_did";
 const SESSION_MARK = "tbs_ll";
@@ -86,6 +97,7 @@ export async function registerDevice(
     if (!jar.get(SESSION_MARK)) await LoginLog.create({ userId, deviceId, fingerprintHash, ip, userAgent });
     return { state: "OTHER_USER", deviceId };
   }
+  const admin = await isAdminUser(userId); // admin → thiết bị tự duyệt
   if (!dev) {
     const old = fingerprintHash
       ? await Device.findOne({ userId, fingerprintHash, deviceId: { $ne: deviceId } }).select("deviceId").lean()
@@ -96,13 +108,15 @@ export async function registerDevice(
       fingerprintHash,
       userAgent,
       ...ua,
-      status: "PENDING",
+      status: admin ? "APPROVED" : "PENDING",
+      ...(admin ? { approvedBy: AUTO_BY, approvedAt: new Date() } : {}),
       possibleOldDeviceId: old?.deviceId,
     });
   } else {
     dev.lastSeenAt = new Date();
     dev.userAgent = userAgent;
     if (fingerprintHash) dev.fingerprintHash = fingerprintHash;
+    if (admin && dev.status !== "APPROVED") dev.set({ status: "APPROVED", approvedBy: AUTO_BY, approvedAt: new Date() });
     await dev.save();
   }
   await setDeviceCookie(deviceId);
@@ -124,8 +138,14 @@ export async function checkDeviceForAttendance(userId: Types.ObjectId) {
   if (!dev) return { ok: false as const, error: "Thiết bị chưa được đăng ký." };
   if (String(dev.userId) !== String(userId))
     return { ok: false as const, error: "Thiết bị này đã gắn với nhân viên khác – không thể chấm công." };
-  if (dev.status !== "APPROVED")
+  if (dev.status !== "APPROVED") {
+    // tài khoản admin: không cần duyệt thiết bị → duyệt luôn
+    if (await isAdminUser(userId)) {
+      await Device.updateOne({ _id: dev._id }, { $set: { status: "APPROVED", approvedBy: AUTO_BY, approvedAt: new Date() } });
+      return { ok: true as const, deviceId };
+    }
     return { ok: false as const, error: "Thiết bị chưa được admin duyệt. Vui lòng gửi yêu cầu đổi thiết bị." };
+  }
   return { ok: true as const, deviceId };
 }
 

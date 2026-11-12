@@ -4,7 +4,6 @@ import { getHelp } from "@/lib/help-server";
 import RulesView from "@/components/RulesView";
 import FaqList from "@/components/help/FaqList";
 import WorkflowView from "@/components/help/WorkflowView";
-import HelpShell from "../HelpShell";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +16,13 @@ export default async function HelpSection({ params }: { params: Promise<{ sectio
   const key = MAP[section as keyof typeof MAP];
   if (!key) notFound();
   const help = await getHelp();
+  // đầu trang + hàng tab ở layout (HelpNav) – không dựng lại khi chuyển mục
   return (
-    <HelpShell current={key}>
-      <div className="rounded-2xl bg-cream/40">
-        {key === "guide" && <RulesView text={help.guide} empty="Chưa có hướng dẫn – admin cập nhật ở Cài đặt → Help." />}
-        {key === "workflow" && <WorkflowView content={help.workflow} />}
-        {key === "about" && <RulesView text={help.about} empty="Chưa có thông tin quán – admin cập nhật ở Cài đặt → Help." />}
-        {key === "faq" && <FaqList items={help.faq} />}
-      </div>
-    </HelpShell>
+    <div className="rounded-2xl bg-cream/40">
+      {key === "guide" && <RulesView text={help.guide} empty="Chưa có hướng dẫn – admin cập nhật ở Cài đặt → Help." />}
+      {key === "workflow" && <WorkflowView content={help.workflow} />}
+      {key === "about" && <RulesView text={help.about} empty="Chưa có thông tin quán – admin cập nhật ở Cài đặt → Help." />}
+      {key === "faq" && <FaqList items={help.faq} />}
+    </div>
   );
 }
