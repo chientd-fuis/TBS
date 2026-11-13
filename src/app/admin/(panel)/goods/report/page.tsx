@@ -96,7 +96,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#f1e6c8] text-left text-xs text-ink/60">
+              <tr className="border-b border-line text-left text-xs text-ink/60">
                 <th className="py-1.5 pr-3">Cơ sở</th>
                 <th className="px-2 text-right">Tiền hàng nhập</th>
                 <th className="px-2 text-right">Tháng trước</th>
@@ -110,7 +110,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
             </thead>
             <tbody>
               {per.map((p) => (
-                <tr key={p.s.id} className="border-b border-[#f1e6c8]/60">
+                <tr key={p.s.id} className="border-b border-line/60">
                   <td className="py-1.5 pr-3 font-semibold whitespace-nowrap">{p.s.short}</td>
                   <td className="px-2 text-right font-bold tabular-nums whitespace-nowrap">{vnd(p.inValue)}</td>
                   <td className="px-2 text-right tabular-nums text-ink/60 whitespace-nowrap">{vnd(p.prevIn)}</td>
@@ -153,7 +153,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#f1e6c8] text-left text-xs text-ink/60">
+                <tr className="border-b border-line text-left text-xs text-ink/60">
                   <th className="py-1.5 pr-3">Món</th>
                   {useStock && <th className="px-2 text-right">Tồn đầu</th>}
                   <th className="px-2 text-right">Nhập trong tháng</th>
@@ -166,7 +166,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
               </thead>
               <tbody>
                 {per[0].rows.map((r) => (
-                  <tr key={r.name} className="border-b border-[#f1e6c8]/60">
+                  <tr key={r.name} className="border-b border-line/60">
                     <td className="py-1.5 pr-3 font-semibold whitespace-nowrap">
                       {r.name}
                       {r.skipped > 0 && <span className="ml-1 text-xs font-normal text-warn">({r.skipped} dòng khác ĐV)</span>}
@@ -187,7 +187,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#f1e6c8] text-left text-xs text-ink/60">
+                <tr className="border-b border-line text-left text-xs text-ink/60">
                   <th className="py-1.5 pr-3">Món</th>
                   {per.map((p) => <th key={p.s.id} className="px-2 text-right whitespace-nowrap">{p.s.short}</th>)}
                   <th className="pl-2 text-right">Tổng</th>
@@ -199,7 +199,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
                   const sq = cells.reduce((s, r) => s + (r?.monthReceived ?? 0), 0);
                   const sv = cells.reduce((s, r) => s + (r?.receivedValue ?? 0), 0);
                   return (
-                    <tr key={n} className="border-b border-[#f1e6c8]/60">
+                    <tr key={n} className="border-b border-line/60">
                       <td className="py-1.5 pr-3 font-semibold whitespace-nowrap">{n}</td>
                       {cells.map((r, i) => (
                         <td key={per[i].s.id} className="px-2 text-right tabular-nums whitespace-nowrap">

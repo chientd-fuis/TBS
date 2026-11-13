@@ -21,7 +21,7 @@ export default function GoodsTabs({ active, stockOn, admin }: { active: (typeof 
           href={t.href}
           className={cn(
             "rounded-xl px-3 py-1.5 text-sm font-semibold ring-1",
-            active === t.key ? "bg-secondary text-white ring-secondary" : "bg-white text-ink ring-[#e9d9a8] hover:bg-primary-light",
+            active === t.key ? "bg-secondary text-white ring-secondary" : "bg-card text-ink ring-line-strong hover:bg-primary-light",
           )}
         >
           {t.label}

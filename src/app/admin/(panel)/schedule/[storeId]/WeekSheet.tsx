@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { ROW_COLORS } from "@/components/WeekGrid";
+import { ROW_COLORS_LIGHT as ROW_COLORS } from "@/components/WeekGrid";
 import type { Entry, TplInfo } from "@/lib/schedule";
 import { viDate, weekdayVi } from "@/lib/time";
 

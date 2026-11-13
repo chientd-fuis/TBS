@@ -11,14 +11,14 @@ import CostPie, { type Slice } from "./CostPie";
 const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
 const signed = (n: number) => `${n < 0 ? "−" : ""}${vnd(Math.abs(n))}`;
 const pct = (x: number) => `${Math.round(x * 1000) / 10}%`;
-const profitCls = (n: number) => (n > 0 ? "text-secondary-dark" : n < 0 ? "text-danger" : "text-ink/50");
+const profitCls = (n: number) => (n > 0 ? "text-good" : n < 0 ? "text-danger" : "text-ink/50");
 
 function Delta({ now, prev, invert = false }: { now: number; prev: number; invert?: boolean }) {
   if (!prev) return <span className="text-xs text-ink/40">–</span>;
   const d = (now - prev) / Math.abs(prev);
   const good = invert ? d <= 0 : d >= 0;
   return (
-    <span className={cn("text-xs font-semibold", good ? "text-secondary-dark" : "text-danger")}>
+    <span className={cn("text-xs font-semibold", good ? "text-good" : "text-danger")}>
       {d >= 0 ? "▲" : "▼"} {pct(Math.abs(d))} <span className="font-normal text-ink/50">so kỳ trước</span>
     </span>
   );
@@ -114,7 +114,7 @@ export default function PnlView({
               {(() => {
                 const group = (title: string, total: number, items: [string, number][], sign: "+" | "−", note?: string) => (
                   <>
-                    <tr className="border-t-2 border-[#f1e6c8]">
+                    <tr className="border-t-2 border-line">
                       <td className="pt-2.5 pb-1 font-bold text-accent">
                         {sign === "−" ? "− " : ""}
                         {title}
@@ -143,7 +143,7 @@ export default function PnlView({
                 ];
                 return (
                   <>
-                    <tr className="border-t-2 border-[#f1e6c8]">
+                    <tr className="border-t-2 border-line">
                       <td className="pt-2.5 pb-1 font-bold text-accent">
                         Doanh thu thật (chốt ca)
                         <span className="block text-xs font-normal text-ink/55">= TK + TM + Shopee/Grab + Chi phí két (két là tiền doanh thu lấy ra chi)</span>
@@ -191,14 +191,14 @@ export default function PnlView({
                       t.platformFee ? undefined : "Chưa đặt % phí sàn – vào tab Cài đặt",
                     )}
                     {t.direct > 0 && group("Chi phí gắn riêng cơ sở (dữ liệu cũ)", t.direct, per((l) => l.direct), "−")}
-                    <tr className="border-t-2 border-[#f1e6c8] bg-cream font-bold">
+                    <tr className="border-t-2 border-line bg-cream font-bold">
                       <td className="py-2 pl-1">
                         Tổng chi phí
                         <span className="block text-xs font-normal text-ink/55">Chi phí két + Lương NV + Chi phí + Mặt bằng + Phí sàn</span>
                       </td>
                       <td className="py-2 text-right tabular-nums">{vnd(totalCost)}</td>
                     </tr>
-                    <tr className="border-t-2 border-[#f1e6c8] bg-[#e3f3e7] text-base font-bold">
+                    <tr className="border-t-2 border-line bg-ok-bg text-base font-bold">
                       <td className="py-2 pl-1">
                         = LÃI
                         <span className="block text-xs font-normal text-ink/55">Doanh thu thật − Tổng chi phí</span>
@@ -239,16 +239,16 @@ export default function PnlView({
       <Card
         title="Theo cơ sở (tham khảo)"
         actions={
-          <div className="flex rounded-lg bg-gray-100 p-0.5 text-xs">
-            <Link href={link(false)} className={cn("rounded-md px-2.5 py-1", !alloc && "bg-white font-bold shadow-sm")}>Lãi gộp cơ sở</Link>
-            <Link href={link(true)} className={cn("rounded-md px-2.5 py-1", alloc && "bg-white font-bold shadow-sm")}>Phân bổ chi phí chung</Link>
+          <div className="flex rounded-lg bg-mute-bg p-0.5 text-xs">
+            <Link href={link(false)} className={cn("rounded-md px-2.5 py-1", !alloc && "bg-card font-bold shadow-sm")}>Lãi gộp cơ sở</Link>
+            <Link href={link(true)} className={cn("rounded-md px-2.5 py-1", alloc && "bg-card font-bold shadow-sm")}>Phân bổ chi phí chung</Link>
           </div>
         }
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-[#f1e6c8] text-xs text-ink/60">
+              <tr className="border-b border-line text-xs text-ink/60">
                 <th className="py-2 text-left font-semibold">Khoản</th>
                 {stores.map((s) => <th key={s._id} className="py-2 text-right font-semibold">{s.short}</th>)}
                 <th className="py-2 text-right font-semibold">Cả chuỗi</th>
@@ -259,7 +259,7 @@ export default function PnlView({
                 const cols: PnlLine[] = [...stores.map((s) => pnl.byStore[s._id]), t];
                 const allocCols = [...stores.map((s) => pnl.allocByStore[s._id] ?? 0), t.shared];
                 const row = (label: string, vals: number[], cls?: string, color = false) => (
-                  <tr key={label} className={cn("border-b border-[#f8f1dd]", cls)}>
+                  <tr key={label} className={cn("border-b border-line", cls)}>
                     <td className="py-1.5 pr-2">{label}</td>
                     {vals.map((v, i) => (
                       <td key={i} className={cn("py-1.5 text-right tabular-nums", color && profitCls(v))}>{signed(v)}</td>
@@ -282,7 +282,7 @@ export default function PnlView({
                         {row(
                           "= Lãi sau phân bổ (tham khảo)",
                           cols.map((l, i) => l.contribution - allocCols[i]),
-                          "bg-[#e3f3e7] font-bold",
+                          "bg-ok-bg font-bold",
                           true,
                         )}
                       </>
@@ -303,8 +303,8 @@ export default function PnlView({
       <Card title="Theo ngày (cả chuỗi)">
         <div className="max-h-[520px] overflow-auto">
           <table className="w-full min-w-[480px] text-sm">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b border-[#f1e6c8] text-xs text-ink/60">
+            <thead className="sticky top-0 bg-card">
+              <tr className="border-b border-line text-xs text-ink/60">
                 <th className="py-2 text-left font-semibold">Ngày</th>
                 <th className="py-2 text-right font-semibold">Doanh thu</th>
                 <th className="py-2 text-right font-semibold">Lãi gộp CS</th>
@@ -316,7 +316,7 @@ export default function PnlView({
               {shownDates.map((d) => {
                 const l = pnl.byDate[d];
                 return (
-                  <tr key={d} className="border-b border-[#f8f1dd]">
+                  <tr key={d} className="border-b border-line">
                     <td className="py-1.5 whitespace-nowrap">
                       {viDate(d).slice(0, 5)} <span className="text-xs text-ink/50">{weekdayVi(d).replace("Thứ ", "T").replace("Chủ Nhật", "CN")}</span>
                     </td>

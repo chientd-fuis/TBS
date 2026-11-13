@@ -20,6 +20,7 @@
   --color-on-primary: #542424; /* chữ trên nền primary (nút chính, đầu bảng, tab đang chọn) */
   --color-header: #fccc18; /* thanh đầu trang app nhân viên */
   --color-on-header: #542424;
+  --color-nav: #18783c; /* thanh menu trang admin (menu trái máy tính / thanh trên điện thoại) – chữ trắng */
   --color-on-accent: #ffffff; /* chữ trên nền accent */
   --color-card: #ffffff; /* thẻ, ô nhập, popup, menu dưới */
   --color-chip: rgb(255 255 255 / 0.7); /* nút nhỏ trên thanh đầu trang (Trợ giúp, Nội quy…) */
@@ -100,6 +101,7 @@ body {
   --color-on-primary: #ffffff;
   --color-header: #d62f36;
   --color-on-header: #ffffff;
+  --color-nav: #64151a;
   --color-chip: rgb(255 255 255 / 0.85);
   --color-line: #f6dcda;
   --color-line-strong: #efc3c0;
@@ -119,6 +121,7 @@ body {
   --color-on-primary: #5c1838;
   --color-header: #f7a9c9;
   --color-on-header: #5c1838;
+  --color-nav: #a52d62;
   --color-line: #f7dbe7;
   --color-line-strong: #f0c2d5;
   --color-muted: #fbe4ee;
@@ -137,6 +140,7 @@ body {
   --color-on-primary: #0f3d31;
   --color-header: #86d5b8;
   --color-on-header: #0f3d31;
+  --color-nav: #0b6d54;
   --color-line: #d3ebe1;
   --color-line-strong: #b8decf;
   --color-muted: #e2f2eb;
@@ -155,6 +159,7 @@ body {
   --color-on-primary: #12306b;
   --color-header: #b3d1ff;
   --color-on-header: #12306b;
+  --color-nav: #1d4ed8;
   --color-line: #dde7fb;
   --color-line-strong: #c6d7f7;
   --color-muted: #e6eefc;
@@ -179,6 +184,7 @@ body {
   --color-on-primary: #18181b;
   --color-header: #202024;
   --color-on-header: #f4f4f5;
+  --color-nav: #202024;
   --color-on-accent: #18181b;
   --color-card: #27272a;
   --color-chip: #3f3f46;

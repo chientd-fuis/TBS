@@ -12,7 +12,7 @@ export default function WeatherStrip({ days, weather, today }: { days: string[];
   });
   const label = (d: string) => `${weekdayVi(d).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} ${d.slice(8)}/${d.slice(5, 7)}`;
   return (
-    <div className={`rounded-2xl border p-3 text-sm ${bad.length ? "border-[#f5c99b] bg-[#fff8ef]" : "border-[#f1e6c8] bg-white"}`}>
+    <div className={`rounded-2xl border p-3 text-sm ${bad.length ? "border-warn-line bg-warn-soft" : "border-line bg-card"}`}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
         <b>🌤️ Thời tiết tuần này</b>
         <span className="text-[11px] text-ink/50">Open-Meteo · mưa &gt; {RAIN_WARN_PCT}% hoặc nhiệt độ TB ngày &lt; {COLD_MAX_C}°C → nên giảm ca (quán kem chè)</span>
@@ -23,12 +23,12 @@ export default function WeatherStrip({ days, weather, today }: { days: string[];
           const a = w && weatherAdvice(w);
           const past = d < today;
           return (
-            <div key={d} className={`rounded-xl px-1.5 py-1.5 text-center ${past ? "opacity-40" : ""} ${a?.reduce ? "bg-[#fde4cf] ring-1 ring-[#f0a35e]" : "bg-cream"}`}>
+            <div key={d} className={`rounded-xl px-1.5 py-1.5 text-center ${past ? "opacity-40" : ""} ${a?.reduce ? "bg-late-bg ring-1 ring-warn-line" : "bg-cream"}`}>
               <div className="text-[11px] font-semibold">{label(d)}</div>
               {w ? (
                 <>
                   <div className="text-xl leading-tight">{weatherIcon(w.code)}</div>
-                  <div className={`text-xs ${a?.cold ? "font-bold text-[#1e40af]" : ""}`}>
+                  <div className={`text-xs ${a?.cold ? "font-bold text-info-fg" : ""}`}>
                     {Math.round(w.tMin)}–{Math.round(w.tMax)}°
                   </div>
                   <div className={`text-[11px] ${a?.rain ? "font-bold text-danger" : "text-ink/60"}`}>☔ {w.rainPct}%</div>
@@ -41,7 +41,7 @@ export default function WeatherStrip({ days, weather, today }: { days: string[];
         })}
       </div>
       {!!bad.length && (
-        <ul className="mt-2 space-y-0.5 text-[13px] font-semibold text-[#b45309]">
+        <ul className="mt-2 space-y-0.5 text-[13px] font-semibold text-weather-fg">
           {bad.map(({ d, a }) => (
             <li key={d}>
               ⚠ {label(d)}: {a.text}

@@ -124,7 +124,7 @@ export default async function DailyRevenuePage({
                 "rounded-lg px-3 py-1.5",
                 (sp.store ?? "") === s.id
                   ? "bg-secondary font-bold text-white"
-                  : "bg-white text-ink/70 ring-1 ring-[#f1e6c8] hover:bg-primary-light",
+                  : "bg-card text-ink/70 ring-1 ring-line hover:bg-primary-light",
               )}
             >
               {s.name}
@@ -163,16 +163,16 @@ export default async function DailyRevenuePage({
                   <dd className="text-right text-xs tabular-nums text-ink/60">
                     {vnd(c.deposit)} / {vnd(c.withdraw)}
                   </dd>
-                  <dt className="pl-2 text-xs font-semibold text-[#1e40af]">
+                  <dt className="pl-2 text-xs font-semibold text-info-fg">
                     TK sau chuyển
                   </dt>
-                  <dd className="text-right text-xs font-semibold tabular-nums text-[#1e40af]">
+                  <dd className="text-right text-xs font-semibold tabular-nums text-info-fg">
                     {vnd(c.tk + c.deposit - c.withdraw)}
                   </dd>
-                  <dt className="pl-2 text-xs font-semibold text-[#1e40af]">
+                  <dt className="pl-2 text-xs font-semibold text-info-fg">
                     TM sau chuyển
                   </dt>
-                  <dd className="text-right text-xs font-semibold tabular-nums text-[#1e40af]">
+                  <dd className="text-right text-xs font-semibold tabular-nums text-info-fg">
                     {vnd(c.tm - c.deposit + c.withdraw)}
                   </dd>
                 </>
@@ -189,7 +189,7 @@ export default async function DailyRevenuePage({
               <dd
                 className={cn(
                   "text-right font-semibold tabular-nums",
-                  c.diff ? "text-danger" : "text-secondary-dark",
+                  c.diff ? "text-danger" : "text-good",
                 )}
               >
                 {c.diff > 0 ? "+" : ""}
@@ -258,7 +258,7 @@ export default async function DailyRevenuePage({
             </div>
           </ActionForm>
           {transfers.length > 0 && (
-            <ul className="mt-3 divide-y divide-[#f1e6c8] text-sm">
+            <ul className="mt-3 divide-y divide-line text-sm">
               {transfers.map((t) => (
                 <li
                   key={String(t._id)}

@@ -80,7 +80,7 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
           {!rows.length ? (
             <Empty>Không có chi phí trong ca tháng này.</Empty>
           ) : (
-            <ul className="divide-y divide-[#f1e6c8]">
+            <ul className="divide-y divide-line">
               {rows.map((r) => (
                 <li key={r.id} className="flex gap-3 py-2.5 text-sm">
                   <div className="w-24 shrink-0 text-xs text-ink/60">
@@ -92,7 +92,7 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
                       {r.items.map((it, i) => (
                         <li key={i} className="flex justify-between gap-2">
                           <span className="truncate">{it.label || <i className="text-ink/50">không ghi mô tả</i>}</span>
-                          <span className={`shrink-0 tabular-nums ${it.amount < 0 ? "text-secondary-dark" : ""}`}>{vnd(it.amount)}</span>
+                          <span className={`shrink-0 tabular-nums ${it.amount < 0 ? "text-good" : ""}`}>{vnd(it.amount)}</span>
                         </li>
                       ))}
                     </ul>
@@ -117,7 +117,7 @@ export default async function ShiftExpensesPage({ searchParams }: { searchParams
                     <span className="truncate">{t.label} <span className="text-ink/50">×{t.n}</span></span>
                     <span className="tabular-nums">{vnd(t.sum)}</span>
                   </div>
-                  <span className="mt-0.5 block h-2 overflow-hidden rounded-full bg-gray-100">
+                  <span className="mt-0.5 block h-2 overflow-hidden rounded-full bg-mute-bg">
                     <span className="block h-full rounded-full bg-secondary" style={{ width: `${(Math.max(0, t.sum) / maxTop) * 100}%` }} />
                   </span>
                 </li>

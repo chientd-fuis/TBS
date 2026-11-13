@@ -64,7 +64,7 @@ export default async function RentPage({ searchParams }: { searchParams: Promise
                       <Badge tone="orange">Chưa có cho tháng này</Badge>
                     )}
                   </p>
-                  <ul className="mt-1 divide-y divide-[#f1e6c8]">
+                  <ul className="mt-1 divide-y divide-line">
                     {rows.map((f) => (
                       <li key={String(f._id)} className={`flex items-center gap-3 py-1.5 text-sm ${active(f) ? "" : "opacity-50"}`}>
                         <span className="flex-1">

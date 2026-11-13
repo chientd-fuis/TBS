@@ -40,7 +40,7 @@ export function ExtrasCell({
 }) {
   const plus = field === "allowance";
   const label = plus ? "Phụ cấp" : "Tạm ứng";
-  const tone = plus ? "text-secondary-dark" : "text-danger";
+  const tone = plus ? "text-good" : "text-danger";
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
@@ -97,15 +97,15 @@ export function ExtrasCell({
           onClick={show}
           aria-label={`Thêm ${label.toLowerCase()} cho ${name}`}
           title={`Thêm ${label.toLowerCase()}`}
-          className={`flex h-8 w-8 items-center justify-center rounded-full ${plus ? "bg-[#e3f4e8] text-secondary-dark" : "bg-[#fde4e4] text-danger"}`}
+          className={`flex h-8 w-8 items-center justify-center rounded-full ${plus ? "bg-ok-bg text-good" : "bg-bad-soft text-danger"}`}
         >
           <Plus size={16} />
         </button>
       )}
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label={`${label} · ${name}`}>
-            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 text-sm shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-shade/40 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label={`${label} · ${name}`}>
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-card p-4 text-sm shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <b className={tone}>
                   {plus ? "+ " : "− "}
@@ -125,13 +125,13 @@ export function ExtrasCell({
                         {e.meta && <span className="block text-[11px] text-ink/50">{e.meta}</span>}
                       </span>
                       {!locked && (
-                        <button type="button" disabled={pending} onClick={() => remove(e)} aria-label="Xoá khoản này" className="rounded p-1 text-ink/40 hover:bg-white hover:text-danger">
+                        <button type="button" disabled={pending} onClick={() => remove(e)} aria-label="Xoá khoản này" className="rounded p-1 text-ink/40 hover:bg-card hover:text-danger">
                           <Trash2 size={14} />
                         </button>
                       )}
                     </li>
                   ))}
-                  <li className="flex justify-between border-t border-dashed border-[#f1e6c8] px-2.5 pt-1.5 font-bold">
+                  <li className="flex justify-between border-t border-dashed border-line px-2.5 pt-1.5 font-bold">
                     <span>Tổng</span>
                     <span className={tone}>{vnd(total)}</span>
                   </li>
@@ -140,7 +140,7 @@ export function ExtrasCell({
               {locked && <p className="text-xs text-ink/60">🔒 Đã trả lương – mở khoá dòng lương để sửa.</p>}
 
               {!locked && leave && (
-                <div className="mb-3 rounded-xl border border-[#e9d9a8] bg-cream/60 p-2.5">
+                <div className="mb-3 rounded-xl border border-line-strong bg-cream/60 p-2.5">
                   <p className="mb-1.5 font-semibold text-accent">Nghỉ không lương (Full-time)</p>
                   <dl className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-xs">
                     <dt className="text-ink/70">Lương cứng</dt><dd className="text-right">{vnd(leave.monthlySalary)}</dd>
@@ -156,7 +156,7 @@ export function ExtrasCell({
                         onChange={(e) => setUnpaid(e.target.value)}
                         inputMode="decimal"
                         aria-label="Số ngày nghỉ không lương"
-                        className="block w-24 rounded-xl border border-[#e9d9a8] bg-white px-2.5 py-1.5 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                        className="block w-24 rounded-xl border border-line-strong bg-card px-2.5 py-1.5 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
                       />
                     </label>
                     <span className="flex-1 pb-1.5 text-right text-xs">
@@ -174,7 +174,7 @@ export function ExtrasCell({
                     type="button"
                     disabled={leaveAmount == null}
                     onClick={addLeaveRow}
-                    className="mt-2 flex items-center gap-1 rounded-xl bg-white px-2.5 py-1.5 text-xs font-semibold text-danger ring-1 ring-[#f3c4c4] disabled:opacity-50"
+                    className="mt-2 flex items-center gap-1 rounded-xl bg-card px-2.5 py-1.5 text-xs font-semibold text-danger ring-1 ring-bad-line disabled:opacity-50"
                   >
                     <Plus size={14} /> Thêm vào tạm ứng
                   </button>
@@ -195,7 +195,7 @@ export function ExtrasCell({
                             onChange={(e) => setRows(rows.map((x, z) => (z === k ? { ...x, text: e.target.value } : x)))}
                             placeholder="Số tiền"
                             aria-label="Số tiền"
-                            className={`block w-full rounded-xl border px-2.5 py-2 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40 ${bad ? "border-danger text-danger" : "border-[#e9d9a8]"}`}
+                            className={`block w-full rounded-xl border px-2.5 py-2 text-right tabular-nums outline-none focus:ring-2 focus:ring-primary/40 ${bad ? "border-danger text-danger" : "border-line-strong"}`}
                           />
                           {p.amount != null && p.amount > 0 && /[^\d.,\s]/.test(r.text) && <span className="block pr-1 text-right text-[11px] text-ink/60">= {vnd(p.amount)}</span>}
                         </div>
@@ -205,7 +205,7 @@ export function ExtrasCell({
                           placeholder={plus ? "Nội dung (VD hỗ trợ ship 31 đơn)" : "Nội dung (VD ứng giữa tháng)"}
                           aria-label="Nội dung"
                           maxLength={200}
-                          className="block min-w-0 flex-1 rounded-xl border border-[#e9d9a8] px-2.5 py-2 outline-none focus:ring-2 focus:ring-primary/40"
+                          className="block min-w-0 flex-1 rounded-xl border border-line-strong px-2.5 py-2 outline-none focus:ring-2 focus:ring-primary/40"
                         />
                         <button type="button" onClick={() => setRows(rows.filter((_, z) => z !== k))} aria-label="Bỏ dòng" className="mt-1.5 rounded p-1 text-ink/40 hover:text-danger">
                           <X size={16} />
@@ -222,7 +222,7 @@ export function ExtrasCell({
                       type="button"
                       disabled={!rowsOk || pending}
                       onClick={save}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 font-semibold disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary text-on-primary px-3 py-2 font-semibold disabled:opacity-50"
                     >
                       {pending && <Loader2 size={16} className="animate-spin" />} Lưu {parsed.length > 1 && rowsOk ? `(${vnd(parsed.reduce((s, p) => s + (p.amount ?? 0), 0))})` : ""}
                     </button>
@@ -254,7 +254,7 @@ export function CopyAccount({ account }: { account: string }) {
     <span className="inline-flex items-center gap-1">
       {account}
       <button type="button" onClick={copy} aria-label="Copy số tài khoản" title="Copy số tài khoản" className="rounded p-1 text-ink/60 hover:bg-primary-light hover:text-accent">
-        {done ? <Check size={14} className="text-secondary-dark" /> : <Copy size={14} />}
+        {done ? <Check size={14} className="text-good" /> : <Copy size={14} />}
       </button>
     </span>
   );

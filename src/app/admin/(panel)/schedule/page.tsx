@@ -33,8 +33,8 @@ export default async function ScheduleStores() {
             <Card title={s.name} actions={pendingAll > 0 ? <Badge tone="orange">{pendingAll} chờ duyệt</Badge> : <Badge tone="green">Không có chờ duyệt</Badge>}>
               <div className="grid grid-cols-3 gap-2 text-center text-sm">
                 <div className="rounded-xl bg-primary-light p-2"><p className="text-xs">Nhân viên</p><p className="text-xl font-bold">{staff}</p></div>
-                <div className="rounded-xl bg-[#d9e6f6] p-2"><p className="text-xs">Ca tuần này</p><p className="text-xl font-bold">{thisWeek}</p></div>
-                <div className="rounded-xl bg-[#ffe8d9] p-2"><p className="text-xs">Đăng ký tuần sau</p><p className="text-xl font-bold text-warn">{pendingNext}</p></div>
+                <div className="rounded-xl bg-grid-1 p-2"><p className="text-xs">Ca tuần này</p><p className="text-xl font-bold">{thisWeek}</p></div>
+                <div className="rounded-xl bg-late-bg p-2"><p className="text-xs">Đăng ký tuần sau</p><p className="text-xl font-bold text-warn">{pendingNext}</p></div>
               </div>
               {tpls === 0 && <p className="mt-2 text-xs text-danger">Chưa có ca mẫu – tạo ở mục Ca làm việc.</p>}
               <p className="mt-2 text-right text-sm font-semibold text-accent">Mở lịch →</p>

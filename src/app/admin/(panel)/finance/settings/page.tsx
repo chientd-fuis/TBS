@@ -56,7 +56,7 @@ export default async function FinanceSettingsPage() {
             </div>
           </div>
         </ActionForm>
-        <div className="mt-3 border-t border-[#f1e6c8] pt-3">
+        <div className="mt-3 border-t border-line pt-3">
           <ActionForm action={testFinanceTelegram} submitLabel="Gửi tin thử vào nhóm" variant="outline" successText="Đã gửi – kiểm tra nhóm Telegram" />
         </div>
       </Card>

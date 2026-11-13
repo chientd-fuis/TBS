@@ -6,6 +6,8 @@ import { weekdayVi } from "@/lib/time";
 
 /** màu nền từng hàng ca – biến CSS (globals.css --color-grid-1..6) để theme Tối đổi sang bản tối */
 export const ROW_COLORS = [1, 2, 3, 4, 5, 6].map((i) => `var(--color-grid-${i})`);
+/** bản màu sáng cố định – bảng xuất ảnh (WeekSheet) luôn như tờ giấy, không theo theme */
+export const ROW_COLORS_LIGHT = ["#d9e6f6", "#fdf0c4", "#f6dbe4", "#dff1e4", "#e9e1f6", "#fde3cf"];
 
 export type GridTpl = { id: string; name: string; startTime: string; endTime: string; minStaff?: number; targetStaff?: number };
 

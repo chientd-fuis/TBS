@@ -169,7 +169,7 @@ export default function ScheduleBoard(p: Props) {
           <span className="inline-flex items-center gap-1"><Zap size={12} className="text-secondary" /> Tự động xếp</span>
           <Badge tone="red">Thiếu người</Badge>
           <Badge tone="yellow">Ít người</Badge>
-          <span className="inline-flex items-center gap-1 rounded-md bg-[#dbeafe] px-1.5 text-[#1e40af]"><ArrowLeftRight size={12} /> Hỗ trợ</span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-info-bg px-1.5 text-info-fg"><ArrowLeftRight size={12} /> Hỗ trợ</span>
         </div>
       </div>
 
@@ -188,32 +188,32 @@ export default function ScheduleBoard(p: Props) {
         <Card title="Xếp ca tự động (nâng cao)">
           <div className="grid gap-3 text-sm md:grid-cols-2">
             <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={opts.approvePending} onChange={(e) => setOpts({ ...opts, approvePending: e.target.checked })} />
+              <input type="checkbox" className="mt-1 accent-secondary" checked={opts.approvePending} onChange={(e) => setOpts({ ...opts, approvePending: e.target.checked })} />
               <span><b>Duyệt đăng ký đang chờ</b> tới định mức mỗi ca (ưu tiên người đang có ít ca, đăng ký sớm). Đăng ký vượt định mức để admin tự quyết.</span>
             </label>
             <label className="flex items-start gap-2">
               <span className="mt-0.5 whitespace-nowrap font-bold">Bù ca thiếu:</span>
-              <select className="rounded-lg border border-[#e9d9a8] px-2 py-1" value={opts.fillTo} onChange={(e) => setOpts({ ...opts, fillTo: e.target.value as AutoOptions["fillTo"] })}>
+              <select className="rounded-lg border border-line-strong px-2 py-1" value={opts.fillTo} onChange={(e) => setOpts({ ...opts, fillTo: e.target.value as AutoOptions["fillTo"] })}>
                 <option value="none">Không bù</option>
                 <option value="min">Bù tới mức tối thiểu</option>
                 <option value="target">Bù tới định mức</option>
               </select>
             </label>
             <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={opts.preferFrequentShift} onChange={(e) => setOpts({ ...opts, preferFrequentShift: e.target.checked })} />
+              <input type="checkbox" className="mt-1 accent-secondary" checked={opts.preferFrequentShift} onChange={(e) => setOpts({ ...opts, preferFrequentShift: e.target.checked })} />
               <span><b>Ưu tiên người hay làm ca này</b> (8 tuần gần nhất)</span>
             </label>
             <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={opts.preferCoworkers} onChange={(e) => setOpts({ ...opts, preferCoworkers: e.target.checked })} />
+              <input type="checkbox" className="mt-1 accent-secondary" checked={opts.preferCoworkers} onChange={(e) => setOpts({ ...opts, preferCoworkers: e.target.checked })} />
               <span><b>Ưu tiên người hay làm cùng</b> với những người đã có trong ca</span>
             </label>
             <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={opts.onlyRequested} onChange={(e) => setOpts({ ...opts, onlyRequested: e.target.checked })} />
+              <input type="checkbox" className="mt-1 accent-secondary" checked={opts.onlyRequested} onChange={(e) => setOpts({ ...opts, onlyRequested: e.target.checked })} />
               <span>Khi bù ca, <b>chỉ lấy người đã đăng ký</b> ít nhất 1 ca trong tuần</span>
             </label>
             <label className="flex items-center gap-2">
               <span className="font-bold">Tối đa ca / người / tuần:</span>
-              <input type="number" min={0} className="w-20 rounded-lg border border-[#e9d9a8] px-2 py-1" value={opts.maxShiftsPerWeek} onChange={(e) => setOpts({ ...opts, maxShiftsPerWeek: Number(e.target.value) || 0 })} />
+              <input type="number" min={0} className="w-20 rounded-lg border border-line-strong px-2 py-1" value={opts.maxShiftsPerWeek} onChange={(e) => setOpts({ ...opts, maxShiftsPerWeek: Number(e.target.value) || 0 })} />
               <span className="text-xs text-ink/60">(0 = không giới hạn)</span>
             </label>
           </div>
@@ -315,14 +315,14 @@ export default function ScheduleBoard(p: Props) {
       </ConfirmDialog>
 
       {/* Bảng lịch theo mẫu – thanh chọn tuần ghim trên đầu khi cuộn (điện thoại) */}
-      <div className="sticky top-[52px] z-20 -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#f1e6c8] bg-cream/95 px-4 py-2 shadow-sm backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
+      <div className="sticky top-[52px] z-20 -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-line bg-cream/95 px-4 py-2 shadow-sm backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
         {p.weekNav}
-        <div className="inline-flex rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]" role="tablist">
+        <div className="inline-flex rounded-xl bg-card p-1 ring-1 ring-line" role="tablist">
           <button
             role="tab"
             aria-selected={mode === "view"}
             onClick={() => setMode("view")}
-            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "view" ? "bg-primary font-bold" : "hover:bg-primary-light")}
+            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "view" ? "bg-primary text-on-primary font-bold" : "hover:bg-primary-light")}
           >
             <Eye size={16} /> Chế độ xem
           </button>
@@ -330,14 +330,14 @@ export default function ScheduleBoard(p: Props) {
             role="tab"
             aria-selected={mode === "edit"}
             onClick={() => setMode("edit")}
-            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "edit" ? "bg-primary font-bold" : "hover:bg-primary-light")}
+            className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm", mode === "edit" ? "bg-primary text-on-primary font-bold" : "hover:bg-primary-light")}
           >
             <Pencil size={16} /> Chế độ sửa
           </button>
         </div>
       </div>
       {mode === "view" ? (
-        <div className="overflow-x-auto rounded-2xl ring-1 ring-[#f1e6c8]">
+        <div className="overflow-x-auto rounded-2xl ring-1 ring-line">
           <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={p.entries} names={p.names} withPending supportFrom={p.supportFrom} width="100%" />
         </div>
       ) : (
@@ -368,10 +368,10 @@ export default function ScheduleBoard(p: Props) {
                   className={cn(
                     "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-xs",
                     e.status === "PENDING"
-                      ? "bg-[#ffd8b8] font-semibold text-warn ring-1 ring-warn/40"
+                      ? "bg-late-strong font-semibold text-warn ring-1 ring-warn/40"
                       : p.supportFrom[e.userId]
-                        ? "bg-[#dbeafe] text-[#1e40af] ring-1 ring-[#93c5fd]"
-                        : "bg-white/80",
+                        ? "bg-info-bg text-info-fg ring-1 ring-info-line"
+                        : "bg-card/80",
                   )}
                   title={
                     p.supportFrom[e.userId]
@@ -401,13 +401,13 @@ export default function ScheduleBoard(p: Props) {
                 </div>
               ))}
               {props.map((c) => (
-                <div key={c.userId} className="rounded-md border border-dashed border-secondary px-1 py-0.5 text-xs text-secondary-dark" title={c.reason}>
+                <div key={c.userId} className="rounded-md border border-dashed border-secondary px-1 py-0.5 text-xs text-good" title={c.reason}>
                   + {c.userName}
                 </div>
               ))}
               <div className="mt-auto flex items-center gap-1 pt-0.5">
                 <select
-                  className="w-full min-w-0 rounded border border-transparent bg-transparent text-[11px] text-ink/60 hover:border-[#c9d6e8] hover:bg-white"
+                  className="w-full min-w-0 rounded border border-transparent bg-transparent text-[11px] text-ink/60 hover:border-grid-line hover:bg-card"
                   value=""
                   disabled={pending}
                   onChange={(ev) => ev.target.value && addSlot(t.id, d, ev.target.value)}
@@ -433,12 +433,12 @@ export default function ScheduleBoard(p: Props) {
                   })}
                 </select>
                 {lv === "short" && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-danger" title={`Thiếu người: ${approvedN}/${tpl.minStaff} (tối thiểu)`}>
+                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-card/80 px-1 text-[10px] font-bold text-danger" title={`Thiếu người: ${approvedN}/${tpl.minStaff} (tối thiểu)`}>
                     <TriangleAlert size={11} /> Thiếu {tpl.minStaff - approvedN}
                   </span>
                 )}
                 {lv === "low" && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-white/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tgt} (định mức${tgt !== tpl.targetStaff ? " riêng ngày này" : ""})`}>
+                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-card/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tgt} (định mức${tgt !== tpl.targetStaff ? " riêng ngày này" : ""})`}>
                     <CircleAlert size={11} /> Ít {approvedN}/{tgt}
                   </span>
                 )}
@@ -454,10 +454,10 @@ export default function ScheduleBoard(p: Props) {
         <Card title={`Chờ duyệt theo nhân viên (${pendingByUser.length})`}>
           <div className="flex flex-wrap gap-2">
             {pendingByUser.map(([uid, ids]) => (
-              <div key={uid} className="flex items-center gap-1 rounded-xl bg-[#ffe8d9] px-2 py-1 text-sm">
+              <div key={uid} className="flex items-center gap-1 rounded-xl bg-late-bg px-2 py-1 text-sm">
                 <b>{p.names[uid]}</b> <span className="text-xs">({ids.length} ca)</span>
                 <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "APPROVED"))} className="rounded-lg bg-secondary px-2 py-0.5 text-xs font-bold text-white">Duyệt</button>
-                <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "REJECTED"))} className="rounded-lg bg-white px-2 py-0.5 text-xs text-danger ring-1 ring-danger/40">Từ chối</button>
+                <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "REJECTED"))} className="rounded-lg bg-card px-2 py-0.5 text-xs text-danger ring-1 ring-danger/40">Từ chối</button>
               </div>
             ))}
           </div>
@@ -513,7 +513,7 @@ export default function ScheduleBoard(p: Props) {
                 <tr key={s.id} className={s.ok === 0 && !s.wait && !s.away.length && p.regRequests[s.id]?.status !== "OFF" ? "row-missing" : ""}>
                   <td className="font-semibold">
                     {s.name}
-                    {s.from && <span className="ml-1 rounded bg-[#dbeafe] px-1 text-[10px] font-normal text-[#1e40af]">hỗ trợ từ {s.from}</span>}
+                    {s.from && <span className="ml-1 rounded bg-info-bg px-1 text-[10px] font-normal text-info-fg">hỗ trợ từ {s.from}</span>}
                   </td>
                   {p.templates.map((t) => <td key={t.id} className="text-center">{s.byTpl[t.id] || ""}</td>)}
                   <td className="text-right font-bold">{s.ok}</td>
@@ -525,7 +525,7 @@ export default function ScheduleBoard(p: Props) {
                     {s.ok > 0 && avg > 0 && s.ok <= avg * 0.5 && <Badge tone="yellow">Ít ca</Badge>}{" "}
                     {s.rej > 0 && <span className="text-ink/60">{s.rej} ca bị từ chối</span>}{" "}
                     {s.away.map(([st, n]) => (
-                      <span key={st} className="mr-1 rounded bg-[#dbeafe] px-1 text-[#1e40af]">⇄ {n} ca ở {st}</span>
+                      <span key={st} className="mr-1 rounded bg-info-bg px-1 text-info-fg">⇄ {n} ca ở {st}</span>
                     ))}
                   </td>
                   <td className="whitespace-nowrap text-center text-xs">
@@ -540,7 +540,7 @@ export default function ScheduleBoard(p: Props) {
                             <button
                               disabled={pending}
                               onClick={() => run(() => requestRegistration(p.storeId, p.weekStart, [s.id]))}
-                              className="inline-flex items-center gap-1 rounded-lg bg-primary px-2 py-0.5 font-bold hover:bg-primary-dark disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-lg bg-primary text-on-primary px-2 py-0.5 font-bold hover:bg-primary-dark disabled:opacity-50"
                               title="Nhân viên sẽ thấy cảnh báo và nút Đăng ký ca"
                             >
                               <BellRing size={12} /> {rq?.status === "OPEN" ? "Nhắc lại" : "Yêu cầu đăng ký"}
@@ -575,9 +575,9 @@ function StaffingRow({ t, onSave, disabled }: { t: TplInfo; onSave: (min: number
   return (
     <div className="flex items-center gap-2 rounded-xl bg-cream p-2 text-sm">
       <b className="w-16 truncate">{t.name}</b>
-      <label className="text-xs">Tối thiểu <input type="number" min={0} value={min} onChange={(e) => setMin(Number(e.target.value))} className="w-14 rounded border border-[#e9d9a8] px-1" /></label>
-      <label className="text-xs">Định mức <input type="number" min={0} value={target} onChange={(e) => setTarget(Number(e.target.value))} className="w-14 rounded border border-[#e9d9a8] px-1" /></label>
-      <button disabled={disabled} onClick={() => onSave(min, target)} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary px-2 py-1 text-xs font-bold">Lưu</button>
+      <label className="text-xs">Tối thiểu <input type="number" min={0} value={min} onChange={(e) => setMin(Number(e.target.value))} className="w-14 rounded border border-line-strong px-1" /></label>
+      <label className="text-xs">Định mức <input type="number" min={0} value={target} onChange={(e) => setTarget(Number(e.target.value))} className="w-14 rounded border border-line-strong px-1" /></label>
+      <button disabled={disabled} onClick={() => onSave(min, target)} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary text-on-primary px-2 py-1 text-xs font-bold">Lưu</button>
     </div>
   );
 }

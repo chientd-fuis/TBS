@@ -101,7 +101,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               Admin đăng nhập bằng <b>Gmail</b> (không còn mật khẩu chung). Thêm / duyệt / phân quyền admin ở mục{" "}
               <Link className="text-accent underline" href="/admin/admins">Quản lý admin</Link>.
             </p>
-            <ActionForm action={saveUserAppAccess} submitLabel="Lưu" successText="Đã lưu" className="mt-3 space-y-3 border-t border-[#f1e6c8] pt-3">
+            <ActionForm action={saveUserAppAccess} submitLabel="Lưu" successText="Đã lưu" className="mt-3 space-y-3 border-t border-line pt-3">
               <p className="text-xs text-ink/60">
                 Gmail admin đăng nhập luôn vào trang quản lý. Cho từng admin vào app nhân viên: tick “Cho vào app nhân viên” ở từng tài khoản trong{" "}
                 <Link className="text-accent underline" href="/admin/admins">Quản lý admin</Link>. Nhân viên cần quản lý dùng role quản lý ở app nhân viên.
@@ -158,7 +158,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </fieldset>
             {isOwner && (
               <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="recompute" className="mt-0.5 accent-[#3c9c54]" />
+                <input type="checkbox" name="recompute" className="mt-0.5 accent-secondary" />
                 <span>
                   Tính lại giờ công theo cách làm tròn mới cho <b>tháng này và tháng trước</b> (bỏ qua tháng đã chốt lương). Không tick = chỉ áp dụng cho lượt
                   chấm công mới.
@@ -168,7 +168,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             {!isOwner && <p className="text-xs text-ink/60">Chỉ Admin Tổng được thay đổi cấu hình.</p>}
           </ActionForm>
 
-          <ActionForm action={saveAutoPenalty} submitLabel="Lưu phạt tự động" successText="Đã lưu – đã tính phạt theo dữ liệu hiện tại" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+          <ActionForm action={saveAutoPenalty} submitLabel="Lưu phạt tự động" successText="Đã lưu – đã tính phạt theo dữ liệu hiện tại" className="mt-4 space-y-3 border-t border-line pt-4">
             <fieldset disabled={!isOwner} className="space-y-3">
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" name="autoPenaltyOn" defaultChecked={s.autoPenaltyOn === true} className="mt-0.5 h-4 w-4" />
@@ -192,7 +192,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </fieldset>
           </ActionForm>
 
-          <ActionForm action={saveProbationConfig} submitLabel="Lưu cài đặt thử việc" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+          <ActionForm action={saveProbationConfig} submitLabel="Lưu cài đặt thử việc" successText="Đã lưu" className="mt-4 space-y-3 border-t border-line pt-4">
             <div className="text-sm">
               <b>🟣 Thử việc</b>
               <span className="block text-xs text-ink/60">
@@ -221,7 +221,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </fieldset>
           </ActionForm>
 
-          <ActionForm action={saveAutoCheckout} submitLabel="Lưu chốt công ca tối" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+          <ActionForm action={saveAutoCheckout} submitLabel="Lưu chốt công ca tối" successText="Đã lưu" className="mt-4 space-y-3 border-t border-line pt-4">
             <div className="text-sm">
               <b>Chốt giờ công ca tối</b> – bật riêng từng cơ sở
               <span className="block text-xs text-ink/60">
@@ -233,7 +233,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </span>
             </div>
             {/* mỗi cơ sở 2 dòng: [tick + tên] / [Check-out lúc __:__ · gợi ý] – không ép chung 1 hàng (điện thoại bị đè chữ) */}
-            <fieldset disabled={!canCutoff} className="min-w-0 divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
+            <fieldset disabled={!canCutoff} className="min-w-0 divide-y divide-line rounded-xl ring-1 ring-line">
               {acStores.map((st) => {
                 const id = String(st._id);
                 return (
@@ -254,7 +254,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 );
               })}
             </fieldset>
-            <fieldset disabled={!isOwner} className="min-w-0 space-y-2 rounded-xl bg-cream px-3 py-2.5 ring-1 ring-[#f1e6c8]">
+            <fieldset disabled={!isOwner} className="min-w-0 space-y-2 rounded-xl bg-cream px-3 py-2.5 ring-1 ring-line">
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" name="quietCheckinOn" defaultChecked={s.quietCheckinOn !== false} className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>

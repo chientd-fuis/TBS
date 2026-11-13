@@ -159,7 +159,7 @@ export default function DailyRevenueTable({
               aria-pressed={shown(c.k)}
               className={cn(
                 "rounded-full px-2.5 py-1 ring-1",
-                shown(c.k) ? "bg-secondary font-semibold text-white ring-secondary" : "bg-white text-ink/50 ring-[#f1e6c8] line-through",
+                shown(c.k) ? "bg-secondary font-semibold text-white ring-secondary" : "bg-card text-ink/50 ring-line line-through",
               )}
             >
               {c.label}
@@ -185,7 +185,7 @@ export default function DailyRevenueTable({
     <div className="overflow-x-auto">
       <table className={cn("w-full text-sm", minW)}>
         <thead>
-          <tr className="border-b border-[#f1e6c8] text-xs text-ink/60">
+          <tr className="border-b border-line text-xs text-ink/60">
             {pickable && <th className="w-8 py-2" aria-label="Đã lấy doanh thu" title="Đã lấy doanh thu (chưa đếm)">Lấy</th>}
             <th className="py-2 text-left">Ngày</th>
             <th className="text-left">Cơ sở</th>
@@ -207,7 +207,7 @@ export default function DailyRevenueTable({
                 <tr
                   onClick={() => toggle(r.key)}
                   className={cn(
-                    "cursor-pointer border-b border-[#f8f1dd]",
+                    "cursor-pointer border-b border-line",
                     pickable && picked[r.key] ? "bg-primary/45 hover:bg-primary/55" : cn("hover:bg-primary-light/50", isOpen && "bg-primary-light/40"),
                   )}
                 >
@@ -220,7 +220,7 @@ export default function DailyRevenueTable({
                         onChange={(e) => togglePick(r, e.target.checked)}
                         title={pickTip(r)}
                         aria-label={`Đã lấy doanh thu ${r.dateLabel} ${r.storeName}`}
-                        className="h-4 w-4 cursor-pointer accent-[#e4b414]"
+                        className="h-4 w-4 cursor-pointer accent-primary-dark"
                       />
                     </td>
                   )}
@@ -235,10 +235,10 @@ export default function DailyRevenueTable({
                   <td className={cn("text-right tabular-nums text-ink/60", col("ket"))}>{vnd(r.ket)}</td>
                   <td className={cn("text-right font-bold tabular-nums", col("thu"))}>{vnd(r.thu)}</td>
                   <td className={cn("text-right tabular-nums", col("dtm"))}>{r.dtm != null ? vnd(r.dtm) : <span className="text-warn">chưa có</span>}</td>
-                  <td className={cn("text-right font-semibold tabular-nums", r.diff ? "text-danger" : "text-secondary-dark", col("diff"))}>{signed(r.diff)}</td>
+                  <td className={cn("text-right font-semibold tabular-nums", r.diff ? "text-danger" : "text-good", col("diff"))}>{signed(r.diff)}</td>
                   <td className={cn("text-center whitespace-nowrap", col("done"))}>
                     {(["Sáng", "Chiều", "Tối"] as const).map((n) => (
-                      <span key={n} className={cn("mx-0.5 inline-block rounded px-1.5 text-[10px] font-bold", r.done.includes(n) ? "bg-secondary text-white" : "bg-gray-100 text-gray-400")}>
+                      <span key={n} className={cn("mx-0.5 inline-block rounded px-1.5 text-[10px] font-bold", r.done.includes(n) ? "bg-secondary text-white" : "bg-mute-bg text-mute-fg")}>
                         {n[0]}
                       </span>
                     ))}
@@ -270,13 +270,13 @@ export default function DailyRevenueTable({
                             const s = r.shifts.find((x) => x.name === n);
                             if (!s)
                               return (
-                                <tr key={n} className="border-t border-[#f1e6c8]">
+                                <tr key={n} className="border-t border-line">
                                   <td className="py-1.5 font-semibold">Ca {n}</td>
                                   <td colSpan={10} className="text-ink/40">chưa chốt</td>
                                 </tr>
                               );
                             return (
-                              <tr key={n} className="border-t border-[#f1e6c8]">
+                              <tr key={n} className="border-t border-line">
                                 <td className="py-1.5 font-semibold">Ca {n}</td>
                                 <td>{s.at} · {s.who}</td>
                                 <td className="text-right tabular-nums">{vnd(s.tk)}</td>
@@ -286,8 +286,8 @@ export default function DailyRevenueTable({
                                 <td className="text-right font-semibold tabular-nums">{vnd(s.thu)}</td>
                                 <td className="text-right tabular-nums text-accent">{vnd(s.own)}</td>
                                 <td className="text-right tabular-nums">{s.dtm != null ? vnd(s.dtm) : "—"}</td>
-                                <td className={cn("text-right tabular-nums", s.diff ? "text-danger" : "text-secondary-dark")}>{signed(s.diff)}</td>
-                                <td className={cn("text-right tabular-nums", s.totalOk === false ? "text-danger" : "text-secondary-dark")}>
+                                <td className={cn("text-right tabular-nums", s.diff ? "text-danger" : "text-good")}>{signed(s.diff)}</td>
+                                <td className={cn("text-right tabular-nums", s.totalOk === false ? "text-danger" : "text-good")}>
                                   {s.staffTotal != null ? `${vnd(s.staffTotal)} ${s.totalOk ? "✓" : "✗"}` : "—"}
                                 </td>
                               </tr>
@@ -296,7 +296,7 @@ export default function DailyRevenueTable({
                           {r.shifts
                             .filter((s) => !["Sáng", "Chiều", "Tối"].includes(s.name))
                             .map((s, i) => (
-                              <tr key={`x${i}`} className="border-t border-[#f1e6c8] text-ink/60">
+                              <tr key={`x${i}`} className="border-t border-line text-ink/60">
                                 <td className="py-1.5">{s.name}</td>
                                 <td>{s.at} · {s.who}</td>
                                 <td colSpan={9}>Doanh thu {vnd(s.thu)} (lượt chốt ngoài ca)</td>
@@ -327,7 +327,7 @@ export default function DailyRevenueTable({
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-[#f1e6c8] bg-[#e3f3e7] font-bold">
+          <tr className="border-t-2 border-line bg-ok-bg font-bold">
             <td className="py-2" colSpan={pickable ? 3 : 2}>TỔNG ({rows.length} dòng)</td>
             <td className={cn("text-right tabular-nums", col("tk"))}>{vnd(tot.tk)}</td>
             <td className={cn("text-right tabular-nums", col("tm"))}>{vnd(tot.tm)}</td>
@@ -335,7 +335,7 @@ export default function DailyRevenueTable({
             <td className={cn("text-right tabular-nums", col("ket"))}>{vnd(tot.ket)}</td>
             <td className={cn("text-right tabular-nums", col("thu"))}>{vnd(tot.thu)}</td>
             <td className={cn("text-right tabular-nums", col("dtm"))}>{vnd(tot.dtm)}</td>
-            <td className={cn("text-right tabular-nums", tot.diff ? "text-danger" : "text-secondary-dark", col("diff"))}>{signed(tot.diff)}</td>
+            <td className={cn("text-right tabular-nums", tot.diff ? "text-danger" : "text-good", col("diff"))}>{signed(tot.diff)}</td>
             <td className={col("done")} />
           </tr>
         </tfoot>

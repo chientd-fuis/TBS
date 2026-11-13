@@ -14,7 +14,7 @@ export function SelectAllBox({ formId }: { formId: string }) {
     <input
       type="checkbox"
       aria-label="Chọn tất cả"
-      className="h-4 w-4 accent-[#c0392b]"
+      className="h-4 w-4 accent-danger"
       onChange={(e) => {
         for (const b of boxes(formId)) b.checked = e.target.checked;
         document.dispatchEvent(new Event("bulk-select"));
@@ -53,7 +53,7 @@ export default function BulkDeleteBar({ formId }: { formId: string }) {
         if (!n || !window.confirm(`Xoá ${n} lượt chấm công đã tích? Không khôi phục được (vẫn lưu trong lịch sử chỉnh sửa).`)) return;
         submit(e.currentTarget);
       }}
-      className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#fdeaea] p-2 text-sm"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-bad-soft p-2 text-sm"
     >
       <span className="font-semibold text-danger">Đã tích {n} lượt</span>
       <Input name="reason" placeholder="Lý do xoá (tuỳ chọn)" className="!w-56 !py-1" />
@@ -61,7 +61,7 @@ export default function BulkDeleteBar({ formId }: { formId: string }) {
         {pending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Xoá các lượt đã tích
       </Button>
       {state?.error && <Alert tone="red">{state.error}</Alert>}
-      {state?.ok && <span className="text-xs text-secondary-dark">Đã xoá</span>}
+      {state?.ok && <span className="text-xs text-good">Đã xoá</span>}
     </form>
   );
 }

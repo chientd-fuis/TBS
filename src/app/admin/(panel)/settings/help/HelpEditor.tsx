@@ -20,7 +20,7 @@ const FORMAT_HINT = (
 function PhonePreview({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <div className="mx-auto w-full max-w-[380px] overflow-hidden rounded-[28px] border-[6px] border-[#3a2424] bg-cream shadow-lg">
-      <div className="flex items-center gap-2 bg-primary px-3 py-2 text-sm font-bold">
+      <div className="flex items-center gap-2 bg-primary text-on-primary px-3 py-2 text-sm font-bold">
         <Smartphone size={14} /> {title}
       </div>
       <div className="max-h-[560px] overflow-y-auto p-3">{children}</div>
@@ -91,7 +91,7 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
       return n;
     });
 
-  const area = "min-h-[340px] w-full rounded-xl border border-[#f1e6c8] bg-white p-3 font-mono text-[13px] leading-relaxed outline-none focus:ring-2 focus:ring-primary";
+  const area = "min-h-[340px] w-full rounded-xl border border-line bg-card p-3 font-mono text-[13px] leading-relaxed outline-none focus:ring-2 focus:ring-primary";
   const sec = HELP_SECTIONS.find((s) => s.key === tab)!;
 
   return (
@@ -102,7 +102,7 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
             key={s.key}
             type="button"
             onClick={() => (setTab(s.key), setMsg({}))}
-            className={cn("rounded-xl px-3 py-2 text-sm", tab === s.key ? "bg-secondary font-bold text-white" : "bg-white text-ink/70 ring-1 ring-[#f1e6c8] hover:bg-primary-light")}
+            className={cn("rounded-xl px-3 py-2 text-sm", tab === s.key ? "bg-secondary font-bold text-white" : "bg-card text-ink/70 ring-1 ring-line hover:bg-primary-light")}
           >
             {s.icon} {s.label}
             {dirty[s.key] && <span className="ml-1 text-warn" title="Chưa lưu">●</span>}
@@ -112,7 +112,7 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* ---------- soạn ---------- */}
-        <div className="min-w-0 space-y-3 rounded-2xl bg-white p-4 ring-1 ring-[#f1e6c8]">
+        <div className="min-w-0 space-y-3 rounded-2xl bg-card p-4 ring-1 ring-line">
           <p className="font-bold text-accent">
             {sec.icon} {sec.label}
           </p>
@@ -139,7 +139,7 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
                     key={p.key}
                     type="button"
                     onClick={() => setPos(p.key)}
-                    className={cn("rounded-full px-3 py-1.5 text-sm", pos === p.key ? "bg-primary font-bold" : "bg-cream text-ink/70 ring-1 ring-[#f1e6c8]")}
+                    className={cn("rounded-full px-3 py-1.5 text-sm", pos === p.key ? "bg-primary text-on-primary font-bold" : "bg-cream text-ink/70 ring-1 ring-line")}
                   >
                     {p.icon} {p.label}
                     {!workflow[p.key].trim() && <span className="ml-1 text-xs text-warn">(trống)</span>}
@@ -168,14 +168,14 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
             <div className="space-y-3">
               <p className="text-xs text-ink/60">Mỗi tình huống gồm câu hỏi và câu trả lời. Câu trả lời gõ được định dạng như trên (1. bước, - ý, **đậm**, ! lưu ý).</p>
               {faq.map((x, i) => (
-                <div key={i} className="space-y-2 rounded-xl bg-cream p-3 ring-1 ring-[#f1e6c8]">
+                <div key={i} className="space-y-2 rounded-xl bg-cream p-3 ring-1 ring-line">
                   <div className="flex items-center gap-2">
                     <span className="shrink-0 text-xs font-bold text-ink/50">#{i + 1}</span>
                     <input
                       value={x.q}
                       onChange={(e) => setQ(i, "q", e.target.value)}
                       placeholder="Câu hỏi – VD: Khách muốn đổi món đã làm?"
-                      className="min-w-0 flex-1 rounded-lg border border-[#f1e6c8] bg-white px-2 py-1.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary"
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2 py-1.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary"
                     />
                     <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Lên" className="rounded p-1 text-ink/60 disabled:opacity-30">
                       <ArrowUp size={16} />
@@ -191,7 +191,7 @@ export default function HelpEditor({ initial }: { initial: HelpContent }) {
                     value={x.a}
                     onChange={(e) => setQ(i, "a", e.target.value)}
                     placeholder={"Câu trả lời – VD:\n1. Xin lỗi khách, hỏi lý do\n2. Báo quản lý ca nếu phải làm lại\n! Không tự ý hoàn tiền"}
-                    className="min-h-[90px] w-full rounded-lg border border-[#f1e6c8] bg-white p-2 font-mono text-[13px] outline-none focus:ring-2 focus:ring-primary"
+                    className="min-h-[90px] w-full rounded-lg border border-line bg-card p-2 font-mono text-[13px] outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               ))}

@@ -9,6 +9,7 @@ import { updateMyProfile } from "../actions";
 import { SignOutButton } from "@/components/user/AuthButtons";
 import ThemePicker from "@/components/user/ThemePicker";
 import { isThemeId } from "@/lib/themes";
+import { setMyTheme } from "../actions";
 
 export default async function AccountPage() {
   const user = await requireActiveUser();
@@ -18,7 +19,7 @@ export default async function AccountPage() {
   return (
     <>
       <Card title="Màu giao diện">
-        <ThemePicker current={isThemeId(user.theme) ? user.theme : "default"} locked={!!user.probation} />
+        <ThemePicker current={isThemeId(user.theme) ? user.theme : "default"} locked={!!user.probation} save={setMyTheme} />
       </Card>
       <Card title="Thông tin cá nhân">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">

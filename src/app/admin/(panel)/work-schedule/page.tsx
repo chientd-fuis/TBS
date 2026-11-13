@@ -35,7 +35,7 @@ export default async function WorkSchedulePage({ searchParams }: { searchParams:
               <Link
                 key={String(s._id)}
                 href={`/admin/work-schedule?store=${s._id}&month=${month}`}
-                className={cn("rounded-lg px-3 py-1.5", String(s._id) === String(store?._id) ? "bg-secondary font-bold text-white" : "bg-white text-ink/70 ring-1 ring-[#f1e6c8] hover:bg-primary-light")}
+                className={cn("rounded-lg px-3 py-1.5", String(s._id) === String(store?._id) ? "bg-secondary font-bold text-white" : "bg-card text-ink/70 ring-1 ring-line hover:bg-primary-light")}
               >
                 {s.name}
               </Link>

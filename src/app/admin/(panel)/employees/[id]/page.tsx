@@ -104,7 +104,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
         </Card>
         <Card
           title={u.probation ? (u.probationReview ? "🟣 Thử việc · cần xem xét" : "🟣 Đang thử việc") : "Thử việc"}
-          className={u.probation ? "ring-2 ring-[#d9a8ec]" : undefined}
+          className={u.probation ? "ring-2 ring-violet-line" : undefined}
         >
           {u.probation && u.probationStart ? (
             <div className="space-y-3 text-sm">
@@ -231,7 +231,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
             <div className="space-y-1.5">
               {STAFF_PERMS.map((p) => (
                 <label key={p.key} className="flex items-start gap-2">
-                  <input type="checkbox" name="managerPerms" value={p.key} defaultChecked={u.managerPerms?.includes(p.key)} className="mt-0.5 accent-[#3c9c54]" />
+                  <input type="checkbox" name="managerPerms" value={p.key} defaultChecked={u.managerPerms?.includes(p.key)} className="mt-0.5 accent-secondary" />
                   <span>
                     <b>{p.label}</b> <span className="text-xs text-ink/60">– {p.hint}</span>
                   </span>
@@ -251,7 +251,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
                         value={String(s._id)}
                         defaultChecked={home || (u.managerStoreIds ?? []).map(String).includes(String(s._id))}
                         disabled={home}
-                        className="accent-[#3c9c54]"
+                        className="accent-secondary"
                       />
                       {s.name}
                       {home && <span className="text-xs text-ink/50">(cơ sở gốc)</span>}

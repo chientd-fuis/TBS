@@ -66,7 +66,7 @@ export default function MobileMenu({ nav, account }: { nav: NavProps; account: R
         createPortal(
           <div className="fixed inset-0 z-50 bg-black/45 lg:hidden" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label="Menu">
             <aside
-              className="flex h-full w-[300px] max-w-[85vw] flex-col bg-secondary-dark shadow-2xl"
+              className="flex h-full w-[300px] max-w-[85vw] flex-col bg-nav shadow-2xl"
               style={{ animation: "tbs-drawer-in .18s ease-out" }}
               onClick={(e) => e.stopPropagation()}
             >

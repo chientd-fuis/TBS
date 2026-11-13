@@ -191,9 +191,9 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
         <Sparkles size={15} /> Trợ lý AI
       </Button>
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-ink/30" onClick={() => setOpen(false)}>
-          <aside className="flex h-full w-full max-w-md flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <header className="flex items-center justify-between gap-2 border-b border-[#f1e6c8] px-4 py-3">
+        <div className="fixed inset-0 z-50 flex justify-end bg-shade/30" onClick={() => setOpen(false)}>
+          <aside className="flex h-full w-full max-w-md flex-col bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
               <div>
                 <b className="text-accent">✨ Trợ lý AI</b> <span className="text-xs text-ink/60">· tra cứu & thao tác theo quyền của bạn</span>
               </div>
@@ -213,18 +213,18 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
               )}
               {msgs.map((m, i) =>
                 m.role === "q" ? (
-                  <div key={i} className="ml-auto max-w-[85%] space-y-1.5 rounded-2xl rounded-br-md bg-primary px-3 py-2 font-medium">
+                  <div key={i} className="ml-auto max-w-[85%] space-y-1.5 rounded-2xl rounded-br-md bg-primary text-on-primary px-3 py-2 font-medium">
                     {m.photo && <img src={m.photo} alt="Ảnh bill" className="max-h-40 rounded-lg" />}
                     <div className="whitespace-pre-line">{m.text}</div>
                   </div>
                 ) : m.role === "bill" ? (
-                  <div key={i} className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md border border-[#f1e6c8] bg-white px-3 py-2">
+                  <div key={i} className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md border border-line bg-card px-3 py-2">
                     <p className="font-semibold">Đọc được {m.txs.length} khoản chi:</p>
                     {m.txs.map((t, k) => (
-                      <label key={k} className={`flex gap-2 rounded-xl p-2 ${t.dupHint ? "bg-[#f0f9f2]" : "bg-[#fff7f0]"}`}>
+                      <label key={k} className={`flex gap-2 rounded-xl p-2 ${t.dupHint ? "bg-ok-soft" : "bg-warn-soft"}`}>
                         <input
                           type="checkbox"
-                          className="mt-1 h-4 w-4 accent-[#3c9c54]"
+                          className="mt-1 h-4 w-4 accent-secondary"
                           checked={!!t.pick}
                           disabled={m.state !== "wait" || !t.date}
                           onChange={(e) => patch(i, { txs: m.txs.map((x, z) => (z === k ? { ...x, pick: e.target.checked } : x)) })}
@@ -232,7 +232,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                         <span className="min-w-0 flex-1">
                           <b>{vnd(t.amount)}</b> · {t.date ? viDate(t.date) : "không rõ ngày"} · {catLabel(t.category)}
                           <span className="block text-xs text-ink/70">{[t.recipient, t.purpose || t.transferNote].filter(Boolean).join(" – ")}</span>
-                          <span className={`block text-xs font-semibold ${t.dupHint ? "text-secondary-dark" : "text-warn"}`}>
+                          <span className={`block text-xs font-semibold ${t.dupHint ? "text-good" : "text-warn"}`}>
                             {t.dupHint ? `✅ Đã nhập rồi: ${t.dupHint.replace(/^Đã có /, "")}` : t.date ? "❗ Chưa nhập vào chi tiêu" : "Không đọc được ngày – nhập tay ở Tài chính → Chi phí"}
                           </span>
                         </span>
@@ -247,7 +247,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                     {m.state !== "done" && !m.txs.some((t) => t.pick) && m.txs.every((t) => t.dupHint) && <p className="text-xs text-ink/60">Bill này đã nhập đủ – không cần thêm.</p>}
                   </div>
                 ) : (
-                  <div key={i} className={`max-w-[94%] rounded-2xl rounded-bl-md border px-3 py-2 whitespace-pre-line ${m.denied || m.error ? "border-[#fecaca] bg-[#fff7f7]" : "border-[#f1e6c8] bg-white"}`}>
+                  <div key={i} className={`max-w-[94%] rounded-2xl rounded-bl-md border px-3 py-2 whitespace-pre-line ${m.denied || m.error ? "border-bad-line bg-bad-soft" : "border-line bg-card"}`}>
                     {m.text}
                     {!!m.choices?.length && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -258,7 +258,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                             disabled={!!m.picked || pending}
                             onClick={() => choose(i, m, c)}
                             className={`rounded-xl border px-2.5 py-1.5 text-left text-[13px] leading-tight transition ${
-                              m.picked === c.id ? "border-secondary bg-secondary text-white" : m.picked ? "border-ink/10 bg-white text-ink/40" : "border-secondary/50 bg-[#f7fbf8] hover:bg-secondary hover:text-white"
+                              m.picked === c.id ? "border-secondary bg-secondary text-white" : m.picked ? "border-ink/10 bg-card text-ink/40" : "border-secondary/50 bg-ok-soft hover:bg-secondary hover:text-white"
                             }`}
                           >
                             <b>{c.name}</b>
@@ -268,8 +268,8 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                       </div>
                     )}
                     {m.card && (
-                      <div className="mt-2 space-y-1.5 rounded-xl border border-secondary/40 bg-[#f7fbf8] p-2.5">
-                        <p className="font-bold text-secondary-dark">📝 {m.card.title}</p>
+                      <div className="mt-2 space-y-1.5 rounded-xl border border-secondary/40 bg-ok-soft p-2.5">
+                        <p className="font-bold text-good">📝 {m.card.title}</p>
                         <ul className="space-y-0.5 text-[13px]">
                           {m.card.lines.map((l, k) => (
                             <li key={k}>• {l}</li>
@@ -288,7 +288,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                         )}
                       </div>
                     )}
-                    {m.source && <p className="mt-1.5 border-t border-dashed border-[#f1e6c8] pt-1 text-[11px] text-ink/60">Nguồn: {m.source}</p>}
+                    {m.source && <p className="mt-1.5 border-t border-dashed border-line pt-1 text-[11px] text-ink/60">Nguồn: {m.source}</p>}
                   </div>
                 ),
               )}
@@ -299,10 +299,10 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
               )}
               <div ref={end} />
             </div>
-            <div className="space-y-2 border-t border-[#f1e6c8] p-3">
+            <div className="space-y-2 border-t border-line p-3">
               <div className="flex flex-wrap gap-1.5">
                 {SUGGEST.map((s) => (
-                  <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full border border-[#f1e6c8] bg-white px-2.5 py-0.5 text-xs">
+                  <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs">
                     {s}
                   </button>
                 ))}
@@ -337,7 +337,7 @@ export default function AskAiPanel({ left: left0, limit, billOk = false }: { lef
                   placeholder="Hỏi hoặc nhờ làm (thưởng, chấm hộ…) · Shift+Enter xuống dòng"
                   maxLength={1000}
                   aria-label="Câu hỏi"
-                  className="max-h-36 min-h-[40px] w-full resize-none rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm leading-snug outline-none focus:border-secondary focus:ring-2 focus:ring-secondary/20"
+                  className="max-h-36 min-h-[40px] w-full resize-none rounded-xl border border-ink/15 bg-card px-3 py-2 text-sm leading-snug outline-none focus:border-secondary focus:ring-2 focus:ring-secondary/20"
                 />
                 <Button type="submit" disabled={busy || !q.trim() || left === 0} aria-label="Gửi">
                   <Send size={16} />

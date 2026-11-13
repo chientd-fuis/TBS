@@ -497,7 +497,7 @@ export default function BulkAttendance({
       key={key}
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-sm ${on ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-white text-ink/80"}`}
+      className={`rounded-full border px-3 py-1 text-sm ${on ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-card text-ink/80"}`}
     >
       {label}
     </button>
@@ -616,7 +616,7 @@ export default function BulkAttendance({
               <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
-                  className="accent-[#3c9c54]"
+                  className="accent-secondary"
                   checked={bMode === "shift"}
                   onChange={() => setBMode("shift")}
                 />{" "}
@@ -625,7 +625,7 @@ export default function BulkAttendance({
               <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
-                  className="accent-[#3c9c54]"
+                  className="accent-secondary"
                   checked={bMode === "time"}
                   onChange={() => setBMode("time")}
                 />{" "}
@@ -689,7 +689,7 @@ export default function BulkAttendance({
           </div>
           <div className="flex flex-wrap gap-2">
             <a
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 font-semibold"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 font-semibold"
               href={`/api/admin/attendance/import?store=${storeId}&month=${bMonth}`}
             >
               <Download size={16} /> Tải file mẫu T{+bMonth.slice(5)}
@@ -855,7 +855,7 @@ export default function BulkAttendance({
                   <th className="w-8">
                     <input
                       type="checkbox"
-                      className="accent-[#3c9c54]"
+                      className="accent-secondary"
                       checked={rows.every(
                         (r) =>
                           r.include ||
@@ -893,18 +893,18 @@ export default function BulkAttendance({
                       key={r.key}
                       className={
                         done
-                          ? "bg-[#e9f6ec]"
+                          ? "bg-ok-soft"
                           : !r.include
                             ? "opacity-50"
                             : r.warn
-                              ? "bg-[#fff6e5]"
+                              ? "bg-warn-soft"
                               : ""
                       }
                     >
                       <td>
                         <input
                           type="checkbox"
-                          className="accent-[#3c9c54]"
+                          className="accent-secondary"
                           disabled={done || !uid}
                           checked={r.include && !!uid}
                           onChange={(e) =>
@@ -965,11 +965,11 @@ export default function BulkAttendance({
                       <td className="min-w-[9rem] text-xs">
                         {/* ghi chú: trạng thái + mọi cảnh báo (thiếu giờ ra, ca dài, nghi trùng) – không tự bỏ lượt nào */}
                         {done ? (
-                          <span className="block font-semibold text-secondary-dark">✓ Đã ghi</span>
+                          <span className="block font-semibold text-good">✓ Đã ghi</span>
                         ) : st === "error" ? (
                           <span className="block text-danger">✗ {r.check?.msg}</span>
                         ) : st === "ok" || st === "dup" ? (
-                          <span className="block text-secondary-dark">OK – sẽ ghi</span>
+                          <span className="block text-good">OK – sẽ ghi</span>
                         ) : null}
                         {r.check?.dup && (
                           <span className="block font-semibold text-warn">⚠ Nghi trùng giờ với lượt đã có – kiểm tra lại</span>
@@ -1041,7 +1041,7 @@ export default function BulkAttendance({
               </span>
             )}
             {!busy && !unchecked && chosen.length > 0 && (
-              <span className="flex items-center gap-1 text-xs text-secondary-dark">
+              <span className="flex items-center gap-1 text-xs text-good">
                 <CheckCircle2 size={14} /> Đã kiểm tra
               </span>
             )}

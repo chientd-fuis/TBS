@@ -200,7 +200,7 @@ export default function StatementImport({ today, ocrEnabled }: { stores?: StoreO
             <div key={i.id} className="relative w-20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={i.data} alt="Ảnh chứng từ" className="h-24 w-20 rounded-lg object-cover object-top ring-1 ring-ink/10" />
-              <button type="button" onClick={() => removeImg(i.id)} className="absolute -top-1.5 -right-1.5 rounded-full bg-ink p-0.5 text-white" aria-label="Bỏ ảnh">
+              <button type="button" onClick={() => removeImg(i.id)} className="absolute -top-1.5 -right-1.5 rounded-full bg-shade p-0.5 text-white" aria-label="Bỏ ảnh">
                 <X size={12} />
               </button>
               <p className={`mt-0.5 text-center text-[10px] ${i.state === "error" ? "text-danger" : "text-ink/60"}`} title={i.error}>
@@ -219,7 +219,7 @@ export default function StatementImport({ today, ocrEnabled }: { stores?: StoreO
           {rows.map((r, i) => {
             const a = amounts.get(r.key)!;
             return (
-              <li key={r.key} className={`rounded-xl p-2.5 ring-1 ${r.include ? "bg-white ring-[#f1e6c8]" : "bg-gray-50 opacity-60 ring-gray-200"}`}>
+              <li key={r.key} className={`rounded-xl p-2.5 ring-1 ${r.include ? "bg-card ring-line" : "bg-gray-50 opacity-60 ring-mute-line"}`}>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-ink/70">
                     <input type="checkbox" checked={r.include} onChange={(e) => patch(r.key, { include: e.target.checked })} className="h-4 w-4" />
@@ -244,7 +244,7 @@ export default function StatementImport({ today, ocrEnabled }: { stores?: StoreO
                   </Select>
                   <Input className="col-span-2" value={r.content} maxLength={300} onChange={(e) => patch(r.key, { content: e.target.value })} placeholder="Nội dung chi tiết (nội dung CK)" aria-label="Nội dung" />
                 </div>
-                <label className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm ${r.countInCost ? "text-secondary-dark" : "text-ink/60"}`}>
+                <label className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm ${r.countInCost ? "text-good" : "text-ink/60"}`}>
                   <input type="checkbox" checked={r.countInCost} onChange={(e) => patch(r.key, { countInCost: e.target.checked })} className="h-4 w-4" />
                   Tính vào chi phí
                   {!r.countInCost && <span className="w-full pl-6 text-[11px]">(chỉ lưu chứng từ{r.category === "LUONG" ? " – lương đã có trong bảng lương" : ""})</span>}

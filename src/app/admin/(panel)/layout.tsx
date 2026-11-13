@@ -19,9 +19,16 @@ import { goodsEnabled } from "@/lib/goods-server";
 import { userAppBlocked } from "@/lib/auth";
 import { after } from "next/server";
 import { maybeRunAutoCheckout } from "@/lib/auto-checkout";
+import { Palette } from "lucide-react";
+import { cn } from "@/lib/format";
+import { THEME_ROOT_ID, themeClass } from "@/lib/themes";
+import { adminThemeOf, adminThemeViewport } from "@/lib/theme-server";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
+
+// thanh trạng thái điện thoại cùng màu thanh menu admin của theme đang chọn (Admin → Giao diện)
+export const generateViewport = adminThemeViewport;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
@@ -54,6 +61,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       📱 App nhân viên
     </Link>
   );
+  // màu giao diện riêng của admin này (Admin → Giao diện)
+  const theme = await adminThemeOf(admin.email).catch(() => "default" as const);
+  const themeLink = (
+    <Link href="/admin/appearance" className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-current/30 hover:bg-black/5">
+      <Palette size={15} aria-hidden /> Giao diện
+    </Link>
+  );
   const logout =
     admin.kind === "OWNER" ? (
       <SignOutButton callbackUrl="/admin/login" />
@@ -63,9 +77,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </form>
     );
   return (
-    <div className="min-h-screen lg:flex">
+    <div id={THEME_ROOT_ID} className={cn("min-h-screen lg:flex", themeClass(theme))}>
       {/* máy tính: menu dọc bên trái · điện thoại: thanh gọn + nút ☰ (MobileMenu) */}
-      <aside className="hidden bg-secondary-dark lg:sticky lg:top-0 lg:block lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
+      <aside className="hidden bg-nav lg:sticky lg:top-0 lg:block lg:h-screen lg:w-60 lg:shrink-0 lg:overflow-y-auto">
         <Link href="/admin" className="flex items-center gap-2 p-3" title="Về Tổng quan">
           <Logo size={36} />
           <div className="text-white">
@@ -76,7 +90,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:relative lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none tbs-navbar-on-dark">
+        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-nav pr-2 pl-1 text-sm shadow-sm lg:relative lg:h-auto lg:justify-end lg:border-b lg:border-line lg:bg-card lg:px-4 lg:py-2 lg:shadow-none tbs-navbar-on-dark">
           {/* loading chuyển trang / lọc (chỉ điện thoại): vạch vàng dưới header. Menu có vòng xoay riêng (data-no-navbar), nút có loading trong nút */}
           <Suspense fallback={null}>
             <NavProgress mobileOnly />
@@ -89,6 +103,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   <div className="opacity-75">{admin.kind === "OWNER" ? "👑 Admin Tổng" : `Admin: ${admin.name}`}</div>
                   <div className="truncate font-semibold">{admin.email}</div>
                 </div>
+                <div className="text-white [&_a]:w-full">{themeLink}</div>
                 {userAppLink && <div className="text-white [&_a]:w-full">{userAppLink}</div>}
                 <div className="[&_button]:w-full [&_button]:justify-center [&_button]:bg-white/15 [&_button]:text-white">{logout}</div>
               </div>
@@ -106,6 +121,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <AskAiPanel left={Number.isFinite(ask.left) ? ask.left : null} limit={ask.limit} billOk={billOk} />
             </span>
           )}
+          <span className="hidden shrink-0 text-accent lg:inline">{themeLink}</span>
           {userAppLink && <span className="hidden shrink-0 text-accent lg:inline">{userAppLink}</span>}
           <span className="hidden shrink-0 lg:inline">{logout}</span>
         </header>

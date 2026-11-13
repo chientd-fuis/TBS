@@ -26,10 +26,10 @@ export default function StaffMultiPick({ staff, defaultIds = [] }: { staff: { id
         </span>
       </div>
       {staff.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên…" className="w-full rounded-xl border border-ink/15 px-3 py-1.5 text-sm" />}
-      <div className="max-h-48 space-y-0.5 overflow-y-auto rounded-xl border border-ink/10 bg-white p-1.5">
+      <div className="max-h-48 space-y-0.5 overflow-y-auto rounded-xl border border-ink/10 bg-card p-1.5">
         {list.map((u) => (
           <label key={u.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm ${sel.has(u.id) ? "bg-primary-light font-semibold" : "hover:bg-cream"}`}>
-            <input type="checkbox" className="h-4 w-4 accent-[#3c9c54]" checked={sel.has(u.id)} onChange={() => toggle(u.id)} />
+            <input type="checkbox" className="h-4 w-4 accent-secondary" checked={sel.has(u.id)} onChange={() => toggle(u.id)} />
             {u.name}
             {u.inactive && <span className="text-xs font-normal text-ink/50">(đã nghỉ)</span>}
           </label>

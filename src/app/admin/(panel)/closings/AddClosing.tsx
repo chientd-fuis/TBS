@@ -161,7 +161,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
 
   const ocrDateDiff = ocr?.state === "done" && ocr.date && ocr.date.slice(5) !== date.slice(5);
   return (
-    <div className="space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
+    <div className="space-y-3 rounded-2xl border border-ink/10 bg-card p-4">
       <div className="flex items-center justify-between">
         <b>Nhập bù chốt ca</b>
         <button type="button" className="flex items-center gap-1 text-xs text-ink/60 hover:text-danger" onClick={() => (setOpen(false), reset(false), setMsg(null))}>
@@ -192,7 +192,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
                   key={s.key}
                   type="button"
                   onClick={() => (setShift(s.key), setOverwrite(false))}
-                  className={`flex-1 whitespace-nowrap rounded-xl border px-1 py-2 text-sm font-semibold ${shift === s.key ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-white text-ink/80"}`}
+                  className={`flex-1 whitespace-nowrap rounded-xl border px-1 py-2 text-sm font-semibold ${shift === s.key ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-card text-ink/80"}`}
                   title={has ? "Đã có người chốt" : "Chưa chốt"}
                 >
                   {s.name}
@@ -218,7 +218,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-ink/60">Ngày chưa chốt ca Tối (45 ngày):</span>
           {store.missing.slice(0, 20).map((d) => (
-            <button key={d} type="button" onClick={() => (setDate(d), setShift("T"), setOverwrite(false))} className={`rounded-full border px-2 py-0.5 ${d === date ? "border-danger bg-danger text-white" : "border-danger/40 text-danger hover:bg-[#fde2e2]"}`}>
+            <button key={d} type="button" onClick={() => (setDate(d), setShift("T"), setOverwrite(false))} className={`rounded-full border px-2 py-0.5 ${d === date ? "border-danger bg-danger text-white" : "border-danger/40 text-danger hover:bg-bad-bg"}`}>
               {dm(d)}
             </button>
           ))}
@@ -229,7 +229,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
         <Alert tone="orange">
           Ca {shiftName} {dm(date)} đã có người chốt – sửa số ở danh sách bên dưới, hoặc{" "}
           <label className="inline-flex items-center gap-1 font-semibold">
-            <input type="checkbox" className="accent-[#c0392b]" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> ghi đè bằng số mới
+            <input type="checkbox" className="accent-danger" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> ghi đè bằng số mới
           </label>
         </Alert>
       )}
@@ -240,7 +240,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           <div key={i} className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p} alt="" className="h-20 w-16 rounded-lg object-cover" />
-            <button type="button" className="absolute -right-1.5 -top-1.5 rounded-full bg-white p-0.5 shadow" onClick={() => setPhotos((x) => x.filter((_, k) => k !== i))}>
+            <button type="button" className="absolute -right-1.5 -top-1.5 rounded-full bg-card p-0.5 shadow" onClick={() => setPhotos((x) => x.filter((_, k) => k !== i))}>
               <X size={12} />
             </button>
           </div>
@@ -288,18 +288,18 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           DT thật: <b>{vnd(thu)}</b>
         </span>
         {hasDt && (
-          <span className={revenueDiff(revenue) === 0 ? "text-secondary-dark" : "text-warn"}>
+          <span className={revenueDiff(revenue) === 0 ? "text-good" : "text-warn"}>
             Âm/Dương (DT máy − DT thật): <b>{vnd(revenue.dt - thu)}</b>
           </span>
         )}
-        {hasTotal && <span className={totalDiff === 0 ? "text-secondary-dark" : "text-danger"}>{totalDiff === 0 ? "✅ Tổng NV cộng đúng" : `⚠️ Tổng NV ghi lệch ${vnd(totalDiff)}`}</span>}
+        {hasTotal && <span className={totalDiff === 0 ? "text-good" : "text-danger"}>{totalDiff === 0 ? "✅ Tổng NV cộng đúng" : `⚠️ Tổng NV ghi lệch ${vnd(totalDiff)}`}</span>}
         {shift === "T" && <span className="text-ink/60">Ca Tối = doanh thu cả ngày → ghi Google Sheet</span>}
       </div>
       <Field label="Ghi chú">
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="accent-[#3c9c54]" checked={sendTelegram} onChange={(e) => setSendTelegram(e.target.checked)} /> Gửi vào nhóm Telegram của cơ sở{photos.length ? " (kèm ảnh)" : ""}
+        <input type="checkbox" className="accent-secondary" checked={sendTelegram} onChange={(e) => setSendTelegram(e.target.checked)} /> Gửi vào nhóm Telegram của cơ sở{photos.length ? " (kèm ảnh)" : ""}
       </label>
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="flex flex-wrap items-center gap-2">

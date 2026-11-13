@@ -917,6 +917,17 @@ const AdminAccountSchema = new Schema(
 export type AdminAccountDoc = InferSchemaType<typeof AdminAccountSchema> & { _id: Types.ObjectId };
 export const AdminAccount = getModel("AdminAccount", AdminAccountSchema);
 
+/* ---------- Tuỳ chọn riêng của từng admin (theo Gmail – cả Admin Tổng, vốn không có AdminAccount) ---------- */
+const AdminPrefSchema = new Schema(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    // màu giao diện trang quản lý (lib/themes.ts) – Admin → Giao diện
+    theme: { type: String, enum: ["default", "red", "pink", "jade", "blue", "dark"], default: "default" },
+  },
+  { timestamps: true },
+);
+export const AdminPref = getModel("AdminPref", AdminPrefSchema);
+
 /* ---------- Sổ quỹ: rút lãi / bổ sung vốn / chuyển giữa tiền mặt và tài khoản (xem lib/cashbook) ---------- */
 const CashTransferSchema = new Schema(
   {

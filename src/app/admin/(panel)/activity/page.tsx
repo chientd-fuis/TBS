@@ -33,7 +33,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     return `/admin/activity${s ? `?${s}` : ""}`;
   };
   const chip = (on: boolean, label: string, to: string) => (
-    <Link key={to + label} href={to} scroll={false} className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-white text-ink/70 hover:bg-cream"}`}>
+    <Link key={to + label} href={to} scroll={false} className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-card text-ink/70 hover:bg-cream"}`}>
       {label}
     </Link>
   );

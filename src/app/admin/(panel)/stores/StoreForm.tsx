@@ -74,18 +74,18 @@ export default function StoreForm({ store }: { store: S | null }) {
         <legend className="px-1 text-sm font-semibold text-accent">Cách chấm công (bật nhiều cách → nhân viên phải qua tất cả)</legend>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <label className="flex items-center gap-1.5">
-            <input type="checkbox" name="checkFace" defaultChecked={store?.checkFace ?? true} className="accent-[#3c9c54]" /> Chụp ảnh khuôn mặt
+            <input type="checkbox" name="checkFace" defaultChecked={store?.checkFace ?? true} className="accent-secondary" /> Chụp ảnh khuôn mặt
           </label>
           <label className="flex items-center gap-1.5">
-            <input type="checkbox" name="checkGps" checked={gps} onChange={(e) => setGps(e.target.checked)} className="accent-[#3c9c54]" /> Vị trí (GPS trong bán kính)
+            <input type="checkbox" name="checkGps" checked={gps} onChange={(e) => setGps(e.target.checked)} className="accent-secondary" /> Vị trí (GPS trong bán kính)
           </label>
           <label className="flex items-center gap-1.5">
-            <input type="checkbox" name="checkWifi" checked={wifi} onChange={(e) => setWifi(e.target.checked)} className="accent-[#3c9c54]" /> WiFi của quán
+            <input type="checkbox" name="checkWifi" checked={wifi} onChange={(e) => setWifi(e.target.checked)} className="accent-secondary" /> WiFi của quán
           </label>
         </div>
         {!gps && !wifi && <p className="text-xs text-warn">Đang tắt cả vị trí và WiFi – nhân viên chấm công được ở bất kỳ đâu.</p>}
         {wifi && (
-          <div className="space-y-2 border-t border-[#f1e6c8] pt-2">
+          <div className="space-y-2 border-t border-line pt-2">
             <p className="text-xs text-ink/70">
               Trình duyệt điện thoại không cho web đọc tên WiFi, nên app kiểm tra bằng <b>IP Internet của quán</b>: máy nhân viên phải đang dùng WiFi quán (không dùng
               4G / VPN / Chuyển tiếp bảo mật iCloud). Cách lấy IP: mở trang này <b>trên điện thoại đang kết nối WiFi quán</b> (tắt 4G) → bấm &quot;Lấy IP mạng đang dùng&quot;
@@ -94,7 +94,7 @@ export default function StoreForm({ store }: { store: S | null }) {
             <div className="grid gap-3 sm:grid-cols-[14rem_1fr]">
               <Field label="Tên WiFi (hiện cho nhân viên)"><Input name="wifiName" defaultValue={store?.wifiName ?? ""} placeholder="VD TBS_Geleximco" /></Field>
               <Field label="IP WiFi quán" hint="Mỗi dòng 1 IP (IPv4, hoặc IPv6 – tự lấy cả dải /64). Quán có 2 mạng thì nhập cả 2.">
-                <textarea name="wifiIps" rows={2} value={ips} onChange={(e) => setIps(e.target.value)} className="w-full rounded-xl border border-[#f1e6c8] bg-white px-3 py-2 font-mono text-sm" placeholder="113.190.xx.xx" />
+                <textarea name="wifiIps" rows={2} value={ips} onChange={(e) => setIps(e.target.value)} className="w-full rounded-xl border border-line bg-card px-3 py-2 font-mono text-sm" placeholder="113.190.xx.xx" />
               </Field>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -139,7 +139,7 @@ export default function StoreForm({ store }: { store: S | null }) {
           </a>
         )}
         <label className="ml-auto flex items-center gap-1 text-sm">
-          <input type="checkbox" name="active" defaultChecked={store?.active ?? true} className="accent-[#3c9c54]" /> Đang hoạt động
+          <input type="checkbox" name="active" defaultChecked={store?.active ?? true} className="accent-secondary" /> Đang hoạt động
         </label>
       </div>
       {locErr && <p className="text-xs text-ink/70">{locErr}</p>}

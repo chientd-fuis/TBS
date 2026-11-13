@@ -37,7 +37,7 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
           <Field label="Tên ngày lễ"><Input name="name" required placeholder="VD Tết Nguyên đán" className="!w-56" /></Field>
           <Field label="Hệ số lương"><MultSelect /></Field>
         </ActionForm>
-        <div className="mt-4 border-t border-[#f1e6c8] pt-3">
+        <div className="mt-4 border-t border-line pt-3">
           <ActionForm action={addSolarHolidays} submitLabel={`Thêm nhanh lễ dương lịch ${year}`} variant="outline" successText="Đã thêm" className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="year" value={year} />
             <Field label="Hệ số"><MultSelect /></Field>
@@ -50,8 +50,8 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
         title={`Ngày lễ năm ${year} (${list.length})`}
         actions={
           <div className="flex gap-1 text-sm">
-            <Link href={`/admin/holidays?year=${year - 1}`} className="rounded-lg px-2 py-1 ring-1 ring-[#f1e6c8] hover:bg-primary-light">‹ {year - 1}</Link>
-            <Link href={`/admin/holidays?year=${year + 1}`} className="rounded-lg px-2 py-1 ring-1 ring-[#f1e6c8] hover:bg-primary-light">{year + 1} ›</Link>
+            <Link href={`/admin/holidays?year=${year - 1}`} className="rounded-lg px-2 py-1 ring-1 ring-line hover:bg-primary-light">‹ {year - 1}</Link>
+            <Link href={`/admin/holidays?year=${year + 1}`} className="rounded-lg px-2 py-1 ring-1 ring-line hover:bg-primary-light">{year + 1} ›</Link>
           </div>
         }
       >
@@ -63,7 +63,7 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
         {!list.length ? (
           <Empty>Chưa có ngày lễ nào trong năm {year}</Empty>
         ) : (
-          <ul className="divide-y divide-[#f1e6c8]">
+          <ul className="divide-y divide-line">
             {list.map((h) => (
               <li key={String(h._id)} className="flex flex-wrap items-end justify-between gap-2 py-2.5">
                 <ActionForm action={saveHoliday} submitLabel="Lưu" variant="outline" successText="Đã lưu" className="flex flex-wrap items-end gap-2">

@@ -3,13 +3,14 @@
  * File thuần (không import server) – dùng được cả ở component client (ô chọn màu).
  * Nhân viên thử việc luôn dùng màu tím thử việc (.theme-trial), không đổi được.
  */
+/** nav = thanh menu trang admin (menu bên trái máy tính / thanh trên điện thoại) – globals.css --color-nav */
 export const THEMES = [
-  { id: "default", name: "Vàng bơ", header: "#fccc18", primary: "#fccc18", secondary: "#3c9c54", cream: "#fcf8ec" },
-  { id: "red", name: "Đỏ son", header: "#d62f36", primary: "#d62f36", secondary: "#7f1d22", cream: "#fff7f6" },
-  { id: "pink", name: "Hồng phấn", header: "#f7a9c9", primary: "#f7a9c9", secondary: "#c93a78", cream: "#fff6fa" },
-  { id: "jade", name: "Ngọc bích", header: "#86d5b8", primary: "#86d5b8", secondary: "#0e8466", cream: "#f3fbf8" },
-  { id: "blue", name: "Xanh lam", header: "#b3d1ff", primary: "#b3d1ff", secondary: "#2563eb", cream: "#f6f9ff" },
-  { id: "dark", name: "Tối", header: "#202024", primary: "#e4e4e7", secondary: "#5b5b63", cream: "#18181b" },
+  { id: "default", name: "Vàng bơ", header: "#fccc18", primary: "#fccc18", secondary: "#3c9c54", cream: "#fcf8ec", nav: "#18783c" },
+  { id: "red", name: "Đỏ son", header: "#d62f36", primary: "#d62f36", secondary: "#7f1d22", cream: "#fff7f6", nav: "#64151a" },
+  { id: "pink", name: "Hồng phấn", header: "#f7a9c9", primary: "#f7a9c9", secondary: "#c93a78", cream: "#fff6fa", nav: "#a52d62" },
+  { id: "jade", name: "Ngọc bích", header: "#86d5b8", primary: "#86d5b8", secondary: "#0e8466", cream: "#f3fbf8", nav: "#0b6d54" },
+  { id: "blue", name: "Xanh lam", header: "#b3d1ff", primary: "#b3d1ff", secondary: "#2563eb", cream: "#f6f9ff", nav: "#1d4ed8" },
+  { id: "dark", name: "Tối", header: "#202024", primary: "#e4e4e7", secondary: "#5b5b63", cream: "#18181b", nav: "#202024" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

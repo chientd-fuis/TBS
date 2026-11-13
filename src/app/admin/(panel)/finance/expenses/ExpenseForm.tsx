@@ -29,7 +29,7 @@ export type ExpenseInitial = {
 };
 
 const pill = (on: boolean) =>
-  `rounded-xl px-3 py-2 text-sm ring-1 transition ${on ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200"}`;
+  `rounded-xl px-3 py-2 text-sm ring-1 transition ${on ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-mute-bg text-mute-fg ring-mute-line hover:bg-mute-line"}`;
 
 export default function ExpenseForm({
   stores: _stores,
@@ -101,9 +101,9 @@ export default function ExpenseForm({
       )}
 
       {warnings.length > 0 && (
-        <ul className="space-y-1 rounded-xl bg-[#fde2e2] px-3 py-2 text-xs text-danger">
+        <ul className="space-y-1 rounded-xl bg-bad-bg px-3 py-2 text-xs text-danger">
           {warnings.map((w) => (
-            <li key={w.text} className={`flex gap-1.5 ${w.fixed ? "text-secondary-dark" : ""}`}>
+            <li key={w.text} className={`flex gap-1.5 ${w.fixed ? "text-good" : ""}`}>
               {w.fixed ? <CheckCircle2 size={14} className="mt-px shrink-0" /> : <TriangleAlert size={14} className="mt-px shrink-0" />}
               <span>{w.text}{w.fixed ? " – đã nhập tay" : ""}</span>
             </li>
@@ -156,7 +156,7 @@ export default function ExpenseForm({
         </div>
       </div>
 
-      <label className={`flex flex-wrap items-center gap-x-2 rounded-xl bg-cream px-3 py-2 text-sm ${f.countInCost ? "text-secondary-dark" : "text-ink/60"}`}>
+      <label className={`flex flex-wrap items-center gap-x-2 rounded-xl bg-cream px-3 py-2 text-sm ${f.countInCost ? "text-good" : "text-ink/60"}`}>
         <input type="checkbox" checked={f.countInCost} onChange={(e) => set("countInCost", e.target.checked)} className="h-4 w-4" />
         Tính vào chi phí
         {!f.countInCost && <span className="w-full pl-6 text-[11px]">(chỉ lưu chứng từ{f.category === "LUONG" ? " – lương đã có trong bảng lương" : ""})</span>}

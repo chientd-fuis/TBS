@@ -1,7 +1,7 @@
 import { weekdayVi } from "@/lib/time";
 import type { ActivityRow } from "./data";
 
-const COLORS = ["bg-[#dbeafe] text-[#1e40af]", "bg-[#fde2e2] text-[#9a2a2a]", "bg-[#e3f4e6] text-[#256b37]", "bg-[#fff1cc] text-[#7a5600]", "bg-[#efe4fb] text-[#5b2d91]", "bg-[#ffe8d9] text-[#9a4a12]"];
+const COLORS = ["bg-info-bg text-info-fg", "bg-bad-bg text-bad-fg", "bg-ok-bg text-good", "bg-wait-bg text-wait-fg", "bg-violet-bg text-violet-fg", "bg-late-bg text-late-fg"];
 const colorOf = (name: string) => COLORS[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % COLORS.length];
 const GROUP_DOT: Record<string, string> = {
   attendance: "bg-[#2a78d6]",
@@ -37,7 +37,7 @@ export default function ActivityFeed({ rows, today, empty = "Chưa có hoạt đ
               {list.map((r) => (
                 <li key={r.id} className="flex gap-3 py-2 text-sm">
                   <span className="w-11 shrink-0 pt-0.5 text-xs tabular-nums text-ink/50">{r.time}</span>
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${GROUP_DOT[r.group] ?? "bg-ink/30"}`} />
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${GROUP_DOT[r.group] ?? "bg-shade/30"}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${colorOf(r.admin)}`}>{r.admin}</span>

@@ -127,7 +127,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-[#f1e6c8] text-left text-xs text-ink/60">
+                    <tr className="border-b border-line text-left text-xs text-ink/60">
                       <th className="py-1.5 pr-3">Món</th>
                       {cols.map((c) => <th key={c.id} className="px-2 py-1.5 text-right whitespace-nowrap">{c.name.replace(/^TBS\s*/i, "")}</th>)}
                       {cols.length > 1 && <th className="py-1.5 pl-2 text-right">Tổng</th>}
@@ -135,7 +135,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                   </thead>
                   <tbody>
                     {rows.map((name) => (
-                      <tr key={name} className="border-b border-[#f1e6c8]/60">
+                      <tr key={name} className="border-b border-line/60">
                         <td className="py-1.5 pr-3 font-semibold whitespace-nowrap">{name}</td>
                         {cols.map((c) => <td key={c.id} className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">{cell(sum.get(name)?.get(c.id))}</td>)}
                         {cols.length > 1 && <td className="py-1.5 pl-2 text-right font-bold tabular-nums whitespace-nowrap">{cell(sum.get(name)?.get(""))}</td>}
@@ -157,7 +157,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                     <Link href={`${path}?date=${d}${store ? `&store=${store}` : ""}`} className="text-sm font-bold text-accent hover:underline">
                       {dayVi(d)}
                     </Link>
-                    <ul className="mt-1 divide-y divide-[#f1e6c8]">
+                    <ul className="mt-1 divide-y divide-line">
                       {list
                         .filter((r) => r.date === d)
                         .map((r) => {
@@ -196,7 +196,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
       {on && edit && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
           <Link href={`${base}${date ? `&date=${date}` : ""}`} scroll={false} aria-label="Đóng" className="absolute inset-0" />
-          <div className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:rounded-3xl">
+          <div className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-card p-4 shadow-xl sm:rounded-3xl">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="font-bold text-accent">
                 {stock ? "Sửa lần kiểm kho" : "Sửa lần nhận"} · {dayVi(edit.date)}

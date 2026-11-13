@@ -42,7 +42,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
               href={`/admin/revenue?month=${month}${s.id ? `&store=${s.id}` : ""}`}
               className={cn(
                 "rounded-lg px-3 py-1.5",
-                (sp.store ?? "") === s.id ? "bg-secondary font-bold text-white" : "bg-white text-ink/70 ring-1 ring-[#f1e6c8] hover:bg-primary-light",
+                (sp.store ?? "") === s.id ? "bg-secondary font-bold text-white" : "bg-card text-ink/70 ring-1 ring-line hover:bg-primary-light",
               )}
             >
               {s.name}

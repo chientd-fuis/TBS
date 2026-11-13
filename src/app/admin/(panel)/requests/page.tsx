@@ -105,9 +105,9 @@ export default async function RequestsPage() {
                 const name = users.get(String(p.userId)) ?? "?";
                 const trial = p.kind === "TRIAL";
                 return (
-                  <div key={String(p._id)} className="space-y-1 rounded-xl bg-[#faf5ff] p-3 text-sm ring-1 ring-[#e3d0f7]">
+                  <div key={String(p._id)} className="space-y-1 rounded-xl bg-violet-soft p-3 text-sm ring-1 ring-violet-line">
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="rounded-full bg-[#7e3a9c] px-2 py-0.5 text-xs font-bold text-white">{trial ? "Hết 3 ca thử việc" : "Hết tháng thử việc"}</span>
+                      <span className="rounded-full bg-violet-fg px-2 py-0.5 text-xs font-bold text-white">{trial ? "Hết 3 ca thử việc" : "Hết tháng thử việc"}</span>
                       <span>
                         <b>{name}</b> · {stores.get(String(p.storeId))} · {viDateTime(p.createdAt)}
                       </span>
@@ -123,7 +123,7 @@ export default async function RequestsPage() {
                         Thử việc {p.periodStart && viDate(p.periodStart)} → {p.periodEnd && viDate(p.periodEnd)} · đã làm <b>{p.shifts ?? 0} ca</b>
                       </p>
                     )}
-                    <p className="font-semibold text-[#7e3a9c]">
+                    <p className="font-semibold text-violet-fg">
                       {trial ? "Có nhận nhân viên làm tiếp không?" : `Áp dụng lương chính thức 22.000đ/giờ từ ${p.periodEnd ? viDate(p.periodEnd) : "ngày hết thử việc"}?`}
                     </p>
                     <Who storeId={p.storeId} perm={APPROVE_PERM.probation} />
@@ -172,7 +172,7 @@ export default async function RequestsPage() {
         ) : (
           <div className="space-y-3">
             {ots.map((a) => (
-              <div key={String(a._id)} className="rounded-xl bg-[#fff7ed] p-3 text-sm ring-1 ring-[#fed7aa]">
+              <div key={String(a._id)} className="rounded-xl bg-warn-soft p-3 text-sm ring-1 ring-warn-line">
                 <p>
                   <b>{users.get(String(a.userId))}</b> · {stores.get(String(a.storeId))} · {weekdayVi(a.workDate)} {viDate(a.workDate)}
                 </p>
@@ -237,7 +237,7 @@ export default async function RequestsPage() {
         ) : (
           <div className="space-y-3">
             {covers.map((c) => (
-              <div key={String(c._id)} className={`rounded-xl p-3 text-sm ${c.kind === "SWAP" ? "bg-[#eff6ff]" : "bg-cream"}`}>
+              <div key={String(c._id)} className={`rounded-xl p-3 text-sm ${c.kind === "SWAP" ? "bg-info-soft" : "bg-cream"}`}>
                 {c.kind === "SWAP" ? (
                   <>
                     <p>
@@ -312,11 +312,11 @@ export default async function RequestsPage() {
               return (
               <div
                 key={String(r._id)}
-                className={`space-y-1 rounded-xl p-3 text-sm ${kind === "EDIT" ? "bg-[#f5f9ff] ring-1 ring-[#c7dbfb]" : kind === "MISSING" ? "bg-[#faf5ff] ring-1 ring-[#e3d0f7]" : "bg-cream"}`}
+                className={`space-y-1 rounded-xl p-3 text-sm ${kind === "EDIT" ? "bg-info-soft ring-1 ring-info-line" : kind === "MISSING" ? "bg-violet-soft ring-1 ring-violet-line" : "bg-cream"}`}
               >
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {kind && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${kind === "EDIT" ? "bg-[#1e3a8a]" : "bg-[#6b21a8]"}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${kind === "EDIT" ? "bg-info-fg" : "bg-violet-fg"}`}>
                       {kind === "EDIT" ? "Sửa giờ lượt đã chấm" : "Chấm bù ca (quên chấm công)"}
                     </span>
                   )}
@@ -329,26 +329,26 @@ export default async function RequestsPage() {
                 {kind === "EDIT" ? (
                   t ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[300px] overflow-hidden rounded-lg bg-white text-sm ring-1 ring-[#dbe6fb]">
+                      <table className="w-full min-w-[300px] overflow-hidden rounded-lg bg-card text-sm ring-1 ring-info-line">
                         <thead>
-                          <tr className="bg-[#eaf1fe] text-left">
+                          <tr className="bg-info-soft text-left">
                             <th className="px-2 py-1.5 font-semibold"></th>
                             <th className="px-2 py-1.5 font-semibold">App đang ghi</th>
                             <th className="px-2 py-1.5 font-semibold">Nhân viên xin</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr className="border-t border-[#e3ebfa]">
+                          <tr className="border-t border-info-line">
                             <td className="px-2 py-1.5 text-ink/70">Giờ vào</td>
                             <td className="px-2 py-1.5">{hm(t.checkInAt, t.storeId)}</td>
                             <td className={`px-2 py-1.5 font-bold ${hm(t.checkInAt, t.storeId) !== r.checkInTime ? "text-warn" : ""}`}>{r.checkInTime}</td>
                           </tr>
-                          <tr className="border-t border-[#e3ebfa]">
+                          <tr className="border-t border-info-line">
                             <td className="px-2 py-1.5 text-ink/70">Giờ ra</td>
                             <td className="px-2 py-1.5">{t.checkOutAt ? hm(t.checkOutAt, t.storeId) : <Badge tone="red">Quên check-out</Badge>}</td>
                             <td className={`px-2 py-1.5 font-bold ${(t.checkOutAt ? hm(t.checkOutAt, t.storeId) : "") !== r.checkOutTime ? "text-warn" : ""}`}>{r.checkOutTime}</td>
                           </tr>
-                          <tr className="border-t border-[#e3ebfa]">
+                          <tr className="border-t border-info-line">
                             <td className="px-2 py-1.5 text-ink/70">Giờ công</td>
                             <td className="px-2 py-1.5">{hoursShort(t.roundedHours ?? 0)}</td>
                             <td className="px-2 py-1.5 font-bold">{ctx.reqHours != null ? hoursShort(ctx.reqHours) : "—"}</td>
@@ -383,7 +383,7 @@ export default async function RequestsPage() {
                         ⚠ Trùng lượt đã có: {ctx.clash.shiftLabel ?? "Ngoài ca"} {attText(ctx.clash, ctx.tz)} – sửa giờ cho khỏi trùng hoặc Từ chối
                       </p>
                     ) : (
-                      <p className="font-semibold text-secondary-dark">
+                      <p className="font-semibold text-good">
                         {ctx.shift ? "Đúng ca được xếp" : "Không có ca được xếp → sau khi duyệt thành lượt ngoài ca (chờ xác nhận làm ngoài giờ)"} · không trùng lượt nào
                         {ctx.list.length ? ` (ngày này app đã có: ${ctx.list.map((a) => `${a.shiftLabel ?? "Ngoài ca"} ${attText(a, ctx.tz)}`).join("; ")})` : ""}
                       </p>
@@ -403,11 +403,11 @@ export default async function RequestsPage() {
                   {(() => {
                     if (kind) return null;
                     return (
-                      <fieldset className="space-y-1 rounded-lg bg-cream p-2 text-xs ring-1 ring-[#f1e6c8]">
+                      <fieldset className="space-y-1 rounded-lg bg-cream p-2 text-xs ring-1 ring-line">
                         <legend className="px-1 font-semibold text-accent">Duyệt sẽ sửa lượt:</legend>
                         {ctx.list.map((a) => (
                           <label key={String(a._id)} className="flex items-start gap-2">
-                            <input type="radio" name="targetId" value={String(a._id)} defaultChecked={String(a._id) === ctx.targetId} className="mt-0.5 accent-[#3c9c54]" />
+                            <input type="radio" name="targetId" value={String(a._id)} defaultChecked={String(a._id) === ctx.targetId} className="mt-0.5 accent-secondary" />
                             <span>
                               {a.shiftLabel ? <b>{a.shiftLabel}</b> : <b>Ngoài ca</b>}: {attText(a, ctx.tz)}
                               {stores.get(String(a.storeId)) && String(a.storeId) !== String(r.storeId) && <span className="text-ink/50"> · {stores.get(String(a.storeId))}</span>}
@@ -416,7 +416,7 @@ export default async function RequestsPage() {
                           </label>
                         ))}
                         <label className="flex items-start gap-2">
-                          <input type="radio" name="targetId" value="new" defaultChecked={!ctx.targetId} className="mt-0.5 accent-[#3c9c54]" />
+                          <input type="radio" name="targetId" value="new" defaultChecked={!ctx.targetId} className="mt-0.5 accent-secondary" />
                           <span>
                             <b>Thêm lượt mới</b> (quên cả check-in lẫn check-out ca này)
                             {!ctx.targetId && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-bold text-white">chọn sẵn</span>}
@@ -469,7 +469,7 @@ export default async function RequestsPage() {
                 </p>
                 <p className="my-1">{f.content}</p>
                 {f.adminReply ? (
-                  <p className="text-secondary-dark">↳ {f.adminName}: {f.adminReply}</p>
+                  <p className="text-good">↳ {f.adminName}: {f.adminReply}</p>
                 ) : (
                   <ActionForm action={replyFeedback} submitLabel="Trả lời" variant="outline" successText="" className="flex items-end gap-1">
                     <input type="hidden" name="id" value={String(f._id)} />

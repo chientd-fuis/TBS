@@ -37,7 +37,7 @@ export default function SessionList({ sessions, now }: { sessions: SessionRow[];
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <span className="text-ink/70">
-          <b className="text-secondary-dark">{online}</b> đang online · {sessions.length} phiên còn hiệu lực
+          <b className="text-good">{online}</b> đang online · {sessions.length} phiên còn hiệu lực
         </span>
         {sessions.length > 1 && (
           <Button variant="ghost" className="px-2 py-1 text-xs text-danger" onClick={() => setAsk("ALL")}>
@@ -52,10 +52,10 @@ export default function SessionList({ sessions, now }: { sessions: SessionRow[];
         <ul className="divide-y divide-ink/5">
           {sessions.map((s) => (
             <li key={s.sid} className="flex items-center gap-3 py-2 text-sm">
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.online ? "bg-secondary" : "bg-ink/20"}`} title={s.online ? "Đang online" : "Không hoạt động"} />
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.online ? "bg-secondary" : "bg-shade/20"}`} title={s.online ? "Đang online" : "Không hoạt động"} />
               <div className="min-w-0 flex-1">
                 <p>
-                  <b>{s.name}</b> <span className={`text-xs ${s.online ? "font-semibold text-secondary-dark" : "text-ink/50"}`}>{s.online ? "đang online" : `hoạt động ${ago(s.lastSeenAt, now)}`}</span>
+                  <b>{s.name}</b> <span className={`text-xs ${s.online ? "font-semibold text-good" : "text-ink/50"}`}>{s.online ? "đang online" : `hoạt động ${ago(s.lastSeenAt, now)}`}</span>
                 </p>
                 <p className="flex flex-wrap items-center gap-x-2 text-xs text-ink/60">
                   <MonitorSmartphone size={12} /> {s.device}

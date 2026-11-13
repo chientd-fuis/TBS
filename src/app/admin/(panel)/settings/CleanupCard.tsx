@@ -102,13 +102,13 @@ export default function CleanupCard({
     const n = counts?.[it.key]?.total;
     return (
       <label key={it.key} className="flex items-start gap-2 text-sm">
-        <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={!!opts[it.key]} onChange={(e) => set({ [it.key]: e.target.checked } as Partial<CleanupOpts>)} />
+        <input type="checkbox" className="mt-1 accent-secondary" checked={!!opts[it.key]} onChange={(e) => set({ [it.key]: e.target.checked } as Partial<CleanupOpts>)} />
         <span className="flex-1">
           {it.label}{" "}
           {counting && n == null ? (
             <Loader2 size={12} className="inline animate-spin text-ink/40" />
           ) : n != null ? (
-            <span className={`text-xs font-semibold ${n ? "text-secondary-dark" : "text-ink/40"}`}>({n.toLocaleString("vi-VN")})</span>
+            <span className={`text-xs font-semibold ${n ? "text-good" : "text-ink/40"}`}>({n.toLocaleString("vi-VN")})</span>
           ) : null}
           {it.hint && <span className="block text-xs text-ink/60">{it.hint}</span>}
         </span>
@@ -148,7 +148,7 @@ export default function CleanupCard({
         {statsErr && <p className="mt-1 text-xs text-danger">{statsErr}</p>}
         {stats && (
           <div className="mt-2 space-y-2">
-            <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
+            <div className="h-2.5 overflow-hidden rounded-full bg-shade/10">
               <div className={`h-full ${pctUsed > 80 ? "bg-danger" : pctUsed > 60 ? "bg-warn" : "bg-secondary"}`} style={{ width: `${Math.max(pctUsed, 1)}%` }} />
             </div>
             <p className="text-xs text-ink/70">
@@ -192,7 +192,7 @@ export default function CleanupCard({
             Xoá <b>chốt ca &amp; doanh thu từng ca</b> sẽ làm mất số liệu Doanh thu theo ngày, Lãi lỗ, báo cáo của những ngày đó (Google Sheet vẫn giữ tổng ngày đã ghi);
             xoá <b>ảnh</b> thì không xem lại được ảnh chấm công / chốt ca. Đơn & ca của các ngày sắp tới vẫn được giữ.
             <label className="mt-2 flex items-center gap-2 font-semibold">
-              <input type="checkbox" className="accent-[#c0392b]" checked={ack} onChange={(e) => setAck(e.target.checked)} /> Tôi hiểu, vẫn muốn xoá
+              <input type="checkbox" className="accent-danger" checked={ack} onChange={(e) => setAck(e.target.checked)} /> Tôi hiểu, vẫn muốn xoá
             </label>
           </Alert>
         )}
@@ -203,7 +203,7 @@ export default function CleanupCard({
             {g === "photo" && opts.photos && (
               <div className="mt-2 rounded-xl bg-cream p-2">
                 <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={!!opts.drivePhotos} onChange={(e) => set({ drivePhotos: e.target.checked })} />
+                  <input type="checkbox" className="mt-1 accent-secondary" checked={!!opts.drivePhotos} onChange={(e) => set({ drivePhotos: e.target.checked })} />
                   <span>
                     Xoá cả thư mục ảnh tháng cũ trên Google Drive
                     <span className="block text-xs text-ink/60">Chuyển vào thùng rác Drive – khôi phục được trong 30 ngày</span>
@@ -237,7 +237,7 @@ export default function CleanupCard({
       {/* Tự động */}
       <div className="mt-4 space-y-2 rounded-xl bg-cream p-3 text-sm">
         <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-1 accent-[#3c9c54]" checked={auto} disabled={pending} onChange={(e) => toggleAuto(e.target.checked)} />
+          <input type="checkbox" className="mt-1 accent-secondary" checked={auto} disabled={pending} onChange={(e) => toggleAuto(e.target.checked)} />
           <span>
             <b>Tự dọn mỗi tháng</b>
             <span className="block text-xs text-ink/60">

@@ -97,7 +97,7 @@ export default function TransferAccount({ fromId, fromEmail, fromName, candidate
       {pv && !pv.blockers.length && (
         <>
           <label className="flex items-start gap-2 text-xs">
-            <input type="checkbox" className="mt-0.5 accent-[#3c9c54]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 accent-secondary" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
             <span>
               Tôi đã xác nhận {to?.email} đúng là Gmail mới của <b>{fromName}</b>. Tài khoản {fromEmail} sẽ bị xoá vĩnh viễn.
             </span>

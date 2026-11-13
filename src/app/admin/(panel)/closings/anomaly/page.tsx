@@ -44,7 +44,7 @@ export default async function AnomalyPage() {
             ))}
             <Card>
               <p className="text-xs text-ink/60">Đã xử lý</p>
-              <p className="text-2xl font-bold text-secondary-dark">{run.items.length - open.length}</p>
+              <p className="text-2xl font-bold text-good">{run.items.length - open.length}</p>
             </Card>
           </div>
           <Card title={`Danh sách (${run.items.length})`}>

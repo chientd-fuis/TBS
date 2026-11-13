@@ -16,11 +16,11 @@ export default function SingleTimeFields({ templates }: { templates: Tpl[] }) {
     <div className="space-y-2">
       <div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-1.5">
-          <input type="radio" className="accent-[#3c9c54]" checked={mode === "shift"} disabled={!templates.length} onChange={() => setMode("shift")} />
+          <input type="radio" className="accent-secondary" checked={mode === "shift"} disabled={!templates.length} onChange={() => setMode("shift")} />
           Theo ca (lấy giờ của ca)
         </label>
         <label className="flex items-center gap-1.5">
-          <input type="radio" className="accent-[#3c9c54]" checked={mode === "time"} onChange={() => setMode("time")} />
+          <input type="radio" className="accent-secondary" checked={mode === "time"} onChange={() => setMode("time")} />
           Tự nhập giờ vào / ra
         </label>
         {!templates.length && <span className="text-xs text-warn">Cơ sở chưa có ca mẫu</span>}
@@ -33,14 +33,14 @@ export default function SingleTimeFields({ templates }: { templates: Tpl[] }) {
                 key={t.id}
                 type="button"
                 onClick={() => setTplId(t.id)}
-                className={`rounded-full border px-3 py-1 text-sm ${tplId === t.id ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-white text-ink/80"}`}
+                className={`rounded-full border px-3 py-1 text-sm ${tplId === t.id ? "border-secondary bg-secondary text-white" : "border-ink/15 bg-card text-ink/80"}`}
               >
                 {t.name} {t.startTime}–{t.endTime}
               </button>
             ))}
           </div>
           <label className="flex items-center gap-1.5 text-sm">
-            <input type="checkbox" className="accent-[#3c9c54]" checked={onlyIn} onChange={(e) => setOnlyIn(e.target.checked)} />
+            <input type="checkbox" className="accent-secondary" checked={onlyIn} onChange={(e) => setOnlyIn(e.target.checked)} />
             Chỉ check-in (nhân viên vẫn đang làm, chưa ra ca)
           </label>
           {tpl && (

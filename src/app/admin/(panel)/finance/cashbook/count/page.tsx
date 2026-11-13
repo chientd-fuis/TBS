@@ -92,15 +92,15 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
           </AutoFilterForm>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-          <div className="rounded-xl bg-cream p-2 ring-1 ring-[#f1e6c8]">
+          <div className="rounded-xl bg-cream p-2 ring-1 ring-line">
             <div className="text-ink/60">Tiền mặt tháng</div>
             <b className="text-sm tabular-nums">{vnd(sumTm(allRows))}</b>
           </div>
-          <div className="rounded-xl bg-cream p-2 ring-1 ring-[#f1e6c8]">
+          <div className="rounded-xl bg-cream p-2 ring-1 ring-line">
             <div className="text-ink/60">✓ Đã lấy ({done.length})</div>
-            <b className="text-sm tabular-nums text-secondary-dark">{vnd(sumTm(done))}</b>
+            <b className="text-sm tabular-nums text-good">{vnd(sumTm(done))}</b>
           </div>
-          <div className="rounded-xl bg-cream p-2 ring-1 ring-[#f1e6c8]">
+          <div className="rounded-xl bg-cream p-2 ring-1 ring-line">
             <div className="text-ink/60">Chưa lấy ({allRows.length - done.length})</div>
             <b className="text-sm tabular-nums text-warn">{vnd(sumTm(allRows) - sumTm(done))}</b>
           </div>
@@ -177,7 +177,7 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
                             title={r.count ? `Đã đếm lúc ${viDateTime(r.count.countedAt)}${r.count.countedBy ? ` · ${r.count.countedBy}` : ""}` : "Tích khi đã lấy & đếm tiền mặt ngày này"}
                           />
                         ) : r.count ? (
-                          <span className="font-bold text-secondary-dark" title={`Đã đếm lúc ${viDateTime(r.count.countedAt)}`}>✓</span>
+                          <span className="font-bold text-good" title={`Đã đếm lúc ${viDateTime(r.count.countedAt)}`}>✓</span>
                         ) : (
                           <span className="text-ink/30">—</span>
                         )}

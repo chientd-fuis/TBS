@@ -66,7 +66,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
     <>
       <PageTitle sub="Mới nhất ở trên. Số chốt ca là LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày). Doanh thu theo ngày xem ở Tài chính → Doanh thu theo ngày.">Lịch sử chốt ca</PageTitle>
       {admin.kind === "OWNER" && (
-        <Link href="/admin/closings/anomaly" className="inline-flex w-fit items-center gap-1 rounded-xl bg-white px-3 py-1.5 text-sm font-semibold text-accent ring-1 ring-[#f1e6c8] hover:bg-primary-light">
+        <Link href="/admin/closings/anomaly" className="inline-flex w-fit items-center gap-1 rounded-xl bg-card px-3 py-1.5 text-sm font-semibold text-accent ring-1 ring-line hover:bg-primary-light">
           ⚠ Bất thường chốt ca &amp; két (AI) →
         </Link>
       )}
@@ -84,7 +84,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
           {[{ id: "", name: "Tất cả" }, ...stores.map((s) => ({ id: String(s._id), name: s.name.replace(/^TBS\s*/i, "") }))].map((s) => {
             const qs = new URLSearchParams(Object.entries({ ...sp, store: s.id }).filter(([, v]) => v) as [string, string][]).toString();
             return (
-              <Link key={s.id || "all"} href={`/admin/closings${qs ? `?${qs}` : ""}`} className={`rounded-lg px-3 py-1.5 ${(sp.store ?? "") === s.id ? "bg-secondary font-bold text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              <Link key={s.id || "all"} href={`/admin/closings${qs ? `?${qs}` : ""}`} className={`rounded-lg px-3 py-1.5 ${(sp.store ?? "") === s.id ? "bg-secondary font-bold text-white" : "bg-mute-bg text-mute-fg hover:bg-mute-line"}`}>
                 {s.name}
               </Link>
             );
@@ -140,7 +140,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                           {c.photos.map((_: unknown, i: number) => (
                             <a key={i} href={`/api/photo?closing=${c._id}&i=${i}`} target="_blank">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={`/api/photo?closing=${c._id}&i=${i}`} alt={`Ảnh ${i + 1}`} className="h-14 w-14 rounded-lg bg-cream object-cover ring-1 ring-[#f1e6c8]" loading="lazy" />
+                              <img src={`/api/photo?closing=${c._id}&i=${i}`} alt={`Ảnh ${i + 1}`} className="h-14 w-14 rounded-lg bg-cream object-cover ring-1 ring-line" loading="lazy" />
                             </a>
                           ))}
                         </div>
@@ -160,7 +160,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                               (() => {
                                 const real = closingSum(c.revenue as Partial<Revenue>);
                                 return c.staffTotal === real ? (
-                                  <div className="text-secondary-dark">Tổng NV ghi {vnd(c.staffTotal)} ✓</div>
+                                  <div className="text-good">Tổng NV ghi {vnd(c.staffTotal)} ✓</div>
                                 ) : (
                                   <div className="font-bold text-danger">NV cộng sai: ghi {vnd(c.staffTotal)}, đúng {vnd(real)}</div>
                                 );
@@ -168,7 +168,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                             {c.revenue.dt != null &&
                               (() => {
                                 const d = revenueDiff(c.revenue as Partial<Revenue>);
-                                return <div className={d ? "font-bold text-danger" : "text-secondary-dark"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
+                                return <div className={d ? "font-bold text-danger" : "text-good"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
                               })()}
                             {!!c.cashMismatch?.diff && (
                               <div className="mt-0.5 rounded-md bg-danger/10 px-1.5 py-0.5 font-bold text-danger">

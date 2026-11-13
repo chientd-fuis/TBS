@@ -131,7 +131,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </div>
       </div>
       {todoTotal > 0 && (
-        <div className="mb-4 overflow-hidden rounded-2xl bg-[#fff4e5] ring-1 ring-warn/40">
+        <div className="mb-4 overflow-hidden rounded-2xl bg-warn-soft ring-1 ring-warn/40">
           <Link href={todo[0].href} className="flex items-center gap-2 px-4 py-3 text-warn">
             <BellRing size={20} className="shrink-0" />
             <span className="flex-1 font-bold">Việc cần xác nhận: {todoTotal} yêu cầu</span>
@@ -142,7 +142,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               const mine = !!x.names?.includes(me);
               return (
                 <li key={x.key}>
-                  <Link href={x.href} className={`flex items-center gap-2 px-4 py-2 text-ink ${mine ? "bg-[#ffedd5]" : ""}`}>
+                  <Link href={x.href} className={`flex items-center gap-2 px-4 py-2 text-ink ${mine ? "bg-late-bg" : ""}`}>
                     <span className="w-5 shrink-0 text-center" aria-hidden>
                       {x.icon}
                     </span>
@@ -195,7 +195,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Card>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-accent">💰 Tổng lương tạm tính tất cả cơ sở – tháng này (đến hôm nay)</span>
-            <span className="text-2xl font-bold text-secondary-dark">{vnd(blocks.reduce((t, b) => t + (b.pay?.total ?? 0), 0))}</span>
+            <span className="text-2xl font-bold text-good">{vnd(blocks.reduce((t, b) => t + (b.pay?.total ?? 0), 0))}</span>
           </div>
           <p className="mt-1 text-xs text-ink/60">
             Tính từ các lượt đã check-out × lương giờ + thưởng − phạt; chưa gồm phụ cấp / tạm ứng. Bảng lương chính thức lập ở mục Bảng lương.
@@ -212,14 +212,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             )}
             <div className="mt-2 grid grid-cols-4 gap-2 text-center text-sm">
               <div className="rounded-xl bg-primary-light p-2"><p className="text-xs">Ca hôm nay</p><p className="text-xl font-bold">{b.shifts.length}</p></div>
-              <div className="rounded-xl bg-[#e3f3e7] p-2"><p className="text-xs">Đang làm</p><p className="text-xl font-bold text-secondary-dark">{b.working.length}</p></div>
-              <div className="rounded-xl bg-[#ffe8d9] p-2"><p className="text-xs">Đi muộn</p><p className="text-xl font-bold text-warn">{b.late.length}</p></div>
-              <div className="rounded-xl bg-[#fde2e2] p-2"><p className="text-xs">Chưa đến</p><p className="text-xl font-bold text-danger">{b.absent.length}</p></div>
+              <div className="rounded-xl bg-ok-bg p-2"><p className="text-xs">Đang làm</p><p className="text-xl font-bold text-good">{b.working.length}</p></div>
+              <div className="rounded-xl bg-late-bg p-2"><p className="text-xs">Đi muộn</p><p className="text-xl font-bold text-warn">{b.late.length}</p></div>
+              <div className="rounded-xl bg-bad-bg p-2"><p className="text-xs">Chưa đến</p><p className="text-xl font-bold text-danger">{b.absent.length}</p></div>
             </div>
             {b.weatherAlerts.length > 0 && (
-              <div className="mt-2 rounded-xl border border-[#f5c99b] bg-[#fff8ef] p-3 text-sm">
+              <div className="mt-2 rounded-xl border border-warn-line bg-warn-soft p-3 text-sm">
                 <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-                  <b className="text-[#b45309]">🌧️ Thời tiết xấu tuần này – nên giảm ca</b>
+                  <b className="text-weather-fg">🌧️ Thời tiết xấu tuần này – nên giảm ca</b>
                   <Link className="text-xs text-accent underline" href={`/admin/schedule/${b.s._id}`}>Xem lịch xếp ca</Link>
                 </div>
                 <ul className="space-y-1">
@@ -233,7 +233,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                         <ul className="mt-0.5 pl-3 text-[13px]">
                           {w.cuts.map((c) => (
                             <li key={c.tplId}>
-                              → Ca <b>{c.tplName}</b>: nên <b className="text-[#b45309]">{c.suggest} người</b> (đang xếp {c.planned}, giảm {c.planned - c.suggest})
+                              → Ca <b>{c.tplName}</b>: nên <b className="text-weather-fg">{c.suggest} người</b> (đang xếp {c.planned}, giảm {c.planned - c.suggest})
                             </li>
                           ))}
                         </ul>
@@ -252,7 +252,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <div className="mt-2 rounded-xl bg-cream p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-xs font-semibold text-accent">💰 Lương tạm tính tháng {viMonth(b.month)} (đến hôm nay)</span>
-                <span className="text-xl font-bold text-secondary-dark">{vnd(b.pay.total)}</span>
+                <span className="text-xl font-bold text-good">{vnd(b.pay.total)}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink/70">
                 <span>{hoursVi(b.pay.hours)} giờ công · {b.pay.staffCount} NV</span>
@@ -267,7 +267,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               {b.working.map((a) => (
                 <p key={String(a._id)} className="flex flex-wrap items-center gap-x-2">
                   <span className="tbs-live-dot mx-0.5" aria-hidden />
-                  <span><b className="text-[#166534]">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
+                  <span><b className="text-good">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
                   {!!a.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(a.lateMinutes)}</Badge>}
                   {b.badges.get(String(a._id))?.map((x) => (
                     <Badge key={x.kind + x.text} tone={x.kind === "new" ? "blue" : x.kind === "ending" ? "yellow" : "red"}>{x.text}</Badge>
@@ -278,8 +278,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <p key={String(sh._id)}>🔴 {b.name.get(String(sh.userId)) || "?"} – ca {sh.startTime} chưa check-in</p>
               ))}
               {b.staffActs.length > 0 && (
-                <div className="mt-2 rounded-xl bg-[#eff6ff] p-2.5 text-xs">
-                  <p className="mb-1 font-semibold text-[#1e40af]">🛡️ Nhân viên quản lý đã thao tác (7 ngày)</p>
+                <div className="mt-2 rounded-xl bg-info-soft p-2.5 text-xs">
+                  <p className="mb-1 font-semibold text-info-fg">🛡️ Nhân viên quản lý đã thao tác (7 ngày)</p>
                   <ul className="space-y-0.5 text-ink/80">
                     {b.staffActs.map((x) => (
                       <li key={String(x._id)}>

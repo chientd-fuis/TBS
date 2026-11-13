@@ -26,7 +26,7 @@ function PermBoxes({ value = [] }: { value?: readonly string[] }) {
         <div key={g} className="flex flex-wrap gap-x-4 gap-y-1 py-0.5 text-sm">
           {ADMIN_PERMS.filter((p) => p.group === g).map((p) => (
             <label key={p.key} className="flex items-center gap-1.5">
-              <input type="checkbox" name="perms" value={p.key} defaultChecked={value.includes(p.key)} className="accent-[#3c9c54]" />
+              <input type="checkbox" name="perms" value={p.key} defaultChecked={value.includes(p.key)} className="accent-secondary" />
               {p.label}
             </label>
           ))}
@@ -44,7 +44,7 @@ function StoreBoxes({ stores, value = [] }: { stores: { id: string; name: string
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {stores.map((s) => (
           <label key={s.id} className="flex items-center gap-1.5">
-            <input type="checkbox" name="storeIds" value={s.id} defaultChecked={value.includes(s.id)} className="accent-[#3c9c54]" />
+            <input type="checkbox" name="storeIds" value={s.id} defaultChecked={value.includes(s.id)} className="accent-secondary" />
             {s.name}
           </label>
         ))}
@@ -128,7 +128,7 @@ export default async function AdminsPage() {
                 </div>
                 <PermBoxes value={a.perms ?? []} />
                 <StoreBoxes stores={stores} value={(a.storeIds ?? []).map(String)} />
-                <label className="flex items-start gap-2 rounded-xl bg-cream px-3 py-2 text-sm ring-1 ring-[#f1e6c8]">
+                <label className="flex items-start gap-2 rounded-xl bg-cream px-3 py-2 text-sm ring-1 ring-line">
                   <input type="checkbox" name="userApp" defaultChecked={a.userApp ?? settings?.adminUserApp === true} className="mt-0.5 h-4 w-4" />
                   <span>
                     <b>Cho vào app nhân viên</b>
@@ -141,7 +141,7 @@ export default async function AdminsPage() {
               </ActionForm>
 
               {devs.length > 0 && (
-                <details className="mt-3 border-t border-[#f1e6c8] pt-2 text-xs">
+                <details className="mt-3 border-t border-line pt-2 text-xs">
                   <summary className="cursor-pointer font-semibold text-accent">Thiết bị đã đăng nhập ({devs.length})</summary>
                   <ul className="mt-1 space-y-1">
                     {devs.map((d) => (
@@ -169,7 +169,7 @@ export default async function AdminsPage() {
                 </details>
               )}
 
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-[#f1e6c8] pt-2">
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-2">
                 {mine.length > 0 && (
                   <ActionForm action={setAdminStatus} submitLabel="Đăng xuất" variant="outline" successText="Đã đăng xuất">
                     <input type="hidden" name="id" value={id} />

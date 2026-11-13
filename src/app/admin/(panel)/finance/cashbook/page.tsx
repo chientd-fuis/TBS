@@ -120,17 +120,17 @@ export default async function CashbookPage() {
               ["Bổ sung vốn", fund.tm.add, 1],
             ]}
             extra={
-              seeCountDetail && <div className="mt-2 border-t border-dashed border-[#e9d9a8] pt-2 text-xs">
+              seeCountDetail && <div className="mt-2 border-t border-dashed border-line-strong pt-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-ink/70" title="Tiền thực tế đã qua các cửa hàng lấy về và đếm (tích ở Đếm tiền)">✓ Thực tế đã lấy</span>
-                  <b className="tabular-nums text-secondary-dark">{vnd(takenTm)}</b>
+                  <b className="tabular-nums text-good">{vnd(takenTm)}</b>
                 </div>
                 <div className="flex items-center justify-between gap-2 text-ink/60">
                   <span>Chưa lấy ({notTaken.length} ngày)</span>
                   <span className="tabular-nums">{vnd(notTaken.reduce((s, r) => s + r.tm, 0))}</span>
                 </div>
                 {owner && (
-                <Link href="/admin/finance/cashbook/count" className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 font-semibold text-accent ring-1 ring-[#e9d9a8] hover:bg-primary-light">
+                <Link href="/admin/finance/cashbook/count" className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-card px-2.5 py-1 font-semibold text-accent ring-1 ring-line-strong hover:bg-primary-light">
                   🧮 Đếm tiền →
                 </Link>
                 )}
@@ -202,7 +202,7 @@ export default async function CashbookPage() {
         {histPays.length > 0 && (
           <div className="mb-3">
             <p className="text-xs font-semibold text-ink/60">Thanh toán lương – tự ghi khi bảng lương “Đã trả” (trừ tài khoản)</p>
-            <ul className="divide-y divide-[#f1e6c8] text-sm">
+            <ul className="divide-y divide-line text-sm">
               {histPays.slice(0, 60).map((p, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-2 py-1.5">
                   <span className="w-20 tabular-nums">{p.date.slice(8)}/{p.date.slice(5, 7)}/{p.date.slice(2, 4)}</span>
@@ -217,7 +217,7 @@ export default async function CashbookPage() {
         {!histMoves.length ? (
           <p className="text-sm text-ink/50">Chưa có phiếu nào.</p>
         ) : (
-          <ul className="divide-y divide-[#f1e6c8] text-sm">
+          <ul className="divide-y divide-line text-sm">
             {histMoves.slice(0, 200).map((t) => {
               const k = cashKindOf(t);
               const out = t.kind === "TAKE";
@@ -293,7 +293,7 @@ function FundBox({
   sub?: number;
 }) {
   return (
-    <div className="rounded-2xl bg-cream p-3 ring-1 ring-[#f1e6c8]">
+    <div className="rounded-2xl bg-cream p-3 ring-1 ring-line">
       <p className="text-sm font-bold text-accent">{title}</p>
       <p
         className={cn(
@@ -317,7 +317,7 @@ function FundBox({
               <dd
                 className={cn(
                   "text-right tabular-nums",
-                  sign < 0 ? "text-danger" : "text-secondary-dark",
+                  sign < 0 ? "text-danger" : "text-good",
                 )}
               >
                 {sign < 0 ? "−" : "+"}

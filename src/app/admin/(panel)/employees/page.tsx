@@ -81,7 +81,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                           {u.adminStaff && <Badge tone="pink">Admin</Badge>}
                           {u.payType === "FULLTIME" && <Badge tone="blue">Full-time</Badge>}
                           {u.probation && (
-                            <span className="rounded-full bg-[#f3e1fa] px-2 py-0.5 text-xs font-semibold text-[#7e3a9c]">
+                            <span className="rounded-full bg-violet-bg px-2 py-0.5 text-xs font-semibold text-violet-fg">
                               Thử việc{u.probationStart ? ` đến ${viDate(probationEnd(u.probationStart))}` : ""}
                             </span>
                           )}

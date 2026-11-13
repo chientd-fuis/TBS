@@ -23,7 +23,7 @@ export default function SectionTabs({ counts, owner = false, perms = [], hide = 
               href={l.href}
               className={cn(
                 "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold ring-1",
-                l === cur ? "bg-secondary text-white ring-secondary" : "bg-white text-ink ring-[#e9d9a8] hover:bg-primary-light",
+                l === cur ? "bg-secondary text-white ring-secondary" : "bg-card text-ink ring-line-strong hover:bg-primary-light",
               )}
             >
               {l.label}

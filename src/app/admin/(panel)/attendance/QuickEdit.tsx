@@ -45,8 +45,8 @@ export default function QuickEdit({
       </button>
       {open && (
         // Hộp thoại cố định giữa màn hình (bảng có thanh cuộn nên không dùng popover tuyệt đối)
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => setOpen(false)}>
-        <div className="w-full max-w-xs rounded-2xl bg-white p-4 text-left text-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-shade/40 p-4" onClick={() => setOpen(false)}>
+        <div className="w-full max-w-xs rounded-2xl bg-card p-4 text-left text-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-bold text-accent">Sửa giờ chấm công</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="Đóng"><X size={16} /></button>
@@ -60,7 +60,7 @@ export default function QuickEdit({
             </div>
             <p className="text-[11px] text-ink/60">Giờ ra nhỏ hơn giờ vào = ca qua đêm (tự cộng sang ngày hôm sau).</p>
             <label className="flex items-center gap-2 rounded-lg bg-primary-light px-2 py-1.5 text-sm font-semibold">
-              <input type="checkbox" name="plusHalf" defaultChecked={extraHours > 0} className="h-4 w-4 accent-[#3c9c54]" />
+              <input type="checkbox" name="plusHalf" defaultChecked={extraHours > 0} className="h-4 w-4 accent-secondary" />
               +0,5h cho ca này
               <span className="text-[11px] font-normal text-ink/60">(cộng vào giờ tính công)</span>
             </label>

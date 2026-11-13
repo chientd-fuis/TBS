@@ -52,7 +52,7 @@ export default async function GoodsItemsPage() {
           {!active.length ? (
             <Empty>Chưa có nguyên liệu.</Empty>
           ) : (
-            <ul className="divide-y divide-[#f1e6c8]">
+            <ul className="divide-y divide-line">
               {active.map((it) => {
                 const cur = priceAt(it.prices, today);
                 const next = it.prices.filter((p) => p.from > today).sort((a, b) => a.from.localeCompare(b.from))[0];
@@ -63,7 +63,7 @@ export default async function GoodsItemsPage() {
                         <b>{it.name}</b>
                         {it.unit && <span className="text-xs text-ink/60">/{it.unit}</span>}
                         {it.aliases.length > 0 && <span className="truncate text-xs text-ink/50">({it.aliases.join(", ")})</span>}
-                        <span className="ml-auto tabular-nums">{cur != null ? <b className="text-secondary-dark">{vnd(cur)}</b> : <span className="text-xs text-warn">chưa có giá</span>}</span>
+                        <span className="ml-auto tabular-nums">{cur != null ? <b className="text-good">{vnd(cur)}</b> : <span className="text-xs text-warn">chưa có giá</span>}</span>
                         {next && <span className="w-full text-right text-xs text-accent">từ {viDate(next.from).slice(0, 5)}: {vnd(next.price)}</span>}
                       </summary>
                       <div className="mt-2 grid gap-3 rounded-xl bg-cream p-3 md:grid-cols-2">
@@ -117,7 +117,7 @@ export default async function GoodsItemsPage() {
             </ul>
           )}
           {removed.length > 0 && (
-            <details className="mt-4 border-t border-[#f1e6c8] pt-3">
+            <details className="mt-4 border-t border-line pt-3">
               <summary className="cursor-pointer text-sm text-ink/60">Đã xoá ({removed.length})</summary>
               <ul className="mt-2 space-y-1">
                 {removed.map((it) => (

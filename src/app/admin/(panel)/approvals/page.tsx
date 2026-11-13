@@ -52,7 +52,7 @@ export default async function ApprovalsPage() {
                 <ActionForm action={approveUser} submitLabel="✅ Duyệt" successText="Đã duyệt" variant="secondary" className="flex flex-wrap items-center gap-2" buttonClassName="w-28 shrink-0 whitespace-nowrap">
                   <input type="hidden" name="userId" value={String(u._id)} />
                   <Input name="hourlyWage" inputMode="numeric" placeholder={`Lương giờ (thử việc: ${vnd(PROBATION_WAGE)})`} className="min-w-0 flex-1" />
-                  <label className="flex w-full items-start gap-2 rounded-lg bg-[#f6e8fb] px-2 py-1.5 text-xs text-[#6b2d86] ring-1 ring-[#e3c6f0]">
+                  <label className="flex w-full items-start gap-2 rounded-lg bg-violet-bg px-2 py-1.5 text-xs text-violet-fg ring-1 ring-violet-line">
                     <input type="checkbox" name="probation" defaultChecked className="mt-0.5 h-4 w-4 accent-[#a855c7]" />
                     <span>
                       <b>Thử việc</b> – lương mặc định {vnd(PROBATION_WAGE)}đ/giờ (nếu để trống ô lương), không dùng Chốt ca / Nhận hàng / Tồn kho. Xong{" "}

@@ -47,7 +47,7 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
           ) : (
             <Alert tone="yellow">Gmail này chưa có quyền quản lý. Nhờ Admin Tổng thêm Gmail của bạn vào danh sách admin, sau đó tải lại trang này.</Alert>
           )}
-          <div className="mt-3 border-t border-[#f1e6c8] pt-3 text-center">
+          <div className="mt-3 border-t border-line pt-3 text-center">
             <SignOutButton callbackUrl="/admin/login" />
             <p className="mt-1 text-xs text-ink/50">Đăng xuất để dùng Gmail khác</p>
           </div>

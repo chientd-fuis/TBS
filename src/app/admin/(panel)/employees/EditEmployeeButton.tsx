@@ -55,8 +55,8 @@ export default function EditEmployeeButton({
         <Pencil size={13} /> Sửa
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-4 text-left text-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-shade/40 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-card p-4 text-left text-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <span className="font-bold text-accent">Sửa nhân viên</span>
               <button type="button" onClick={() => setOpen(false)} aria-label="Đóng">

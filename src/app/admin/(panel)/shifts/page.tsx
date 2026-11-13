@@ -36,7 +36,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
       <PageTitle sub="Ca làm việc chỉ dùng để cảnh báo đi muộn / về sớm, không dùng tính lương">Ca làm việc</PageTitle>
       <div className="flex flex-wrap gap-2">
         {stores.map((s) => (
-          <Link key={String(s._id)} href={`/admin/shifts?store=${s._id}&week=${week}`} className={`rounded-xl px-3 py-1.5 text-sm ${String(s._id) === String(store._id) ? "bg-primary font-bold" : "bg-white ring-1 ring-[#f1e6c8]"}`}>
+          <Link key={String(s._id)} href={`/admin/shifts?store=${s._id}&week=${week}`} className={`rounded-xl px-3 py-1.5 text-sm ${String(s._id) === String(store._id) ? "bg-primary text-on-primary font-bold" : "bg-card ring-1 ring-line"}`}>
             {s.name}
           </Link>
         ))}
@@ -93,7 +93,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
               <p className="mb-1 text-xs font-semibold text-accent">Thứ trong tuần (bỏ trống = tất cả)</p>
               <div className="flex flex-wrap gap-3 text-sm">
                 {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-                  <label key={d} className="flex items-center gap-1"><input type="checkbox" name="weekdays" value={d} className="accent-[#3c9c54]" /> {WD[d]}</label>
+                  <label key={d} className="flex items-center gap-1"><input type="checkbox" name="weekdays" value={d} className="accent-secondary" /> {WD[d]}</label>
                 ))}
               </div>
             </div>
@@ -101,7 +101,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Promi
               <p className="mb-1 text-xs font-semibold text-accent">Nhân viên</p>
               <div className="grid grid-cols-2 gap-1 text-sm sm:grid-cols-3">
                 {staff.map((u) => (
-                  <label key={String(u._id)} className="flex items-center gap-1"><input type="checkbox" name="userIds" value={String(u._id)} className="accent-[#3c9c54]" /> {u.name}</label>
+                  <label key={String(u._id)} className="flex items-center gap-1"><input type="checkbox" name="userIds" value={String(u._id)} className="accent-secondary" /> {u.name}</label>
                 ))}
               </div>
             </div>

@@ -19,7 +19,18 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const store = await Store.findById(user.storeId).lean();
   const tz = store?.timezone || "Asia/Ho_Chi_Minh";
   const { month: m } = await searchParams;
-  const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : prevMonth(localMonth(new Date(), tz));
+  const lastMonth = prevMonth(localMonth(new Date(), tz));
+  // mở trang không chọn tháng → bảng lương MỚI NHẤT đã công bố cho mình (cả bảng công bố / đã trả, hoặc admin công bố riêng dòng của mình);
+  // chưa có bảng nào công bố → tháng trước (hiện "chưa công bố")
+  let latest: string | null = null;
+  if (!/^\d{4}-\d{2}$/.test(m || "")) {
+    const recent = await PayrollItem.find({ userId: user._id }).sort({ month: -1 }).limit(12).select("month payrollId publishedAt").lean();
+    const status = new Map(
+      (await Payroll.find({ _id: { $in: recent.map((r) => r.payrollId) } }).select("status").lean()).map((p) => [String(p._id), p.status]),
+    );
+    latest = recent.find((r) => !!r.publishedAt || ["PUBLISHED", "PAID"].includes(status.get(String(r.payrollId)) ?? ""))?.month ?? null;
+  }
+  const month = /^\d{4}-\d{2}$/.test(m || "") ? m! : (latest ?? lastMonth);
   let item = await PayrollItem.findOne({ userId: user._id, month }).lean();
   let payroll = item ? await Payroll.findById(item.payrollId).lean() : null;
   if (payroll && payroll.status !== "PAID" && (payroll.status === "PUBLISHED" || item?.publishedAt)) {
@@ -45,6 +56,11 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         <h1 className="text-lg font-bold text-accent">Bảng lương</h1>
         <MonthPicker month={month} base="/payroll" />
       </div>
+      {latest && latest < lastMonth && (
+        <p className="rounded-xl bg-primary-light px-3 py-2 text-xs">
+          Bảng lương tháng {viMonth(lastMonth)} chưa công bố – đang xem bảng mới nhất đã công bố (tháng {viMonth(latest)}).
+        </p>
+      )}
       {!visible || !item ? (
         <Alert tone="yellow">
           Bảng lương tháng {viMonth(month)} chưa được công bố. Bảng lương được công bố vào ngày 5 tháng sau (hoặc sớm hơn nếu admin công bố).

@@ -50,12 +50,12 @@ export default function AdminNav({
             }}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm whitespace-nowrap",
-              active ? "bg-primary font-bold text-ink" : "text-white/90 hover:bg-white/10",
+              active ? "bg-primary text-on-primary font-bold" : "text-white/90 hover:bg-white/10",
             )}
           >
             <Icon size={17} />
             <span className="flex-1">{g.label}</span>
-            {loading ? <Spinner className="text-ink" /> : n > 0 && <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">{n}</span>}
+            {loading ? <Spinner className="text-on-primary" /> : n > 0 && <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">{n}</span>}
           </Link>
         );
       })}

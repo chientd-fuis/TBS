@@ -114,7 +114,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
               {byCat.map(([k, v]) => (
                 <li key={k} className="grid grid-cols-[8rem_1fr_6.5rem] items-center gap-2 text-xs">
                   <span className="truncate">{CATEGORY_LABEL[k] ?? k}</span>
-                  <span className="h-2 overflow-hidden rounded-full bg-gray-100"><span className="block h-full rounded-full bg-secondary" style={{ width: `${(v / total) * 100}%` }} /></span>
+                  <span className="h-2 overflow-hidden rounded-full bg-mute-bg"><span className="block h-full rounded-full bg-secondary" style={{ width: `${(v / total) * 100}%` }} /></span>
                   <span className="text-right tabular-nums">{vnd(v)}</span>
                 </li>
               ))}
@@ -126,7 +126,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           {!list.length ? (
             <Empty>Chưa có chi phí nào trong tháng này.</Empty>
           ) : (
-            <ul className="divide-y divide-[#f1e6c8]">
+            <ul className="divide-y divide-line">
               {list.map((e) => {
                 const tg = TG[(e.telegram?.status ?? "PENDING") as keyof typeof TG];
                 return (

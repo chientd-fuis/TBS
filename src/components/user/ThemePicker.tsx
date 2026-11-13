@@ -4,20 +4,24 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/format";
 import { THEME_ROOT_ID, THEMES, themeClass, themeHeaderColor, type ThemeId } from "@/lib/themes";
-import { setMyTheme } from "@/app/(user)/actions";
+type Save = (id: string) => Promise<{ ok?: boolean; error?: string }>;
 
-function applyTheme(id: ThemeId) {
+function applyTheme(id: ThemeId, admin: boolean) {
   const el = document.getElementById(THEME_ROOT_ID);
   if (el) {
     for (const c of [...el.classList]) if (c.startsWith("theme-")) el.classList.remove(c);
     const cls = themeClass(id);
     if (cls) el.classList.add(cls);
   }
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", themeHeaderColor(id)));
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", admin ? THEMES.find((t) => t.id === id)!.nav : themeHeaderColor(id)));
 }
 
-/** Tài khoản → Màu giao diện: chạm 1 ô là đổi ngay + lưu theo tài khoản. Thử việc: khoá (luôn màu tím). */
-export default function ThemePicker({ current, locked }: { current: ThemeId; locked: boolean }) {
+/**
+ * Chọn màu giao diện: chạm 1 ô là đổi ngay + lưu theo tài khoản.
+ *  - App nhân viên (Tài khoản → Màu giao diện): save = setMyTheme; thử việc: khoá (luôn màu tím).
+ *  - Trang admin (Giao diện): save = setAdminTheme, admin = true (xem trước thanh menu admin).
+ */
+export default function ThemePicker({ current, locked = false, save, admin = false }: { current: ThemeId; locked?: boolean; save: Save; admin?: boolean }) {
   const router = useRouter();
   const [sel, setSel] = useState<ThemeId>(current);
   const [saving, setSaving] = useState<ThemeId | null>(null);
@@ -29,15 +33,15 @@ export default function ThemePicker({ current, locked }: { current: ThemeId; loc
     const prev = sel;
     setSel(id);
     setError("");
-    applyTheme(id);
+    applyTheme(id, admin);
     setSaving(id);
     startTransition(async () => {
-      const r: { ok?: boolean; error?: string } = await setMyTheme(id).catch(() => ({ error: "Mất kết nối mạng – chưa lưu được màu, thử lại." }));
+      const r: { ok?: boolean; error?: string } = await save(id).catch(() => ({ error: "Mất kết nối mạng – chưa lưu được màu, thử lại." }));
       setSaving(null);
       if (r?.ok) router.refresh();
       else {
         setSel(prev);
-        applyTheme(prev);
+        applyTheme(prev, admin);
         setError(r?.error || "Chưa lưu được màu – thử lại");
       }
     });
@@ -45,7 +49,7 @@ export default function ThemePicker({ current, locked }: { current: ThemeId; loc
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-ink/70">Chạm để đổi – áp dụng ngay, lưu theo tài khoản (đổi điện thoại vẫn giữ).</p>
+      <p className="text-xs text-ink/70">Chạm để đổi – áp dụng ngay, lưu theo tài khoản (đổi máy vẫn giữ). Mỗi người chọn riêng, không ảnh hưởng người khác.</p>
       {locked && (
         <p className="rounded-xl bg-violet-bg px-3 py-2.5 text-[13px] leading-relaxed text-violet-fg">
           Bạn đang <b>thử việc</b> – app dùng màu tím thử việc. Lên nhân viên chính thức là chọn được màu.
@@ -68,7 +72,7 @@ export default function ThemePicker({ current, locked }: { current: ThemeId; loc
             >
               {/* xem trước: thanh đầu trang + 2 nút (chính / phụ) trên nền theme */}
               <span className="flex h-[62px] flex-col overflow-hidden rounded-[10px] ring-1 ring-black/10" style={{ background: t.cream }}>
-                <span className="h-4" style={{ background: t.header }} />
+                <span className="h-4" style={{ background: admin ? t.nav : t.header }} />
                 <span className="flex flex-1 items-center justify-center gap-1.5">
                   <span className="h-3.5 w-8 rounded-[5px]" style={{ background: t.primary }} />
                   <span className="h-3.5 w-6 rounded-[5px]" style={{ background: t.secondary }} />

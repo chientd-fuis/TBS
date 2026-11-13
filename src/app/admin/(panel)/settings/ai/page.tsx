@@ -55,7 +55,7 @@ export default async function AiSettingsPage() {
         <Card>
           <p className="text-xs text-ink/60">Token dùng tháng này</p>
           <p className="text-2xl font-bold">{fmt(used)}</p>
-          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#f3ecdc]">
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted">
             <div className={`h-full rounded-full ${pct >= cfg.warnPct ? "bg-danger" : "bg-secondary"}`} style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-1 text-xs text-ink/60">{cfg.monthlyTokens ? `${pct}% ngân sách ${fmt(cfg.monthlyTokens)} token/tháng` : "Không giới hạn ngân sách"}</p>
@@ -67,7 +67,7 @@ export default async function AiSettingsPage() {
         </Card>
         <Card>
           <p className="text-xs text-ink/60">Trạng thái</p>
-          <p className="text-2xl font-bold">{cfg.enabled ? <span className="text-secondary-dark">Đang bật</span> : <span className="text-danger">Đang tắt</span>}</p>
+          <p className="text-2xl font-bold">{cfg.enabled ? <span className="text-good">Đang bật</span> : <span className="text-danger">Đang tắt</span>}</p>
           <p className="mt-1 text-xs text-ink/60">Hết ngân sách / tắt AI: vẫn giữ “Đọc ảnh tờ chốt ca” để nhân viên chốt ca được.</p>
         </Card>
       </div>
@@ -91,7 +91,7 @@ export default async function AiSettingsPage() {
                     <td>{r.key}</td>
                     <td className="text-xs">{r.model}</td>
                     <td className="text-right tabular-nums">{r.used}{lim ? ` / ${lim}` : ""}{r.errors ? <span className="block text-[11px] text-warn">{r.errors} lần lỗi</span> : null}</td>
-                    <td className="text-right font-semibold tabular-nums">{r.blockedToday ? <span className="text-danger">hết</span> : left == null ? <span className="font-normal text-ink/40">?</span> : <span className={left <= Math.ceil(lim * 0.1) ? "text-danger" : "text-secondary-dark"}>{left}</span>}</td>
+                    <td className="text-right font-semibold tabular-nums">{r.blockedToday ? <span className="text-danger">hết</span> : left == null ? <span className="font-normal text-ink/40">?</span> : <span className={left <= Math.ceil(lim * 0.1) ? "text-danger" : "text-good"}>{left}</span>}</td>
                     <td className="text-right tabular-nums">{r.lastMin}</td>
                     <td className="text-right tabular-nums">{fmt(r.tokens)}</td>
                     <td className="text-xs">{r.blockedToday && <Badge tone="red">Google báo hết lượt ngày</Badge>}</td>
@@ -119,7 +119,7 @@ export default async function AiSettingsPage() {
         <ActionForm action={saveAiSettings} submitLabel="Lưu cài đặt AI" successText="Đã lưu" className="space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" name="enabled" defaultChecked={cfg.enabled} className="h-4 w-4 accent-[#3c9c54]" /> Bật AI toàn hệ thống
+              <input type="checkbox" name="enabled" defaultChecked={cfg.enabled} className="h-4 w-4 accent-secondary" /> Bật AI toàn hệ thống
             </label>
             <Field label="Ngân sách token / tháng (0 = không giới hạn)"><Input name="monthlyTokens" defaultValue={cfg.monthlyTokens} inputMode="numeric" className="!w-40 text-right" /></Field>
             <Field label="Tô đỏ khi dùng tới (%)"><Input name="warnPct" defaultValue={cfg.warnPct} inputMode="numeric" className="!w-24 text-right" /></Field>
@@ -139,13 +139,13 @@ export default async function AiSettingsPage() {
                         <b>{f.label}</b>
                         <div className="text-xs text-ink/60">{f.hint}</div>
                       </td>
-                      <td className="text-center"><input type="checkbox" name={`on_${f.key}`} defaultChecked={c.enabled} className="h-4 w-4 accent-[#3c9c54]" aria-label={`Bật ${f.label}`} /></td>
+                      <td className="text-center"><input type="checkbox" name={`on_${f.key}`} defaultChecked={c.enabled} className="h-4 w-4 accent-secondary" aria-label={`Bật ${f.label}`} /></td>
                       <td className="whitespace-nowrap text-xs">
                         {f.roles.length ? (
                           <div className="flex flex-col gap-1">
                             {AI_ROLES.filter((r) => f.roles.includes(r.key)).map((r) => (
                               <label key={r.key} className="flex items-center gap-1.5">
-                                <input type="checkbox" name={`role_${f.key}_${r.key}`} defaultChecked={c.roles[r.key]} className="h-4 w-4 accent-[#3c9c54]" /> {r.label}
+                                <input type="checkbox" name={`role_${f.key}_${r.key}`} defaultChecked={c.roles[r.key]} className="h-4 w-4 accent-secondary" /> {r.label}
                               </label>
                             ))}
                           </div>
@@ -176,7 +176,7 @@ export default async function AiSettingsPage() {
               <Field label="Chi phí két ≥ (× TB 4 tuần)"><Input name="an_ketFactor" defaultValue={cfg.anomaly.ketFactor} className="!w-24 text-right" /></Field>
               <Field label="Chốt ca lệch giờ ra ca ≥ (phút)"><Input name="an_lateCloseMin" defaultValue={cfg.anomaly.lateCloseMin} inputMode="numeric" className="!w-24 text-right" /></Field>
               <label className="flex items-center gap-2 pb-2 text-sm">
-                <input type="checkbox" name="an_telegram" defaultChecked={cfg.anomaly.telegram} className="h-4 w-4 accent-[#3c9c54]" /> Gửi Telegram nhóm quản lý doanh thu
+                <input type="checkbox" name="an_telegram" defaultChecked={cfg.anomaly.telegram} className="h-4 w-4 accent-secondary" /> Gửi Telegram nhóm quản lý doanh thu
               </label>
             </div>
           </div>
@@ -194,7 +194,7 @@ export default async function AiSettingsPage() {
                 ] as const
               ).map(([name, on, label, hint]) => (
                 <label key={name} className="flex items-start gap-2">
-                  <input type="checkbox" name={name} defaultChecked={on} className="mt-0.5 h-4 w-4 accent-[#3c9c54]" />
+                  <input type="checkbox" name={name} defaultChecked={on} className="mt-0.5 h-4 w-4 accent-secondary" />
                   <span>
                     <b>{label}</b> <span className="text-xs text-ink/60">– {hint}</span>
                   </span>

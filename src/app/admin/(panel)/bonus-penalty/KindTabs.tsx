@@ -10,7 +10,7 @@ export default function KindTabs({ defaultValue = "PENALTY", size = "md" }: { de
   return (
     <div>
       <input type="hidden" name="kind" value={kind} />
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Loại">
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-mute-bg p-1" role="tablist" aria-label="Loại">
         <button
           type="button"
           role="tab"
@@ -19,7 +19,7 @@ export default function KindTabs({ defaultValue = "PENALTY", size = "md" }: { de
           className={cn(
             "inline-flex items-center justify-center gap-1.5 rounded-lg font-bold transition",
             btn,
-            kind === "PENALTY" ? "bg-danger text-white shadow" : "text-danger hover:bg-[#fde2e2]",
+            kind === "PENALTY" ? "bg-danger text-white shadow" : "text-danger hover:bg-bad-bg",
           )}
         >
           <TriangleAlert size={size === "sm" ? 14 : 16} /> Phạt
@@ -32,7 +32,7 @@ export default function KindTabs({ defaultValue = "PENALTY", size = "md" }: { de
           className={cn(
             "inline-flex items-center justify-center gap-1.5 rounded-lg font-bold transition",
             btn,
-            kind === "BONUS" ? "bg-bonus text-white shadow" : "text-bonus hover:bg-[#e3f3e7]",
+            kind === "BONUS" ? "bg-bonus text-white shadow" : "text-bonus hover:bg-ok-bg",
           )}
         >
           <Gift size={size === "sm" ? 14 : 16} /> Thưởng

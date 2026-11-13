@@ -17,7 +17,7 @@ const TABS: { href: string; label: string; owner?: boolean; perm?: string }[] = 
 export default function FinanceTabs({ isOwner, perms = [] }: { isOwner: boolean; perms?: string[] }) {
   const path = usePathname();
   return (
-    <nav className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]">
+    <nav className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-card p-1 ring-1 ring-line">
       {TABS.filter((t) => isOwner || (!t.owner && (!t.perm || perms.includes(t.perm)))).map((t) => {
         const active = t.href === "/admin/finance" ? path === t.href : path.startsWith(t.href);
         return (

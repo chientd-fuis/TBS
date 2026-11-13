@@ -55,18 +55,18 @@ export default function ForecastPanel({ storeId, weekStart }: { storeId: string;
       }
     >
       <p className="mb-2 text-xs text-ink/60">Dựa trên doanh thu chốt ca ~{data.weeks} tuần gần nhất (cùng thứ trong tuần, ngày lễ nhân hệ số) + dự báo thời tiết. ↑ / ↓ = so với định mức hiện tại.</p>
-      {data.impact && <p className="mb-2 rounded-xl bg-[#fff8ef] px-2.5 py-1.5 text-xs">🌧️ Ảnh hưởng thời tiết lên doanh thu quán (học từ thời tiết thực tế + chốt ca): <b>{data.impact}</b></p>}
+      {data.impact && <p className="mb-2 rounded-xl bg-warn-soft px-2.5 py-1.5 text-xs">🌧️ Ảnh hưởng thời tiết lên doanh thu quán (học từ thời tiết thực tế + chốt ca): <b>{data.impact}</b></p>}
       <div className="overflow-x-auto">
         <table className="tbs text-center text-sm">
           <thead>
             <tr>
               <th className="text-left">Ca</th>
               {data.days.map((d) => (
-                <th key={d} className={data.holidayNames[d] ? "bg-[#fde8e8]" : data.weather?.[d]?.warn ? "bg-[#fde4cf]" : ""} title={data.weather?.[d]?.warn || undefined}>
+                <th key={d} className={data.holidayNames[d] ? "bg-bad-soft" : data.weather?.[d]?.warn ? "bg-late-bg" : ""} title={data.weather?.[d]?.warn || undefined}>
                   {weekdayVi(d).replace("Thứ ", "T").replace("Chủ Nhật", "CN")} {d.slice(8)}/{d.slice(5, 7)}
                   {data.holidayNames[d] && <div className="text-[10px] font-normal text-danger">{data.holidayNames[d]}</div>}
                   {data.weather?.[d] && (
-                    <div className={`text-[10px] font-normal ${data.weather[d].warn ? "font-semibold text-[#b45309]" : "text-ink/60"}`}>
+                    <div className={`text-[10px] font-normal ${data.weather[d].warn ? "font-semibold text-weather-fg" : "text-ink/60"}`}>
                       {data.weather[d].icon} {data.weather[d].tMin}–{data.weather[d].tMax}° ☔{data.weather[d].rainPct}%
                     </div>
                   )}
@@ -82,9 +82,9 @@ export default function ForecastPanel({ storeId, weekStart }: { storeId: string;
                   const c = cell(t.id, d)!;
                   const delta = c.suggest - c.current;
                   return (
-                    <td key={d} className={data.holidayNames[d] ? "bg-[#fff5f5]" : ""}>
+                    <td key={d} className={data.holidayNames[d] ? "bg-bad-soft" : ""}>
                       <b className="text-lg">{c.suggest}</b>{" "}
-                      {delta !== 0 && <span className={`text-xs font-bold ${delta > 0 ? "text-secondary-dark" : "text-warn"}`}>{delta > 0 ? `↑${delta}` : `↓${-delta}`}</span>}
+                      {delta !== 0 && <span className={`text-xs font-bold ${delta > 0 ? "text-good" : "text-warn"}`}>{delta > 0 ? `↑${delta}` : `↓${-delta}`}</span>}
                       {c.rev != null && c.rev > 0 && <div className="text-[11px] text-ink/60">{tr(c.rev)}</div>}
                       {c.samples === 0 && <div className="text-[10px] text-ink/40">chưa có dữ liệu</div>}
                     </td>
