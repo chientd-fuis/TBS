@@ -59,11 +59,12 @@ export default function CheckInWidget({
   const [step, setStep] = useState<"idle" | "locating" | "camera" | "sending">("idle");
   const [pos, setPos] = useState<GeolocationPosition | null>(null);
   const [error, setError] = useState("");
-  const [toasts, setToasts] = useState<{ id: number; tone: "ok" | "warn"; text: string }[]>([]);
-  const toast = useCallback((tone: "ok" | "warn", text: string) => {
+  // tone "warn" = thành công nhưng có lưu ý (ngoài ca, đi muộn…) – nền vàng, vẫn dấu tích, lưu ý ghi dòng dưới
+  const [toasts, setToasts] = useState<{ id: number; tone: "ok" | "warn"; text: string; notes?: string[] }[]>([]);
+  const toast = useCallback((tone: "ok" | "warn", text: string, notes: string[] = []) => {
     const id = Date.now() + Math.random();
-    setToasts((l) => [...l, { id, tone, text }]);
-    setTimeout(() => setToasts((l) => l.filter((x) => x.id !== id)), tone === "ok" ? 4000 : 7000);
+    setToasts((l) => [...l, { id, tone, text, notes }]);
+    setTimeout(() => setToasts((l) => l.filter((x) => x.id !== id)), tone === "ok" ? 4000 : 8000);
   }, []);
   // sau khi chấm xong, cập nhật ngay trạng thái (không chờ trang tải lại)
   const [localOpen, setLocalOpen] = useState<string | null | undefined>(undefined);
@@ -122,17 +123,21 @@ export default function CheckInWidget({
       }
       const res = j as Result;
       const where = res.storeName ? ` · ${res.storeName}${res.support ? " (hỗ trợ)" : ""}` : "";
+      // 1 thông báo duy nhất: "thành công" + lưu ý (nếu có) ngay bên dưới – không hiện thêm ô cảnh báo riêng như báo lỗi
+      const notes = [
+        res.action === "CHECK_IN" && res.outOfShift ? "Bạn không có ca được xếp vào giờ này – giờ làm sẽ được gửi quản lý xác nhận. Nhớ CHECK-OUT khi về." : "",
+        res.action === "CHECK_IN" && res.lateMinutes ? `Đi muộn ${res.lateMinutes} phút.` : "",
+        res.cappedAt ? `Quá giờ chốt ca tối – chỉ tính công tới ${res.cappedAt}.` : "",
+        res.earlyMinutes ? `Về sớm ${res.earlyMinutes} phút.` : "",
+        res.overtimeNote ?? "",
+      ].filter(Boolean);
       toast(
-        "ok",
+        notes.length ? "warn" : "ok",
         res.action === "CHECK_IN"
           ? `Check-in thành công lúc ${res.time}${where}${res.shiftLabel ? ` · Ca ${res.shiftLabel}` : ""}`
           : `Check-out thành công lúc ${res.pressedAt ?? res.time}${where} · ${res.roundedHours ?? 0}h tính công`,
+        notes,
       );
-      if (res.cappedAt) toast("warn", `Quá giờ chốt ca tối – chỉ tính công tới ${res.cappedAt}.`);
-      if (res.action === "CHECK_IN" && res.outOfShift) toast("warn", "Bạn đang chấm công ngoài ca (không có ca được xếp) – giờ làm vẫn được ghi nhận, nhớ CHECK-OUT khi về.");
-      if (res.action === "CHECK_IN" && res.lateMinutes) toast("warn", `Đi muộn ${res.lateMinutes} phút`);
-      if (res.earlyMinutes) toast("warn", `Về sớm ${res.earlyMinutes} phút`);
-      if (res.overtimeNote) toast("warn", res.overtimeNote);
       setLocalOpen(res.action === "CHECK_IN" ? res.time : null);
       setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();
@@ -161,11 +166,19 @@ export default function CheckInWidget({
               onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}
               className={cn(
                 "pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-2xl px-4 py-3 text-left text-sm shadow-lg ring-1 animate-[tbs-toast_.25s_ease-out]",
-                t.tone === "ok" ? "bg-secondary text-white ring-secondary-dark" : "bg-[#fff4e5] text-warn ring-warn/40",
+                t.tone === "ok" ? "bg-secondary text-white ring-secondary-dark" : "bg-primary-light text-ink ring-primary",
               )}
             >
-              {t.tone === "ok" ? <CheckCircle2 size={18} className="mt-0.5 shrink-0" /> : <TriangleAlert size={18} className="mt-0.5 shrink-0" />}
-              <span>{t.text}</span>
+              <CheckCircle2 size={18} className={cn("mt-0.5 shrink-0", t.tone === "warn" && "text-secondary-dark")} />
+              <span className="min-w-0">
+                <span className={cn("block", t.tone === "warn" && "font-semibold")}>{t.text}</span>
+                {t.notes?.map((n) => (
+                  <span key={n} className="mt-1 flex items-start gap-1 text-[13px] text-[#9a3412]">
+                    <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden />
+                    {n}
+                  </span>
+                ))}
+              </span>
             </button>
           ))}
         </div>

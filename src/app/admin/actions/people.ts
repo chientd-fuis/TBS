@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
-import { AdminAccount, Device, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
+import { AdminAccount, Device, ProbationRequest, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
 import { assertAdmin, assertOwner } from "@/lib/guards";
 import { isOwnerEmail } from "@/lib/auth";
 import { isPayType, payTermsAt, type PayType } from "@/lib/salary";
@@ -20,14 +20,14 @@ export async function approveUser(_: FormState, fd: FormData): Promise<FormState
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user || user.status !== "PENDING") return { error: "Đăng ký không còn ở trạng thái chờ duyệt" };
-    // thử việc: lương trống → mặc định 20.000đ/giờ; hết 1 tháng tự xét chuyển chính thức (lib/probation.ts)
+    // thử việc: lương trống → mặc định 20.000đ/giờ; 3 ca đầu = ca thử việc → admin Nhận / Không nhận; hết tháng → hỏi lên 22k (lib/probation.ts)
     const probation = fd.get("probation") === "on";
     const wage = num(fd.get("hourlyWage")) || (probation ? PROBATION_WAGE : 0);
     const today = localDate(new Date());
     user.status = "ACTIVE";
     user.joinedAt = user.joinedAt ?? new Date();
     if (wage > 0) user.hourlyWage = wage;
-    if (probation) user.set({ probation: true, probationStart: today, probationReview: false });
+    if (probation) user.set({ probation: true, probationStart: today, probationReview: false, trialStage: "ON" });
     await user.save();
     if (wage > 0) await WageHistory.create({ userId: user._id, hourlyWage: wage, effectiveFrom: today, createdBy: admin.name });
     // duyệt luôn thiết bị đầu tiên
@@ -61,7 +61,8 @@ export async function probationAction(_: FormState, fd: FormData): Promise<FormS
     if (op === "start") {
       const w = wage > 0 ? wage : PROBATION_WAGE;
       const raise = w !== user.hourlyWage;
-      user.set({ probation: true, probationStart: today, probationReview: false, hourlyWage: w });
+      // 3 ca đầu từ hôm nay = ca thử việc
+      user.set({ probation: true, probationStart: today, probationReview: false, hourlyWage: w, trialStage: "ON" });
       await user.save();
       if (raise) await WageHistory.create({ userId: user._id, hourlyWage: w, effectiveFrom: today, createdBy: by });
     } else if (op === "official") {
@@ -73,8 +74,15 @@ export async function probationAction(_: FormState, fd: FormData): Promise<FormS
       await user.save();
     } else if (op === "stop") {
       user.set({ probation: false, probationReview: false, probationEndedAt: new Date() });
+      if (user.trialStage === "ON" || user.trialStage === "PENDING") user.set({ trialStage: "DONE" });
       await user.save();
     } else return { error: "Thao tác không hợp lệ" };
+    // chuyển chính thức / bỏ thử việc ở trang nhân viên → đóng yêu cầu thử việc đang chờ
+    if (op === "official" || op === "stop")
+      await ProbationRequest.updateMany(
+        { userId: user._id, status: "PENDING" },
+        { $set: { status: "APPROVED", decidedBy: by, decidedAt: new Date(), reply: op === "official" ? "Chuyển chính thức ở trang nhân viên" : "Bỏ thử việc ở trang nhân viên" } },
+      );
     await audit(adminActor(admin), `user.probation.${op}`, { type: "User", id: String(user._id) }, null, { wage: wage || undefined });
     revalidatePath("/admin/employees", "layout");
     revalidatePath("/", "layout");

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
-import { Attendance, AttendanceArchive, Device, LoginLog, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
+import { Attendance, AttendanceArchive, Device, LoginLog, ProbationRequest, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
 import { seniorityStart, seniorityText } from "@/lib/seniority";
 import { decrypt } from "@/lib/crypto";
 import { vnd } from "@/lib/format";
@@ -11,7 +11,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { DeviceActions } from "../../devices/DeviceActions";
 import { probationAction, setPayTerms, setStaffPerms, setWage, updateEmployee } from "../../../actions/people";
-import { OFFICIAL_WAGE, PROBATION_MIN_SHIFTS, PROBATION_WAGE, probationEnd, probationShifts } from "@/lib/probation";
+import { OFFICIAL_WAGE, PROBATION_WAGE, probationConfig, probationEnd, probationShifts, TRIAL_SHIFTS } from "@/lib/probation";
 import { STAFF_PERMS } from "@/lib/permissions";
 import TransferAccount from "./TransferAccount";
 
@@ -42,6 +42,14 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
   const workDays = (archived[0]?.days ?? 0) + liveDays.length;
   const fulltime = u.payType === "FULLTIME";
   const probShifts = u.probation && u.probationStart ? await probationShifts(u._id, u.probationStart) : 0;
+  // 3 ca thử việc / yêu cầu hết tháng thử việc đang chờ
+  const [trialDone, pendingMonth, probCfg] = u.probation
+    ? await Promise.all([
+        u.trialStage === "ON" && u.probationStart ? Attendance.countDocuments({ userId: u._id, status: "COMPLETED", workDate: { $gte: u.probationStart } }) : 0,
+        ProbationRequest.exists({ userId: u._id, kind: "MONTH", status: "PENDING" }),
+        probationConfig(),
+      ])
+    : [0, null, { monthOn: true, trialHalf: true }];
   const rank = (st: string) => (st === "NEW" ? 0 : st === "PENDING" ? 1 : st === "REJECTED" ? 2 : 3);
   const candidates = others
     .sort((a, b) => rank(a.status) - rank(b.status))
@@ -101,22 +109,38 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
           {u.probation && u.probationStart ? (
             <div className="space-y-3 text-sm">
               <p>
-                Bắt đầu <b>{viDate(u.probationStart)}</b> · hết thử việc <b>{viDate(probationEnd(u.probationStart))}</b> · đã làm{" "}
-                <b className={probShifts >= PROBATION_MIN_SHIFTS ? "text-secondary-dark" : "text-warn"}>
-                  {probShifts}/{PROBATION_MIN_SHIFTS} ca
-                </b>
-                . Lương hiện tại {vnd(u.hourlyWage)}/giờ.
+                Bắt đầu <b>{viDate(u.probationStart)}</b> · hết tháng thử việc <b>{viDate(probationEnd(u.probationStart))}</b> · đã làm <b>{probShifts} ca</b>. Lương hiện tại{" "}
+                {vnd(u.hourlyWage)}/giờ.
               </p>
-              {u.probationReview ? (
-                <Alert tone="red">
-                  Hết tháng thử việc nhưng mới làm {probShifts} ca (cần {PROBATION_MIN_SHIFTS}) – chưa tự lên chính thức. Chọn chuyển chính thức hoặc gia hạn thử việc.
+              {u.trialStage === "ON" && (
+                <Alert tone="pink">
+                  Đang làm <b>3 ca thử việc</b>: xong {trialDone}/{TRIAL_SHIFTS} ca{probCfg.trialHalf ? " (tính 50% giờ công)" : ""}. Xong ca thứ 3 → gửi admin Nhận / Không nhận.
                 </Alert>
-              ) : (
-                <p className="text-xs text-ink/60">
-                  Hết thử việc: đủ {PROBATION_MIN_SHIFTS} ca → tự chuyển chính thức, lương {vnd(OFFICIAL_WAGE)}/giờ từ ngày đó; chưa đủ → báo “cần xem xét”. Đang thử việc: không dùng
-                  Chốt ca / Nhận hàng / Tồn kho, app màu hồng tím.
-                </p>
               )}
+              {u.trialStage === "PENDING" && (
+                <Alert tone="orange">
+                  Đã xong 3 ca thử việc – <b>chờ admin Nhận / Không nhận</b> ở{" "}
+                  <Link href="/admin/requests" className="font-semibold underline">
+                    Yêu cầu
+                  </Link>
+                  .
+                </Alert>
+              )}
+              {pendingMonth && (
+                <Alert tone="orange">
+                  Hết tháng thử việc – <b>chờ admin xác nhận lên lương {vnd(OFFICIAL_WAGE)}/giờ</b> ở{" "}
+                  <Link href="/admin/requests" className="font-semibold underline">
+                    Yêu cầu
+                  </Link>
+                  .
+                </Alert>
+              )}
+              <p className="text-xs text-ink/60">
+                {probCfg.monthOn
+                  ? `Hết tháng thử việc → hỏi admin áp dụng lương ${vnd(OFFICIAL_WAGE)}/giờ (Đồng ý / Chưa – gia hạn 1 tháng).`
+                  : `Không có tháng thử việc: được nhận sau 3 ca là lên chính thức ${vnd(OFFICIAL_WAGE)}/giờ.`}{" "}
+                Đang thử việc: không dùng Chốt ca / Nhận hàng / Tồn kho, app màu hồng tím.
+              </p>
               <div className="flex flex-wrap items-end gap-2">
                 <ActionForm action={probationAction} submitLabel="Chuyển chính thức" variant="secondary" successText="Đã chuyển chính thức" className="flex items-end gap-2">
                   <input type="hidden" name="userId" value={String(u._id)} />

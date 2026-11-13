@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { Settings } from "@/lib/models";
 import { connectDB } from "@/lib/db";
-import { assertAdmin } from "@/lib/guards";
+import { assertAdmin, assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { dec, errMsg, num, type FormState } from "./types";
@@ -106,11 +106,14 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
   }
 }
 
-/** Tự động check-out khi hết ca tối – bật / giờ riêng từng cơ sở (Admin Tổng). Lưu xong chạy ngay 1 lần. */
+/**
+ * Chốt giờ công ca tối – bật / giờ chốt riêng từng cơ sở: Admin Tổng hoặc admin được cấp quyền "attendance.cutoff".
+ * Giờ cấm check-in (chung mọi cơ sở): chỉ Admin Tổng – admin khác lưu thì giữ nguyên. Lưu xong chạy ngay 1 lần.
+ */
 export async function saveAutoCheckout(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
-    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
+    const admin = await assertPerm("attendance.cutoff");
+    const isOwner = admin.kind === "OWNER";
     await connectDB();
     const { Store } = await import("@/lib/models");
     const { isAutoCheckoutTime, runAutoCheckout } = await import("@/lib/auto-checkout");
@@ -123,17 +126,40 @@ export async function saveAutoCheckout(_: FormState, fd: FormData): Promise<Form
       await Store.updateOne({ _id: id }, { $set: { autoCheckoutOn: on, autoCheckoutTime: time } });
       changes[id] = { on, time };
     }
-    // giờ cấm check-in (mọi cơ sở) – mặc định 01:00–06:00
-    const quiet = {
-      quietCheckinOn: fd.get("quietCheckinOn") === "on",
-      quietCheckinFrom: String(fd.get("quietCheckinFrom") ?? "").trim() || "01:00",
-      quietCheckinTo: String(fd.get("quietCheckinTo") ?? "").trim() || "06:00",
-    };
-    if (!isAutoCheckoutTime(quiet.quietCheckinFrom) || !isAutoCheckoutTime(quiet.quietCheckinTo)) return { error: "Giờ cấm check-in không hợp lệ (HH:mm)" };
-    if (quiet.quietCheckinOn && quiet.quietCheckinFrom === quiet.quietCheckinTo) return { error: "Giờ cấm check-in: giờ bắt đầu và kết thúc phải khác nhau" };
-    await Settings.updateOne({ key: "main" }, { $set: quiet }, { upsert: true });
-    await audit(adminActor(admin), "settings.autoCheckout", { type: "Settings" }, null, { stores: changes, ...quiet });
+    // giờ cấm check-in (mọi cơ sở) – mặc định 01:00–06:00 – chỉ Admin Tổng đổi
+    let quiet: { quietCheckinOn: boolean; quietCheckinFrom: string; quietCheckinTo: string } | null = null;
+    if (isOwner) {
+      quiet = {
+        quietCheckinOn: fd.get("quietCheckinOn") === "on",
+        quietCheckinFrom: String(fd.get("quietCheckinFrom") ?? "").trim() || "01:00",
+        quietCheckinTo: String(fd.get("quietCheckinTo") ?? "").trim() || "06:00",
+      };
+      if (!isAutoCheckoutTime(quiet.quietCheckinFrom) || !isAutoCheckoutTime(quiet.quietCheckinTo)) return { error: "Giờ cấm check-in không hợp lệ (HH:mm)" };
+      if (quiet.quietCheckinOn && quiet.quietCheckinFrom === quiet.quietCheckinTo) return { error: "Giờ cấm check-in: giờ bắt đầu và kết thúc phải khác nhau" };
+      await Settings.updateOne({ key: "main" }, { $set: quiet }, { upsert: true });
+    }
+    await audit(adminActor(admin), "settings.autoCheckout", { type: "Settings" }, null, { stores: changes, ...(quiet ?? {}) });
     if (Object.values(changes).some((c) => c.on)) await runAutoCheckout();
+    revalidatePath("/admin", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Thử việc (Admin Tổng): có tháng thử việc (hết tháng hỏi lên 22k) · 3 ca thử việc tính 50% giờ công */
+export async function saveProbationConfig(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
+    await connectDB();
+    const data = { probationMonthOn: fd.get("probationMonthOn") === "on", probationTrialHalf: fd.get("probationTrialHalf") === "on" };
+    await Settings.updateOne({ key: "main" }, { $set: data }, { upsert: true });
+    await audit(adminActor(admin), "settings.probation", { type: "Settings" }, null, data);
+    // áp ngay hệ số mới cho nhân viên đang làm 3 ca thử việc
+    const { User } = await import("@/lib/models");
+    const { syncTrial } = await import("@/lib/probation");
+    for (const u of await User.find({ probation: true, trialStage: { $in: ["ON", "PENDING"] } }).select("_id").lean()) await syncTrial(u._id);
     revalidatePath("/admin", "layout");
     return { ok: true };
   } catch (e) {

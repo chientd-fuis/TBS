@@ -4,6 +4,7 @@ import { adminActor, type AdminSession } from "./admin-session";
 import { audit } from "./audit";
 import { assertNotLocked, computeFields, findShiftFor, payStoreOf, storeTz } from "./attendance";
 import { localMonth, zonedToDate } from "./time";
+import { syncTrial } from "./probation";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,7 +75,7 @@ export async function upsertAttendance(
   const shift = await findShiftFor(opts.userId, checkInAt, tz, storeId);
   const shiftAssignmentId = shift?.a._id ?? null;
   const extraHours = opts.extraHours ?? existing?.extraHours ?? 0;
-  const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt, extraHours });
+  const fields = await computeFields({ storeId, shiftAssignmentId, checkInAt, checkOutAt, extraHours, payFactor: existing?.payFactor });
   // chưa có giờ ra: lượt đang "quên check-out" mà admin chỉ sửa giờ vào / ghi chú / +0,5h → giữ "quên check-out" (không mở lại thành đang trong ca)
   const status = checkOutAt
     ? "COMPLETED"
@@ -118,6 +119,7 @@ export async function upsertAttendance(
       reason: opts.reason,
     });
     await audit(actor, "attendance.update", { type: "Attendance", id: String(existing._id) }, { checkInAt: before.checkInAt, checkOutAt: before.checkOutAt }, { checkInAt, checkOutAt, reason: opts.reason });
+    if (user.probation) await syncTrial(user._id).catch((e: Error) => console.error("[trial]", e.message)); // 3 ca thử việc
     return existing;
   }
   const created = await Attendance.create({
@@ -134,6 +136,7 @@ export async function upsertAttendance(
     checkOutAt,
     reason: opts.reason,
   });
+  if (user.probation) await syncTrial(user._id).catch((e: Error) => console.error("[trial]", e.message)); // 3 ca thử việc
   return created;
 }
 

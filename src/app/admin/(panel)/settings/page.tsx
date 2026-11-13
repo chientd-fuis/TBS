@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { AdminLoginLog, AuditLog, PendingPhoto, ShiftTemplate, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveUserAppAccess } from "../../actions/settings";
+import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveProbationConfig, saveUserAppAccess } from "../../actions/settings";
 import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
@@ -18,6 +19,8 @@ export const maxDuration = 60;
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ drive?: string; msg?: string }> }) {
   const admin = await requireAdmin();
   const isOwner = admin.kind === "OWNER";
+  // chốt giờ công ca tối: Admin Tổng hoặc admin được cấp quyền (Quản lý admin → Chấm công)
+  const canCutoff = can(admin, "attendance.cutoff");
   const sp = await searchParams;
   const s = await getSettings();
   // tháng mốc để dọn: từ (tháng này − 2) lùi về 24 tháng
@@ -189,6 +192,35 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </fieldset>
           </ActionForm>
 
+          <ActionForm action={saveProbationConfig} submitLabel="Lưu cài đặt thử việc" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
+            <div className="text-sm">
+              <b>🟣 Thử việc</b>
+              <span className="block text-xs text-ink/60">
+                Nhân viên thử việc (lương 20.000đ/giờ): làm xong <b>3 ca đầu</b> → gửi admin cơ sở <b>Nhận / Không nhận</b> (không nhận = cho nghỉ việc). Trong lúc chờ vẫn chấm công
+                bình thường, từ ca thứ 4 tính đủ giờ.
+              </span>
+            </div>
+            <fieldset disabled={!isOwner} className="space-y-2">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="probationTrialHalf" defaultChecked={s.probationTrialHalf !== false} className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Tính <b>3 ca thử việc 50% giờ công</b>
+                  <span className="block text-xs text-ink/60">Nhân viên thấy “Ca thử việc” ở 3 lượt chấm công đó. Bỏ tick = tính đủ giờ.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="probationMonthOn" defaultChecked={s.probationMonthOn !== false} className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Có <b>tháng thử việc</b>
+                  <span className="block text-xs text-ink/60">
+                    Được nhận sau 3 ca vẫn thử việc 20.000đ/giờ tới hết 1 tháng → gửi admin “áp dụng lương 22.000đ/giờ từ ngày hết thử việc?” (Đồng ý / Chưa – gia hạn 1
+                    tháng). Bỏ tick = được nhận là lên chính thức 22.000đ/giờ từ ca thứ 4.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+          </ActionForm>
+
           <ActionForm action={saveAutoCheckout} submitLabel="Lưu chốt công ca tối" successText="Đã lưu" className="mt-4 space-y-3 border-t border-[#f1e6c8] pt-4">
             <div className="text-sm">
               <b>Chốt giờ công ca tối</b> – bật riêng từng cơ sở
@@ -201,7 +233,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </span>
             </div>
             {/* mỗi cơ sở 2 dòng: [tick + tên] / [Check-out lúc __:__ · gợi ý] – không ép chung 1 hàng (điện thoại bị đè chữ) */}
-            <fieldset disabled={!isOwner} className="min-w-0 divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
+            <fieldset disabled={!canCutoff} className="min-w-0 divide-y divide-[#f1e6c8] rounded-xl ring-1 ring-[#f1e6c8]">
               {acStores.map((st) => {
                 const id = String(st._id);
                 return (
@@ -236,7 +268,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <label htmlFor="quietCheckinTo" className="shrink-0">đến</label>
                 <Input id="quietCheckinTo" type="time" name="quietCheckinTo" defaultValue={s.quietCheckinTo || "06:00"} className="w-28 shrink-0" />
               </div>
+              {!isOwner && <p className="pl-6 text-xs text-ink/60">Giờ cấm check-in áp dụng mọi cơ sở – chỉ Admin Tổng đổi được.</p>}
             </fieldset>
+            {!canCutoff && (
+              <p className="text-xs text-ink/60">Cần quyền &quot;Chốt giờ công ca tối&quot; (Admin Tổng cấp ở Quản lý admin) để thay đổi.</p>
+            )}
           </ActionForm>
         </Card>
 

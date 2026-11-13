@@ -50,4 +50,4 @@ export async function responsibleAdminNames(storeId: unknown, perm: string | nul
 }
 
 /** Quyền cần để duyệt từng loại yêu cầu (null = mọi admin) – khớp với action duyệt tương ứng */
-export const APPROVE_PERM = { overtime: "adjustments", adjustment: "adjustments", cover: null } as const;
+export const APPROVE_PERM = { overtime: "adjustments", adjustment: "adjustments", cover: null, probation: null } as const;

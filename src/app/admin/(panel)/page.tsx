@@ -2,7 +2,7 @@ import Link from "next/link";
 import { can } from "@/lib/permissions";
 import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
+import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
 import { liveBadges, type LiveBadge } from "@/lib/live-badges";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
@@ -26,7 +26,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   const settings = await getSettings();
   // việc chờ xác nhận: loại theo cơ sở thì ghi rõ cần admin nào (Quản lý admin → Cơ sở quản lý), còn lại là việc chung
-  const [pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames] = await Promise.all([
+  const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames] = await Promise.all([
+    ProbationRequest.find({ status: "PENDING" }).select("storeId").lean(),
     CoverRequest.find({ status: "PENDING" }).select("storeId").lean(),
     AdjustmentRequest.find({ status: "PENDING" }).select("storeId").lean(),
     Attendance.find({ "overtime.status": "PENDING" }).select("storeId").lean(),
@@ -45,6 +46,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   };
   type Todo = { key: string; icon: string; n: number; text: string; href: string; store?: string; names?: string[] };
   const assigned: Todo[] = [
+    ...byStore(pProbs).map(([sid, n]) => ({ key: `pb${sid}`, icon: "🟣", n, text: "thử việc (nhận / lên lương)", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.probation) })),
     ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm ngoài giờ / ngoài ca", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
     ...byStore(pCovers).map(([sid, n]) => ({ key: `cv${sid}`, icon: "⇄", n, text: "đổi ca / nhờ làm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.cover) })),
     ...byStore(pAdjs).map(([sid, n]) => ({ key: `aj${sid}`, icon: "🕘", n, text: "chấm công bù / chấm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.adjustment) })),

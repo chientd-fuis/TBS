@@ -1,7 +1,9 @@
 import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
-import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, Store, User } from "@/lib/models";
+import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, ProbationRequest, Store, User } from "@/lib/models";
 import { resolveOvertime } from "../../actions/overtime";
+import { resolveProbation } from "../../actions/probation";
+import { probationConfig, trialShiftLines } from "@/lib/probation";
 import { extraKinds, hoursShort, OVERTIME_GRACE_MIN } from "@/lib/overtime";
 import { adminDirectory, APPROVE_PERM } from "@/lib/admin-stores";
 import { attendancesNear, attText, compareWarnings, dayAttendances, findOverlap, pickTarget, requestWindow } from "@/lib/adjustment";
@@ -37,7 +39,16 @@ export default async function RequestsPage() {
     Attendance.find({ "overtime.status": "PENDING" }).sort({ checkOutAt: 1 }).lean(),
     Attendance.find({ "overtime.status": { $in: ["APPROVED", "REJECTED"] } }).sort({ "overtime.decidedAt": -1 }).limit(10).lean(),
   ]);
-  const ids = [...reqs, ...done, ...fbs, ...ots, ...otsDone].map((r) => r.userId).concat([...covers, ...coversDone].flatMap((c) => [c.fromUserId, c.toUserId]));
+  // thử việc: hết 3 ca thử việc (Nhận / Không nhận) · hết tháng thử việc (Đồng ý 22k / Gia hạn)
+  const [probs, probsDone, probCfg] = await Promise.all([
+    ProbationRequest.find({ status: "PENDING" }).sort({ createdAt: 1 }).lean(),
+    ProbationRequest.find({ status: { $ne: "PENDING" } }).sort({ decidedAt: -1 }).limit(10).lean(),
+    probationConfig(),
+  ]);
+  const trialLines = new Map(await Promise.all(probs.filter((p) => p.kind === "TRIAL").map(async (p) => [String(p._id), await trialShiftLines(p.attendanceIds ?? [])] as const)));
+  const ids = [...reqs, ...done, ...fbs, ...ots, ...otsDone, ...probs, ...probsDone]
+    .map((r) => r.userId)
+    .concat([...covers, ...coversDone].flatMap((c) => [c.fromUserId, c.toUserId]));
   const users = new Map((await User.find({ _id: { $in: ids } }).select("name").lean()).map((u) => [String(u._id), u.name]));
   const storeList = await Store.find().lean();
   const stores = new Map(storeList.map((s) => [String(s._id), s.name]));
@@ -79,6 +90,76 @@ export default async function RequestsPage() {
   return (
     <>
       <PageTitle>Yêu cầu từ nhân viên</PageTitle>
+      {(probs.length > 0 || probsDone.length > 0) && (
+        <Card title={`🟣 Thử việc chờ xác nhận (${probs.length})`} className="mb-4">
+          <p className="mb-2 text-xs text-ink/60">
+            <b>Hết 3 ca thử việc</b>: Nhận = làm tiếp{probCfg.monthOn ? " (vẫn thử việc 20k/h tới hết tháng thử việc)" : " – lên chính thức 22k/h từ ca thứ 4"}; Không nhận = cho nghỉ
+            việc (khoá tài khoản), 3 ca thử việc vẫn trả theo giờ đã tính{probCfg.trialHalf ? " (50%)" : ""}. <b>Hết tháng thử việc</b>: Đồng ý = lương 22k/h từ ngày hết thử
+            việc; Chưa = gia hạn thử việc thêm 1 tháng (hết tháng hỏi lại).
+          </p>
+          {probs.length === 0 ? (
+            <Empty>Không có yêu cầu thử việc chờ xác nhận</Empty>
+          ) : (
+            <div className="space-y-3">
+              {probs.map((p) => {
+                const name = users.get(String(p.userId)) ?? "?";
+                const trial = p.kind === "TRIAL";
+                return (
+                  <div key={String(p._id)} className="space-y-1 rounded-xl bg-[#faf5ff] p-3 text-sm ring-1 ring-[#e3d0f7]">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="rounded-full bg-[#7e3a9c] px-2 py-0.5 text-xs font-bold text-white">{trial ? "Hết 3 ca thử việc" : "Hết tháng thử việc"}</span>
+                      <span>
+                        <b>{name}</b> · {stores.get(String(p.storeId))} · {viDateTime(p.createdAt)}
+                      </span>
+                    </p>
+                    {trial ? (
+                      <ul className="space-y-0.5 text-xs">
+                        {(trialLines.get(String(p._id)) ?? []).map((l) => (
+                          <li key={l}>• {l}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs">
+                        Thử việc {p.periodStart && viDate(p.periodStart)} → {p.periodEnd && viDate(p.periodEnd)} · đã làm <b>{p.shifts ?? 0} ca</b>
+                      </p>
+                    )}
+                    <p className="font-semibold text-[#7e3a9c]">
+                      {trial ? "Có nhận nhân viên làm tiếp không?" : `Áp dụng lương chính thức 22.000đ/giờ từ ${p.periodEnd ? viDate(p.periodEnd) : "ngày hết thử việc"}?`}
+                    </p>
+                    <Who storeId={p.storeId} perm={APPROVE_PERM.probation} />
+                    <ApproveRejectForm
+                      action={resolveProbation}
+                      approveLabel={trial ? "Nhận" : "Đồng ý lương 22k"}
+                      rejectLabel={trial ? "Không nhận" : "Chưa – gia hạn 1 tháng"}
+                      rejectConfirm={trial ? `Không nhận ${name}? Tài khoản bị khoá (nghỉ việc), 3 ca thử việc vẫn tính lương theo giờ đã ghi.` : undefined}
+                      placeholder="Ghi chú (tuỳ chọn)"
+                    >
+                      <input type="hidden" name="id" value={String(p._id)} />
+                    </ApproveRejectForm>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {probsDone.length > 0 && (
+            <details className="mt-4 text-sm">
+              <summary className="cursor-pointer text-accent">Đã xử lý gần đây</summary>
+              <ul className="mt-2 space-y-1 text-xs">
+                {probsDone.map((p) => (
+                  <li key={String(p._id)}>
+                    {users.get(String(p.userId))} · {p.kind === "TRIAL" ? "hết 3 ca thử việc" : "hết tháng thử việc"}{" "}
+                    <Badge tone={p.status === "APPROVED" ? "green" : "red"}>
+                      {p.kind === "TRIAL" ? (p.status === "APPROVED" ? "Nhận" : "Không nhận") : p.status === "APPROVED" ? "Lên 22k" : "Gia hạn"}
+                    </Badge>{" "}
+                    {p.decidedBy && <span className="text-ink/60">· {p.decidedBy}</span>}
+                    {p.reply && <span className="text-ink/60"> – {p.reply}</span>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </Card>
+      )}
       <Card title={`⏱ Làm ngoài giờ chờ xác nhận (${ots.length})`} className="mb-4">
         <p id="ngoai-gio" className="mb-2 text-xs text-ink/60">
           Gồm: <b>ra muộn</b> quá giờ hết ca được xếp hơn {OVERTIME_GRACE_MIN} phút · <b>vào sớm</b> trước giờ ca làm tăng giờ công · <b>ngoài ca</b> (không được xếp ca).

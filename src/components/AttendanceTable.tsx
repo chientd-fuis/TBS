@@ -29,7 +29,11 @@ export type AttRow = {
   checkOutPendingPhotoId?: unknown;
   /** "Hỗ trợ tại X" / "Hỗ trợ từ Y" – xem lib/support.labelSupport */
   supportLabel?: string;
+  /** ca thử việc (3 ca đầu của nhân viên thử việc) · hệ số giờ công (0,5 = 50%) */
+  trial?: boolean | null;
+  payFactor?: number | null;
 };
+const trialText = (r: AttRow) => `Ca thử việc${r.payFactor != null && r.payFactor < 1 ? ` · tính ${Math.round(r.payFactor * 100)}% giờ công` : ""}`;
 
 /** Bảng chấm công theo mẫu: Ngày | Giờ Đến | Giờ Về | Tổng | Format | Giờ tính công | Ca | Cảnh báo | Ảnh | Ghi chú (spec 5) */
 export function AttendanceTable({
@@ -101,6 +105,11 @@ export function AttendanceTable({
                 <td className="text-right font-bold">
                   {hoursVi(r.roundedHours)}
                   {!!r.extraHours && <span className="block text-[10px] font-semibold text-secondary-dark" title="Admin cộng thêm cho ca này">gồm +{hoursVi(r.extraHours)}h</span>}
+                  {r.trial && r.payFactor != null && r.payFactor < 1 && (
+                    <span className="block text-[10px] font-semibold text-[#7e3a9c]" title={trialText(r)}>
+                      thử việc {Math.round(r.payFactor * 100)}%
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap text-xs">{r.shiftLabel || (r.outOfShift ? <Badge>Ngoài ca</Badge> : "")}</td>
                 <td className="space-x-1 whitespace-nowrap">
@@ -138,9 +147,17 @@ export function AttendanceTable({
                   )}
                 </td>
                 {staffView ? (
-                  <td className="min-w-32 text-xs">{r.staffNote}</td>
+                  <td className="min-w-32 text-xs">
+                    {r.trial && (
+                      <span className="mb-0.5 block">
+                        <Badge tone="pink">{trialText(r)}</Badge>
+                      </span>
+                    )}
+                    {r.staffNote}
+                  </td>
                 ) : (
                 <td className="min-w-40 text-xs">
+                  {r.trial && <><Badge tone="pink">{trialText(r)}</Badge>{" "}</>}
                   {r.supportLabel && <><Badge tone="blue">⇄ {r.supportLabel}</Badge>{" "}</>}
                   {r.source === "ADMIN_MANUAL" && (
                     <span>

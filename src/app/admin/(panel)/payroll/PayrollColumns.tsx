@@ -15,9 +15,11 @@ const COLS = [
   { n: 11, label: "Trả lương" },
 ] as const;
 
-export default function PayrollColumns({ children }: { children: ReactNode }) {
+/** extra: bộ lọc "Ẩn NV 0đ / đã nghỉ" đặt cùng hàng nút cột */
+export default function PayrollColumns({ extra, children }: { extra?: ReactNode; children: ReactNode }) {
   return (
-    <ColumnToggle cols={COLS} storageKey="tbs.payroll.hiddenCols" keepNote="Tên + Thực nhận luôn hiện" minimalLabel="Chỉ tên + thực nhận">
+    // "Hiện cột trả lương": chỉ Tên + Thực nhận + Chuyển khoản (đi chuyển khoản trên điện thoại)
+    <ColumnToggle cols={COLS} storageKey="tbs.payroll.hiddenCols" keepNote="Tên + Thực nhận luôn hiện" minimalLabel="Hiện cột trả lương" presetShow={[10]} extra={extra}>
       {children}
     </ColumnToggle>
   );

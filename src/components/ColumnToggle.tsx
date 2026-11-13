@@ -12,17 +12,23 @@ export function ColumnToggle({
   storageKey,
   keepNote,
   minimalLabel,
+  presetShow = [],
   defaultHidden = [],
+  extra,
   children,
 }: {
   cols: readonly { n: number; label: string }[];
   storageKey: string;
   /** VD "Tên + Thực nhận luôn hiện" */
   keepNote: string;
-  /** nút ẩn hết các cột ẩn được, VD "Chỉ tên + thực nhận" */
+  /** nút gọn: ẩn hết các cột ẩn được (trừ presetShow), VD "Chỉ tên + thực nhận" */
   minimalLabel: string;
+  /** cột vẫn hiện khi bấm nút gọn (VD bảng lương: Chuyển khoản) */
+  presetShow?: number[];
   /** cột ẩn sẵn khi máy này chưa chọn lần nào */
   defaultHidden?: number[];
+  /** bộ lọc khác đặt cùng hàng nút (VD "Ẩn NV 0đ / đã nghỉ") */
+  extra?: ReactNode;
   children: ReactNode;
 }) {
   const all = cols.map((c) => c.n);
@@ -44,7 +50,8 @@ export function ColumnToggle({
     } catch {}
   };
   const toggle = (n: number) => save(hidden.includes(n) ? hidden.filter((x) => x !== n) : [...hidden, n]);
-  const minimal = hidden.length === all.length;
+  const presetHidden = all.filter((n) => !presetShow.includes(n));
+  const minimal = hidden.length === presetHidden.length && presetHidden.every((n) => hidden.includes(n));
   const css = hidden.map((n) => `.${scope} thead th:nth-child(${n}), .${scope} tbody tr > td:nth-child(${n}):not([colspan]) { display: none; }`).join("\n");
 
   return (
@@ -56,11 +63,12 @@ export function ColumnToggle({
         </button>
         <button
           type="button"
-          onClick={() => save(minimal ? [] : all)}
+          onClick={() => save(minimal ? [] : presetHidden)}
           className={cn("rounded-xl px-3 py-1.5 ring-1", minimal ? "bg-secondary font-semibold text-white ring-secondary" : "bg-white ring-[#e9d9a8] hover:bg-primary-light")}
         >
           {minimal ? "Hiện đủ cột" : minimalLabel}
         </button>
+        {extra}
       </div>
       {open && (
         <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl bg-cream p-2 text-sm">

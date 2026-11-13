@@ -160,10 +160,11 @@ export async function rejectOvertimeHours(a: {
   checkInAt: Date;
   checkOutAt?: Date | null;
   extraHours?: number | null;
+  payFactor?: number | null;
   overtime?: ExtraLike | null;
 }) {
   if (!a.checkOutAt || !a.overtime) throw new Error("Thiếu giờ ra");
   const { inAt, outAt } = rejectedWindow({ checkInAt: a.checkInAt, checkOutAt: a.checkOutAt }, a.overtime);
-  const fields = await computeFields({ storeId: a.storeId, shiftAssignmentId: a.shiftAssignmentId, checkInAt: inAt, checkOutAt: outAt, extraHours: a.extraHours });
+  const fields = await computeFields({ storeId: a.storeId, shiftAssignmentId: a.shiftAssignmentId, checkInAt: inAt, checkOutAt: outAt, extraHours: a.extraHours, payFactor: a.payFactor });
   return { fields, inAt, outAt };
 }

@@ -6,7 +6,7 @@ import { Badge, Card } from "@/components/ui";
 import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
-import { isProbation, PROBATION_MIN_SHIFTS, probationEnd } from "@/lib/probation";
+import { isProbation, probationConfig, probationEnd, TRIAL_SHIFTS } from "@/lib/probation";
 import { AUTO_LOCK_MS, checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +46,9 @@ export default async function HomePage() {
   const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
   // nhân viên thử việc: không Chốt ca / Nhận hàng / Tồn kho
   const trial = isProbation(user);
+  // 3 ca thử việc: đã xong mấy ca
+  const trialDone = trial && user.trialStage === "ON" && user.probationStart ? await Attendance.countDocuments({ userId: user._id, status: "COMPLETED", workDate: { $gte: user.probationStart } }) : 0;
+  const trialHalf = trial ? (await probationConfig()).trialHalf : false;
   const goodsOn = !trial && (await goodsEnabled());
   const stockOn = goodsOn && (await stockEnabled());
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
@@ -71,8 +74,12 @@ export default async function HomePage() {
         <div className="rounded-2xl bg-primary-light p-4 text-sm ring-1 ring-primary">
           <span className="block font-bold text-accent">🌱 Bạn đang thử việc</span>
           <span className="text-xs text-ink/70">
-            Làm đủ {PROBATION_MIN_SHIFTS} ca trong tháng thử việc{user.probationStart ? ` (đến ${viDate(probationEnd(user.probationStart))})` : ""} để lên nhân viên chính thức. Chốt ca, nhận
-            hàng, tồn kho do nhân viên chính thức làm.
+            {user.trialStage === "ON"
+              ? `${trialDone}/${TRIAL_SHIFTS} ca thử việc${trialHalf ? " (ca thử việc tính 50% giờ công)" : ""}. Xong ${TRIAL_SHIFTS} ca, quản lý sẽ xác nhận nhận bạn làm tiếp.`
+              : user.trialStage === "PENDING"
+                ? "Đã xong 3 ca thử việc – đang chờ quản lý xác nhận. Bạn vẫn chấm công bình thường."
+                : `Tháng thử việc${user.probationStart ? ` đến ${viDate(probationEnd(user.probationStart))}` : ""}, hết tháng quản lý xét lên nhân viên chính thức.`}{" "}
+            Chốt ca, nhận hàng, tồn kho do nhân viên chính thức làm.
           </span>
         </div>
       ) : (

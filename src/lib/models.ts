@@ -58,6 +58,9 @@ const SettingsSchema = new Schema(
     penaltyNoShowVnd: { type: Number, default: 0 }, // bỏ ca: có lịch, không chấm công
     penaltyMissingOutVnd: { type: Number, default: 0 }, // quên check-out
     penaltyMissingInVnd: { type: Number, default: 0 }, // quên check-in: admin chấm hộ / duyệt yêu cầu bổ sung chấm công
+    // Thử việc (lib/probation.ts)
+    probationMonthOn: { type: Boolean, default: true }, // có tháng thử việc (20k/h, hết tháng hỏi admin lên 22k) – tắt: nhận sau 3 ca là chính thức luôn
+    probationTrialHalf: { type: Boolean, default: true }, // 3 ca thử việc tính 50% giờ công – tắt: tính đủ
   },
   { timestamps: true },
 );
@@ -123,11 +126,15 @@ const UserSchema = new Schema(
     // hồ sơ nhân viên của 1 admin (cùng Gmail) – để admin có dòng trong bảng lương
     adminStaff: { type: Boolean, default: false },
     // Thử việc (lib/probation.ts): lương 20k/h, không Chốt ca / Nhận hàng / Tồn kho, app màu hồng tím.
-    // Hết 1 tháng: làm ≥ 10 ca → tự chuyển chính thức 22k/h; chưa đủ → probationReview (admin xem xét)
+    //  · 3 ca đầu = ca thử việc (50% giờ công) → gửi admin Nhận / Không nhận (ProbationRequest TRIAL)
+    //  · hết 1 tháng thử việc (Cài đặt bật) → gửi admin "áp dụng lương 22k?" (ProbationRequest MONTH)
     probation: { type: Boolean, default: false },
     probationStart: String, // YYYY-MM-DD bắt đầu thử việc
-    probationReview: { type: Boolean, default: false },
+    probationReview: { type: Boolean, default: false }, // (cũ) hết tháng chưa đủ 10 ca – nay thay bằng yêu cầu MONTH
     probationEndedAt: Date,
+    // 3 ca thử việc: ON = đang làm 3 ca đầu · PENDING = đủ 3 ca, chờ admin Nhận / Không nhận · DONE = đã nhận
+    // trống = nhân viên thử việc từ trước khi có chức năng này (không áp dụng 3 ca thử việc)
+    trialStage: { type: String, enum: ["ON", "PENDING", "DONE"] },
     status: { type: String, enum: USER_STATUS, default: "NEW" },
     rejectReason: String,
     storeId: { type: Schema.Types.ObjectId, ref: "Store" },
@@ -305,6 +312,9 @@ const AttendanceSchema = new Schema(
     // lượt quên check-out chờ báo nhóm chấm công: false = chưa báo (gom báo 1 tin lúc giờ chốt + 2 tiếng, VD 01:00), true = đã báo.
     // Không có default: lượt cũ (trước khi có trường này) không bị báo lại.
     missedNotified: Boolean,
+    // CA THỬ VIỆC (lib/probation.ts): 3 lượt đầu của nhân viên thử việc – giờ công × payFactor (mặc định 0,5 = 50%)
+    trial: Boolean,
+    payFactor: Number, // hệ số giờ công (trống = 1); computeFields nhân vào giờ tính công (không nhân giờ admin cộng thêm)
     // Làm NGOÀI GIỜ (lib/overtime.ts) – mặc định VẪN TÍNH công, chờ admin xác nhận:
     //  · ra muộn: check-out quá giờ hết ca được xếp > 30 phút (minutes)
     //  · vào sớm: check-in trước giờ ca làm tăng giờ công (earlyInMinutes)
@@ -403,6 +413,29 @@ const AdjustmentRequestSchema = new Schema(
   { timestamps: true },
 );
 export const AdjustmentRequest = getModel("AdjustmentRequest", AdjustmentRequestSchema);
+
+/**
+ * Yêu cầu admin xác nhận THỬ VIỆC (lib/probation.ts):
+ *  - TRIAL: nhân viên làm xong 3 ca thử việc → Nhận (làm tiếp) / Không nhận (cho nghỉ việc)
+ *  - MONTH: hết 1 tháng thử việc → Đồng ý lương chính thức 22k từ ngày hết thử việc / Chưa (gia hạn thêm 1 tháng)
+ */
+const ProbationRequestSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    kind: { type: String, enum: ["TRIAL", "MONTH"], required: true },
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING", index: true },
+    attendanceIds: [{ type: Schema.Types.ObjectId, ref: "Attendance" }], // TRIAL: 3 ca thử việc
+    periodStart: String, // MONTH: ngày bắt đầu / hết thử việc (YYYY-MM-DD)
+    periodEnd: String,
+    shifts: Number, // MONTH: số ca đã làm trong tháng thử việc
+    decidedBy: String,
+    decidedAt: Date,
+    reply: String,
+  },
+  { timestamps: true },
+);
+export const ProbationRequest = getModel("ProbationRequest", ProbationRequestSchema);
 
 /* ---------- Chốt ca: ảnh chụp cuối ca → gửi nhóm Telegram ---------- */
 const ShiftClosingSchema = new Schema(

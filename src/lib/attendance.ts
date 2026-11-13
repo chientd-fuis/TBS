@@ -98,6 +98,12 @@ export async function shiftBlock(shiftAssignmentId: Id, tz: string) {
   return { ...block, label };
 }
 
+/** Giờ tính công = giờ làm tròn × hệ số (ca thử việc 0,5) + giờ admin cộng thêm */
+export function factorHours(rounded: number, payFactor?: number | null, extraHours?: number | null) {
+  const f = payFactor != null && payFactor >= 0 && payFactor < 1 ? payFactor : 1;
+  return Math.round((rounded * f + (extraHours || 0)) * 100) / 100;
+}
+
 /** Tính lại các trường tổng giờ / làm tròn / muộn / sớm của 1 bản ghi. */
 export async function computeFields(att: {
   storeId: Id;
@@ -106,6 +112,8 @@ export async function computeFields(att: {
   checkOutAt?: Date | null;
   /** giờ admin cộng thêm cho lượt này (VD +0,5h) */
   extraHours?: number | null;
+  /** hệ số giờ công (ca thử việc 0,5 = 50%; trống = 1) – không nhân phần admin cộng thêm */
+  payFactor?: number | null;
 }) {
   const settings = await getSettings();
   const tz = await storeTz(att.storeId);
@@ -123,11 +131,15 @@ export async function computeFields(att: {
   }
   if (att.checkOutAt) {
     out.totalHours = totalHours(att.checkInAt, att.checkOutAt);
-    out.roundedHours = (att.extraHours || 0) + roundedHours(att.checkInAt, att.checkOutAt, {
-      stepHours: settings.roundStepHours,
-      graceMinutes: settings.roundGraceMinutes,
-      graceHourMinutes: settings.roundGraceHourMinutes ?? settings.roundGraceMinutes,
-    });
+    out.roundedHours = factorHours(
+      roundedHours(att.checkInAt, att.checkOutAt, {
+        stepHours: settings.roundStepHours,
+        graceMinutes: settings.roundGraceMinutes,
+        graceHourMinutes: settings.roundGraceHourMinutes ?? settings.roundGraceMinutes,
+      }),
+      att.payFactor,
+      att.extraHours,
+    );
     if (block) out.earlyMinutes = earlyMinutesInBlock(att.checkOutAt, block.segments, settings.earlyThresholdMinutes);
   }
   return out;
@@ -215,11 +227,11 @@ export async function recomputeRounding(now = new Date()) {
   const locked = new Set(
     (await Payroll.find({ month: { $in: months }, status: { $ne: "DRAFT" } }).select("storeId month").lean()).map((p) => `${p.storeId}|${p.month}`),
   );
-  const list = await Attendance.find({ month: { $in: months }, checkOutAt: { $ne: null } }).select("storeId homeStoreId month checkInAt checkOutAt roundedHours extraHours").lean();
+  const list = await Attendance.find({ month: { $in: months }, checkOutAt: { $ne: null } }).select("storeId homeStoreId month checkInAt checkOutAt roundedHours extraHours payFactor").lean();
   const ops = [];
   for (const a of list) {
     if (locked.has(`${payStoreOf(a)}|${a.month}`)) continue;
-    const r = (a.extraHours || 0) + roundedHours(a.checkInAt, a.checkOutAt!, cfg);
+    const r = factorHours(roundedHours(a.checkInAt, a.checkOutAt!, cfg), a.payFactor, a.extraHours);
     if (r !== a.roundedHours) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { roundedHours: r } } } });
   }
   if (ops.length) await Attendance.bulkWrite(ops);

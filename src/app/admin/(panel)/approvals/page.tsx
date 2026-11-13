@@ -4,7 +4,7 @@ import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
 import { approveUser, rejectUser } from "../../actions/people";
-import { OFFICIAL_WAGE, PROBATION_MIN_SHIFTS, PROBATION_WAGE } from "@/lib/probation";
+import { OFFICIAL_WAGE, PROBATION_WAGE, probationConfig, TRIAL_SHIFTS } from "@/lib/probation";
 
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function ApprovalsPage() {
   await requireAdmin();
   const users = await User.find({ status: "PENDING" }).sort({ registeredAt: 1 }).lean();
+  const probCfg = await probationConfig();
   const stores = new Map((await Store.find().lean()).map((s) => [String(s._id), s.name]));
   const devices = await Device.find({ userId: { $in: users.map((u) => u._id) } }).lean();
   return (
@@ -54,8 +55,9 @@ export default async function ApprovalsPage() {
                   <label className="flex w-full items-start gap-2 rounded-lg bg-[#f6e8fb] px-2 py-1.5 text-xs text-[#6b2d86] ring-1 ring-[#e3c6f0]">
                     <input type="checkbox" name="probation" defaultChecked className="mt-0.5 h-4 w-4 accent-[#a855c7]" />
                     <span>
-                      <b>Thử việc</b> – lương mặc định {vnd(PROBATION_WAGE)}đ/giờ (nếu để trống ô lương), không dùng Chốt ca / Nhận hàng / Tồn kho. Sau 1 tháng làm đủ{" "}
-                      {PROBATION_MIN_SHIFTS} ca → tự lên chính thức {vnd(OFFICIAL_WAGE)}đ/giờ; chưa đủ → admin xem xét.
+                      <b>Thử việc</b> – lương mặc định {vnd(PROBATION_WAGE)}đ/giờ (nếu để trống ô lương), không dùng Chốt ca / Nhận hàng / Tồn kho. Xong{" "}
+                      {TRIAL_SHIFTS} ca thử việc{probCfg.trialHalf ? " (tính 50% giờ công)" : ""} → admin Nhận / Không nhận;{" "}
+                      {probCfg.monthOn ? `hết 1 tháng → admin xác nhận lên ${vnd(OFFICIAL_WAGE)}đ/giờ.` : `được nhận là lên chính thức ${vnd(OFFICIAL_WAGE)}đ/giờ.`}
                     </span>
                   </label>
                 </ActionForm>

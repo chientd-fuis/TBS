@@ -15,6 +15,7 @@ import { addDays, localDate, localMonth, localTime } from "@/lib/time";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 import { checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 import { flagOvertime } from "@/lib/overtime";
+import { syncTrial } from "@/lib/probation";
 
 const Body = z.object({
   // vị trí / ảnh chỉ gửi khi cơ sở bật cách chấm tương ứng
@@ -196,6 +197,7 @@ export async function POST(req: Request) {
         checkInAt: open.checkInAt,
         checkOutAt: outAt,
         extraHours: open.extraHours,
+        payFactor: open.payFactor,
       });
       const updated = await Attendance.findOneAndUpdate(
         { _id: open._id, status: "OPEN" }, // điều kiện → bấm 2 lần không ghi đè
@@ -228,6 +230,13 @@ export async function POST(req: Request) {
       // làm ngoài giờ (ra muộn > 30 phút / vào sớm làm tăng giờ công / ngoài ca) → chờ admin xác nhận, mặc định vẫn tính (báo nhóm chấm công sau)
       const ot = await flagOvertime(updated._id, tz, { employeeName: user.name || user.email, storeId: store._id, storeName: store.name });
       if (ot) after(ot.notify);
+      // nhân viên thử việc: 3 ca đầu = ca thử việc (50% giờ công – nhân viên xem ở Lịch sử, không báo khi check-out), đủ 3 ca → gửi admin Nhận / Không nhận
+      let rounded = updated.roundedHours;
+      if (user.probation) {
+        await syncTrial(user._id).catch((e: Error) => console.error("[trial]", e.message));
+        const fresh = await Attendance.findById(updated._id).select("roundedHours trial").lean();
+        if (fresh?.trial) rounded = fresh.roundedHours;
+      }
       // thông báo nhóm chấm công (chạy sau khi đã trả kết quả cho nhân viên)
       after(() =>
         notifyAttendance(
@@ -246,7 +255,7 @@ export async function POST(req: Request) {
             lateMinutes: updated.lateMinutes,
             earlyMinutes: updated.earlyMinutes,
             totalHours: updated.totalHours,
-            roundedHours: updated.roundedHours,
+            roundedHours: rounded,
             supportFrom: isSupport ? home.name : null,
           },
           photoBuf,
@@ -259,7 +268,7 @@ export async function POST(req: Request) {
         cappedAt: capInfo ? capInfo.time : null,
         pressedAt: capInfo ? localTime(now, tz) : null,
         totalHours: updated.totalHours,
-        roundedHours: updated.roundedHours,
+        roundedHours: rounded,
         earlyMinutes: updated.earlyMinutes,
         lateMinutes: updated.lateMinutes,
         shiftLabel: updated.shiftLabel,

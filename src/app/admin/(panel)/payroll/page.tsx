@@ -94,13 +94,6 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
           </Link>
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Link
-            href={hide ? `/admin/payroll?${new URLSearchParams({ store: String(store._id), month })}` : qs({ hide: "1" })}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm ${hide ? "bg-secondary font-semibold text-white" : "bg-white ring-1 ring-[#f1e6c8]"}`}
-            title="Ẩn nhân viên lương 0đ và nhân viên đã nghỉ việc đã trả hết lương"
-          >
-            <span aria-hidden>{hide ? "☑" : "☐"}</span> Ẩn NV 0đ / đã nghỉ{hide && quietCount ? ` (${quietCount})` : ""}
-          </Link>
           <MonthPicker month={month} base="/admin/payroll" params={{ store: String(store._id), hide: hide ? "1" : undefined }} />
         </div>
       </div>
@@ -133,9 +126,12 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         }
       >
         {payroll?.status === "DRAFT" && (
-          <Alert tone="yellow">
-            Chưa công bố – nhân viên chưa xem được{items.some((x) => x.publishedAt) ? ` (trừ ${items.filter((x) => x.publishedAt).length} người đã công bố riêng)` : ""}. Cần cho riêng ai xem trước → bấm “👁 Công bố riêng” ở dòng người đó. Tự công bố lúc <b>00:00 ngày 5</b> tháng sau{payroll.unlockedAt ? " (đã huỷ công bố thủ công → không tự công bố lại)" : ""}. Bảng lương tự tính theo chấm công, thưởng phạt mới nhất · cập nhật {viDateTime(payroll.calculatedAt)}.
-          </Alert>
+          // hướng dẫn dài – ẩn trên điện thoại (trạng thái "Chưa công bố" đã có ở tiêu đề)
+          <div className="hidden sm:block">
+            <Alert tone="yellow">
+              Chưa công bố – nhân viên chưa xem được{items.some((x) => x.publishedAt) ? ` (trừ ${items.filter((x) => x.publishedAt).length} người đã công bố riêng)` : ""}. Cần cho riêng ai xem trước → bấm “👁 Công bố riêng” ở dòng người đó. Tự công bố lúc <b>00:00 ngày 5</b> tháng sau{payroll.unlockedAt ? " (đã huỷ công bố thủ công → không tự công bố lại)" : ""}. Bảng lương tự tính theo chấm công, thưởng phạt mới nhất · cập nhật {viDateTime(payroll.calculatedAt)}.
+            </Alert>
+          </div>
         )}
         {payroll?.status === "PUBLISHED" && (
           <Alert tone="green">
@@ -159,7 +155,17 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
         {!payroll ? (
           <Empty>Chưa có dữ liệu tháng này</Empty>
         ) : (
-          <PayrollColumns>
+          <PayrollColumns
+            extra={
+              <Link
+                href={hide ? `/admin/payroll?${new URLSearchParams({ store: String(store._id), month })}` : qs({ hide: "1" })}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 ${hide ? "bg-secondary font-semibold text-white" : "bg-white ring-1 ring-[#e9d9a8] hover:bg-primary-light"}`}
+                title="Ẩn nhân viên lương 0đ và nhân viên đã nghỉ việc đã trả hết lương"
+              >
+                <span aria-hidden>{hide ? "☑" : "☐"}</span> Ẩn NV 0đ / đã nghỉ{hide && quietCount ? ` (${quietCount})` : ""}
+              </Link>
+            }
+          >
           <div className="mt-3 overflow-x-auto">
             <table className="tbs">
               <thead>

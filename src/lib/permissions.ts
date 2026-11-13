@@ -7,6 +7,7 @@
  */
 export const ADMIN_PERMS = [
   { key: "adjustments", label: "Duyệt yêu cầu chấm công bù (nhân viên gửi)", group: "Chấm công" },
+  { key: "attendance.cutoff", label: "Chốt giờ công ca tối – bật / đổi giờ chốt từng cơ sở (Cài đặt)", group: "Chấm công" },
   { key: "revenue", label: "Doanh thu – xem bảng chốt ca luỹ kế theo ngày (menu Doanh thu, không sửa)", group: "Doanh thu" },
   { key: "finance.shiftExpenses", label: "Tài chính – Chi phí trong ca", group: "Tài chính" },
   { key: "finance.bills", label: "Tài chính – Bill / chuyển khoản", group: "Tài chính" },

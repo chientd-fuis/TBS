@@ -85,6 +85,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                               Thử việc{u.probationStart ? ` đến ${viDate(probationEnd(u.probationStart))}` : ""}
                             </span>
                           )}
+                          {u.probation && u.trialStage === "ON" && <Badge tone="pink">Đang 3 ca thử việc</Badge>}
+                          {u.probation && u.trialStage === "PENDING" && <Badge tone="orange">Chờ nhận / không nhận</Badge>}
                           {u.probation && u.probationReview && <Badge tone="red">Cần xem xét</Badge>}
                         </span>
                       )}
