@@ -30,7 +30,7 @@ export default function HelpNav() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Link href={sec ? "/help" : "/"} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-[#f1e6c8]" aria-label="Quay lại">
+        <Link href={sec ? "/help" : "/"} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-card ring-1 ring-line" aria-label="Quay lại">
           <ChevronLeft size={20} />
         </Link>
         <h1 className="min-w-0 truncate text-lg font-bold text-accent">{sec ? `${sec.icon} ${sec.label}` : "Trợ giúp"}</h1>
@@ -45,7 +45,7 @@ export default function HelpNav() {
                 href={s.href}
                 scroll={false}
                 aria-current={on ? "page" : undefined}
-                className={cn("shrink-0 rounded-full px-3 py-1.5", on ? "bg-secondary font-bold text-white" : "bg-white text-ink/70 ring-1 ring-[#f1e6c8]")}
+                className={cn("shrink-0 rounded-full px-3 py-1.5", on ? "bg-secondary font-bold text-white" : "bg-card text-ink/70 ring-1 ring-line")}
               >
                 {s.icon} {s.label}
               </Link>

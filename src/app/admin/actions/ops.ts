@@ -26,8 +26,6 @@ import { addDays, localDate, localMonth, zonedToDate } from "@/lib/time";
 import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
 import { attendancesNear, attText, dayAttendances, findOverlap, pickTarget, requestWindow } from "@/lib/adjustment";
-import { flagOvertime } from "@/lib/overtime";
-import { after } from "next/server";
 import { errMsg, num, str, type FormState } from "./types";
 import { extractSheetId } from "@/lib/revenue";
 import { normalizeIp, parseIpList } from "@/lib/checkin-methods";
@@ -600,6 +598,9 @@ export async function removePayrollExtra(itemId: string, field: string, index: n
 }
 
 /* ===== Yêu cầu điều chỉnh & phản hồi lương ===== */
+/** Ghi chú cho NV do hệ thống tự sinh (ngoài giờ chờ xác nhận / kết quả duyệt ngoài giờ / quên check-out) – hết đúng khi giờ đã được sửa */
+const isAutoStaffNote = (n?: string | null) =>
+  !!n && (n.includes("chờ admin xác nhận") || n.startsWith("Admin đã duyệt:") || n.startsWith("Admin không duyệt") || n.startsWith("Bạn quên check-out"));
 export async function resolveAdjustment(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("adjustments"); // mặc định chỉ Admin Tổng; admin cần được cấp quyền
@@ -655,16 +656,15 @@ export async function resolveAdjustment(_: FormState, fd: FormData): Promise<For
           reason: `${req.kind === "EDIT" ? "Yêu cầu sửa giờ" : req.kind === "MISSING" ? "Yêu cầu chấm bù" : "Yêu cầu NV"}: ${req.reason}`,
           source: "REQUEST",
         });
-        // sửa giờ: bỏ kết quả làm ngoài giờ / chốt công ca tối của giờ cũ → xét lại theo giờ mới
-        if (req.kind === "EDIT" && saved && (saved.overtime || saved.actualCheckOutAt)) {
-          await Attendance.updateOne({ _id: saved._id }, { $unset: { overtime: 1, actualCheckOutAt: 1 } });
+        // Admin duyệt yêu cầu = đã đồng ý ĐÚNG giờ này (kể cả phần ngoài giờ / ngoài ca) → KHÔNG tạo thêm "Làm ngoài giờ chờ xác nhận"
+        // (chỉ lượt nhân viên tự check-in / check-out mới bị xét ngoài giờ – api/attendance).
+        // Sửa giờ: bỏ kết quả ngoài giờ / chốt công ca tối của giờ cũ + ghi chú tự động đã cũ (chờ xác nhận, quên check-out…)
+        if (req.kind === "EDIT" && saved && (saved.overtime || saved.actualCheckOutAt || isAutoStaffNote(saved.staffNote))) {
+          await Attendance.updateOne(
+            { _id: saved._id },
+            { $unset: { overtime: 1, actualCheckOutAt: 1, ...(isAutoStaffNote(saved.staffNote) ? { staffNote: 1 } : {}) } },
+          );
           saved = await Attendance.findById(saved._id);
-        }
-        // làm ngoài giờ (ra muộn > 30 phút / vào sớm / ngoài ca) → gắn chờ xác nhận (giống tự bấm check-out)
-        if (outTime && saved?.status === "COMPLETED" && !saved.overtime?.status) {
-          const [u, st] = await Promise.all([User.findById(req.userId).select("name email").lean(), Store.findById(saved.storeId).select("name").lean()]);
-          const ot = await flagOvertime(saved._id, await storeTz(saved.storeId), { employeeName: u?.name || u?.email || "?", storeId: saved.storeId, storeName: st?.name || "" });
-          if (ot) after(ot.notify);
         }
         req.status = "APPROVED";
       } else {

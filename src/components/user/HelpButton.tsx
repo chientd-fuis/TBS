@@ -25,19 +25,19 @@ export default function HelpButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex shrink-0 items-center gap-1 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30"
+        className="flex shrink-0 items-center gap-1 rounded-xl bg-chip px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30"
       >
         <CircleHelp size={15} strokeWidth={2.5} /> Trợ giúp
       </button>
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label="Trợ giúp">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-shade/50 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label="Trợ giúp">
             <div className="w-full max-w-lg rounded-t-3xl bg-cream pb-[env(safe-area-inset-bottom)] shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between gap-2 border-b border-[#f1e6c8] px-4 py-3">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
                 <b className="flex items-center gap-2 text-accent">
                   <CircleHelp size={20} /> Trợ giúp
                 </b>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-full bg-white ring-1 ring-[#f1e6c8]">
+                <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-full bg-card ring-1 ring-line">
                   <X size={22} />
                 </button>
               </div>
@@ -47,7 +47,7 @@ export default function HelpButton() {
                     <Link
                       href={s.href}
                       onClick={() => setOpen(false)}
-                      className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#f1e6c8] hover:bg-primary-light"
+                      className="flex items-center gap-3 rounded-2xl bg-card p-3 ring-1 ring-line hover:bg-primary-light"
                     >
                       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light text-2xl" aria-hidden>
                         {s.icon}

@@ -10,7 +10,7 @@ export default async function HelpHome() {
     <ul className="space-y-2">
       {HELP_SECTIONS.map((s) => (
         <li key={s.key}>
-          <Link href={s.href} className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#f1e6c8] hover:bg-primary-light">
+          <Link href={s.href} className="flex items-center gap-3 rounded-2xl bg-card p-3 ring-1 ring-line hover:bg-primary-light">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light text-2xl" aria-hidden>
               {s.icon}
             </span>

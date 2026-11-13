@@ -30,7 +30,7 @@ export default async function ManageRequests() {
             {pending.map((c) => {
               const own = [String(c.fromUserId), String(c.toUserId)].includes(me);
               return (
-                <div key={String(c._id)} className={`rounded-xl p-3 text-sm ${c.kind === "SWAP" ? "bg-[#eff6ff]" : "bg-cream"}`}>
+                <div key={String(c._id)} className={`rounded-xl p-3 text-sm ${c.kind === "SWAP" ? "bg-info-soft" : "bg-cream"}`}>
                   {c.kind === "SWAP" ? (
                     <>
                       <p><Badge tone="blue">⇄ Đổi ca</Badge> <b>{users.get(String(c.fromUserId))}</b> ↔ <b>{users.get(String(c.toUserId))}</b></p>

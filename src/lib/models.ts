@@ -148,6 +148,8 @@ const UserSchema = new Schema(
     noLogin: { type: Boolean, default: false },
     managerPerms: { type: [String], default: [] },
     managerStoreIds: { type: [Schema.Types.ObjectId], default: [] }, // cơ sở được quản lý thêm (ngoài cơ sở gốc)
+    // màu giao diện app nhân viên (Tài khoản → Màu giao diện; lib/themes.ts). Thử việc luôn màu tím, bỏ qua trường này.
+    theme: { type: String, enum: ["default", "red", "pink", "jade", "blue", "dark"], default: "default" },
   },
   { timestamps: true },
 );

@@ -268,7 +268,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <p key={String(a._id)} className="flex flex-wrap items-center gap-x-2">
                   <span className="tbs-live-dot mx-0.5" aria-hidden />
                   <span><b className="text-[#166534]">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
-                  {!!a.lateMinutes && <Badge tone="orange">Muộn {minutesVi(a.lateMinutes)}</Badge>}
+                  {!!a.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(a.lateMinutes)}</Badge>}
                   {b.badges.get(String(a._id))?.map((x) => (
                     <Badge key={x.kind + x.text} tone={x.kind === "new" ? "blue" : x.kind === "ending" ? "yellow" : "red"}>{x.text}</Badge>
                   ))}

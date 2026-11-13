@@ -35,8 +35,8 @@ export function ConfirmDialog({
   if (!open || typeof document === "undefined") return null;
   // Portal ra <body>: hộp thoại hay nằm trong ô bảng (whitespace-nowrap, text-right, overflow…) → không kế thừa style đó.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 text-left whitespace-normal" onClick={() => !busy && onCancel()}>
-      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-shade/40 p-4 text-left whitespace-normal" onClick={() => !busy && onCancel()}>
+      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="flex items-start gap-2 text-base font-bold text-accent">
           {danger && <TriangleAlert size={18} className="mt-0.5 shrink-0 text-danger" />}
           <span className="min-w-0 break-words">{title}</span>

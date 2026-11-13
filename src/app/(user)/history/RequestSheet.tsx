@@ -1,10 +1,11 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronRight, Loader2, Plus, X } from "lucide-react";
 import { normalizeTime } from "@/components/TimeInput";
 import { roundedHours, type RoundingConfig } from "@/lib/calc";
 import { ATT_EDIT_EVENT } from "@/components/user/AttEditButton";
+import { minutesVi as mins } from "@/lib/format";
 import { submitAdjustment } from "../actions";
 
 /** 1 lượt chấm công để chọn sửa giờ (giờ HH:mm theo giờ cơ sở) */
@@ -44,6 +45,16 @@ const span = (a: string, b: string): [number, number] | null => {
   if (s == null || e == null) return null;
   return [s, e <= s ? e + 1440 : e];
 };
+/** giờ vào / ra vô lý: trùng nhau (= 24 tiếng) hoặc quá 16 tiếng → báo ngay dưới ô giờ, không cho gửi */
+const MAX_SPAN_MIN = 16 * 60;
+const spanIssue = (sp: [number, number] | null) => {
+  if (!sp) return null;
+  const d = sp[1] - sp[0];
+  if (d === 1440) return "Giờ ra trùng giờ vào – kiểm tra lại.";
+  if (d > MAX_SPAN_MIN)
+    return `Một lượt làm việc không quá 16 tiếng (đang là ${Math.floor(d / 60)} tiếng${d % 60 ? ` ${d % 60} phút` : ""}). Kiểm tra lại giờ vào / giờ ra – giờ ra nhỏ hơn giờ vào là làm qua đêm.`;
+  return null;
+};
 /** lượt đã chấm: quên check-out chỉ có giờ vào, đang trong ca tính tới hết ngày */
 const attSpan = (a: PickAtt): [number, number] => {
   const s = toMin(a.inTime) ?? 0;
@@ -54,7 +65,6 @@ const attSpan = (a: PickAtt): [number, number] => {
 const overlaps = (r: [number, number], a: [number, number]) => (a[1] === a[0] ? a[0] >= r[0] && a[0] < r[1] : Math.min(a[1], r[1]) - Math.max(a[0], r[0]) > 0);
 const hv = (n: number | null | undefined) => `${String(n ?? 0).replace(".", ",")}h`;
 const ddmm = (ymd: string) => `${ymd.slice(8)}/${ymd.slice(5, 7)}`;
-const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}'` : `${m}'`);
 
 const REASONS: Record<Kind, string[]> = {
   MISSING: ["Quên cả check-in và check-out", "Điện thoại hết pin", "Lỗi app / GPS / WiFi"],
@@ -68,7 +78,7 @@ function Chip({ on, disabled, onClick, children }: { on?: boolean; disabled?: bo
       disabled={disabled}
       aria-pressed={on}
       onClick={onClick}
-      className={`rounded-full px-3 py-2 text-sm ${on ? "bg-accent text-white" : disabled ? "bg-[#f6f0e0] text-ink/50 line-through" : "bg-white text-ink ring-1 ring-[#e2d3b0] active:bg-primary-light"}`}
+      className={`rounded-full px-3 py-2 text-sm ${on ? "bg-accent text-on-accent" : disabled ? "bg-muted text-ink/50 line-through" : "bg-card text-ink ring-1 ring-line-strong active:bg-primary-light"}`}
     >
       {children}
     </button>
@@ -88,13 +98,18 @@ function TimeBox({ label, value, onChange, hint, warn }: { label: string; value:
         placeholder="VD 08:30"
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/[^\d:.h]/g, ""))}
+        // chạm vào ô đã có giờ (đủ 5 ký tự) → chọn hết để gõ đè luôn, không bị kẹt do giới hạn 5 ký tự
+        onFocus={(e) => {
+          const el = e.currentTarget;
+          window.setTimeout(() => el.setSelectionRange(0, el.value.length), 0);
+        }}
         onBlur={() => {
           const n = normalizeTime(value);
           if (n) onChange(n);
         }}
-        className="h-12 w-full rounded-xl bg-white px-3 text-base font-normal text-ink ring-1 ring-[#e2d3b0] focus:outline-none focus:ring-2 focus:ring-primary"
+        className="h-12 w-full rounded-xl bg-card px-3 text-base font-normal text-ink ring-1 ring-line-strong focus:outline-none focus:ring-2 focus:ring-primary"
       />
-      {hint && <span className={`text-xs font-medium ${warn ? "text-[#c2410c]" : "text-ink/70"}`}>{hint}</span>}
+      {hint && <span className={`text-xs font-medium ${warn ? "text-late-fg" : "text-ink/70"}`}>{hint}</span>}
     </label>
   );
 }
@@ -119,7 +134,7 @@ function Reason({ kind, value, onChange }: { kind: Kind; value: string; onChange
         maxLength={300}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Ghi rõ để admin duyệt nhanh"
-        className="resize-none rounded-xl bg-white px-3 py-2.5 text-base text-ink ring-1 ring-[#e2d3b0] focus:outline-none focus:ring-2 focus:ring-primary"
+        className="resize-none rounded-xl bg-card px-3 py-2.5 text-base text-ink ring-1 ring-line-strong focus:outline-none focus:ring-2 focus:ring-primary"
       />
     </div>
   );
@@ -128,8 +143,8 @@ function Reason({ kind, value, onChange }: { kind: Kind; value: string; onChange
 /**
  * Popup "Gửi yêu cầu chấm công" (trang Lịch sử) – 2 tab:
  *  - Quên chấm công: chấm bù 1 ca app không có lượt nào (bắt buộc ngày, giờ vào, giờ ra, lý do).
- *  - Sửa giờ ca đã chấm: chọn 1 lượt (hoặc bấm nhãn Quên check-out / Muộn / Sớm trong bảng) → sửa giờ vào / ra.
- * Dữ liệu từng tab giữ riêng; gửi lỗi (kể cả mất mạng) → giữ nguyên, chỉ hiện lỗi. Gửi xong mới xoá.
+ *  - Sửa giờ ca đã chấm: chọn 1 lượt (hoặc bấm nhãn Quên check-out / Đi muộn / Về sớm trong bảng) → sửa giờ vào / ra.
+ * Dữ liệu từng tab giữ riêng; gửi lỗi (kể cả mất mạng) → giữ nguyên, chỉ hiện lỗi. Gửi thành công → xoá sạch cả 2 tab.
  */
 export default function RequestSheet({
   atts,
@@ -184,7 +199,43 @@ export default function RequestSheet({
     [byId],
   );
 
-  // bấm nhãn Quên check-out / Muộn / Sớm trong bảng chấm công → mở đúng lượt
+  /**
+   * Nút "Sửa giờ lượt … thay vì chấm bù": hiện đang mở (vòng xoay) cho người dùng thấy đã bấm,
+   * rồi chuyển sang tab Sửa giờ (mang theo giờ + lý do đã điền) và cuộn popup lên đầu để thấy form.
+   */
+  const sheetRef = useRef<HTMLElement>(null);
+  const [jumping, setJumping] = useState<string | null>(null);
+  const jumpToEdit = (a: PickAtt) => {
+    if (jumping) return;
+    setJumping(a.id);
+    const carry = { inT: normalizeTime(mIn) || undefined, outT: normalizeTime(mOut) || undefined, reason: mReason };
+    window.setTimeout(() => {
+      editAtt(a.id, carry);
+      setJumping(null);
+      sheetRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }, 350);
+  };
+  const jumpBtn = (a: PickAtt, className: string) => (
+    <button
+      type="button"
+      onClick={() => jumpToEdit(a)}
+      disabled={!!jumping}
+      aria-busy={jumping === a.id || undefined}
+      className={`inline-flex items-center gap-2 rounded-lg bg-card px-3 py-2 font-bold text-accent ring-1 ring-bad-line active:scale-[.98] disabled:opacity-80 ${className}`}
+    >
+      {jumping === a.id ? (
+        <>
+          <Loader2 size={16} className="animate-spin" aria-hidden /> Đang mở lượt {a.inTime} → {a.outTime ?? "…"}…
+        </>
+      ) : (
+        <>
+          Sửa giờ lượt {a.inTime} → {a.outTime ?? "…"} thay vì chấm bù
+        </>
+      )}
+    </button>
+  );
+
+  // bấm nhãn Quên check-out / Đi muộn / Về sớm trong bảng chấm công → mở đúng lượt
   useEffect(() => {
     const on = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -197,14 +248,38 @@ export default function RequestSheet({
     return () => window.removeEventListener(ATT_EDIT_EVENT, on);
   }, [byId, editAtt]);
   // mở popup: khoá cuộn trang phía sau
+  /**
+   * iPhone (Safari): popup cố định có ô nhập → bật bàn phím, Safari tự cuộn trang phía sau làm popup lệch khỏi chỗ chạm
+   * (chạm ô Giờ vào không được, chạm nhiều lần như bị đơ). Cách chữa:
+   *  - khoá hẳn trang phía sau (body position: fixed, giữ vị trí cuộn, trả lại khi đóng)
+   *  - khung popup bám theo vùng nhìn thấy (visualViewport) → bàn phím mở thì popup co lại phía trên bàn phím
+   */
+  const [vv, setVv] = useState<{ top: number; h: number } | null>(null);
   useEffect(() => {
     if (!open) return;
-    const o = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const y = window.scrollY;
+    const b = document.body.style;
+    const prev = { position: b.position, top: b.top, left: b.left, right: b.right, overflow: b.overflow };
+    Object.assign(b, { position: "fixed", top: `-${y}px`, left: "0", right: "0", overflow: "hidden" });
+    const v = window.visualViewport;
+    // chỉ bám theo vùng nhìn thấy khi bàn phím đang mở (vùng nhìn thấy thấp hơn hẳn cửa sổ); bình thường để popup phủ kín như cũ
+    const fit = () => v && setVv(v.height < window.innerHeight - 120 ? { top: v.offsetTop, h: v.height } : null);
+    fit();
+    v?.addEventListener("resize", fit);
+    v?.addEventListener("scroll", fit);
     return () => {
-      document.body.style.overflow = o;
+      v?.removeEventListener("resize", fit);
+      v?.removeEventListener("scroll", fit);
+      Object.assign(b, prev);
+      window.scrollTo(0, y);
+      setVv(null);
     };
   }, [open]);
+  // gửi bị lỗi → cuộn tới ô báo lỗi (tránh lỗi nằm khuất dưới đáy popup / sau thanh trình duyệt)
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(""), 5000);
@@ -224,7 +299,8 @@ export default function RequestSheet({
   /* ---- tab Quên chấm công ---- */
   const dayAtts = atts.filter((a) => a.workDate === date);
   const mSpan = span(mIn, mOut);
-  const clash = mSpan ? dayAtts.find((a) => overlaps(mSpan, attSpan(a))) : undefined;
+  const mIssue = spanIssue(mSpan);
+  const clash = mSpan && !mIssue ? dayAtts.find((a) => overlaps(mSpan, attSpan(a))) : undefined;
   const dayShifts = (shifts[date] ?? []).map((s) => {
     const sp = span(s.start, s.end);
     return { ...s, done: !!sp && dayAtts.some((a) => overlaps(sp, attSpan(a))) };
@@ -232,10 +308,27 @@ export default function RequestSheet({
 
   /* ---- tab Sửa giờ ---- */
   const eSpan = span(eIn, eOut);
+  const eIssue = spanIssue(eSpan);
   const inDiff = att ? (toMin(att.inTime) ?? 0) - (toMin(eIn) ?? toMin(att.inTime) ?? 0) : 0;
   const changed = !!att && (normalizeTime(eIn) !== att.inTime || (normalizeTime(eOut) || null) !== att.outTime);
   const picks = [...atts].sort((a, b) => Number(b.status === "MISSING_CHECKOUT" && usable(b)) - Number(a.status === "MISSING_CHECKOUT" && usable(a)));
   const shown = showAll ? picks : picks.slice(0, 8);
+
+  /** Về trạng thái ban đầu: cả tab Quên chấm công lẫn Sửa giờ (giờ, lý do, lượt đã chọn, ngày) */
+  const resetForm = () => {
+    setTab("MISSING");
+    setDate(today);
+    setMIn("");
+    setMOut("");
+    setMReason("");
+    setAttId(null);
+    setChoosing(false);
+    setShowAll(false);
+    setEIn("");
+    setEOut("");
+    setEReason("");
+    setError(null);
+  };
 
   const send = () => {
     setError(null);
@@ -247,6 +340,7 @@ export default function RequestSheet({
       if (!att) return setError({ msg: "Chọn lượt cần sửa" });
       if (!i) return setError({ msg: "Nhập giờ vào (dạng 24h, VD 08:00)" });
       if (!o) return setError({ msg: "Nhập giờ ra (dạng 24h, VD 17:30)" });
+      if (eIssue) return setError({ msg: eIssue });
       if (!changed) return setError({ msg: "Bạn chưa đổi giờ nào so với app đang ghi" });
       if (eReason.trim().length < 5) return setError({ msg: "Nhập lý do (ít nhất 5 ký tự)" });
       fd.set("attendanceId", att.id);
@@ -259,6 +353,7 @@ export default function RequestSheet({
       if (!date) return setError({ msg: "Chọn ngày làm" });
       if (!i) return setError({ msg: "Nhập giờ vào (dạng 24h, VD 08:00)" });
       if (!o) return setError({ msg: "Nhập giờ ra (dạng 24h, VD 17:30)" });
+      if (mIssue) return setError({ msg: mIssue });
       if (clash) return setError({ msg: `Trùng lượt đã chấm ${clash.inTime} → ${clash.outTime ?? "quên check-out"} (${clash.shiftLabel ?? "ngoài ca"}). Không thể chấm bù chồng lên lượt đã có.`, overlapId: clash.id });
       if (mReason.trim().length < 5) return setError({ msg: "Nhập lý do (ít nhất 5 ký tự)" });
       fd.set("workDate", date);
@@ -271,16 +366,7 @@ export default function RequestSheet({
       try {
         const r = await submitAdjustment(null, fd);
         if (r?.ok) {
-          if (kind === "EDIT") {
-            setAttId(null);
-            setEIn("");
-            setEOut("");
-            setEReason("");
-          } else {
-            setMIn("");
-            setMOut("");
-            setMReason("");
-          }
+          resetForm(); // gửi thành công (tab nào cũng vậy) → xoá sạch cả 2 tab, lần mở sau là form trống
           setOpen(false);
           setToast(kind === "EDIT" ? "Đã gửi yêu cầu sửa giờ – chờ admin duyệt." : "Đã gửi yêu cầu chấm bù – chờ admin duyệt.");
           router.refresh();
@@ -301,7 +387,7 @@ export default function RequestSheet({
         setError(null);
         if (k === "EDIT" && !attId) setChoosing(true);
       }}
-      className={`rounded-[11px] px-1.5 py-2 text-center ${tab === k ? "bg-primary text-ink shadow-sm" : "text-ink/70"}`}
+      className={`rounded-[11px] px-1.5 py-2 text-center ${tab === k ? "bg-primary text-on-primary shadow-sm" : "text-ink/70"}`}
     >
       <span className={`block text-sm ${tab === k ? "font-bold" : "font-semibold"}`}>{title}</span>
       <span className="block text-[11px]">{sub}</span>
@@ -314,7 +400,7 @@ export default function RequestSheet({
       <button
         type="button"
         onClick={openSheet}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-white active:scale-[.99]"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-on-accent active:scale-[.99]"
       >
         <Plus size={18} aria-hidden /> Gửi yêu cầu chấm công
       </button>
@@ -326,22 +412,27 @@ export default function RequestSheet({
         </div>
       )}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onClick={() => !sending && setOpen(false)}>
+        <div
+          className="fixed inset-x-0 top-0 bottom-0 z-50 flex touch-manipulation items-end justify-center bg-shade/50 sm:items-center sm:p-4"
+          style={vv ? { top: vv.top, height: vv.h, bottom: "auto" } : undefined}
+          onClick={() => !sending && setOpen(false)}
+        >
           <section
+            ref={sheetRef}
             role="dialog"
             aria-modal="true"
             aria-label="Gửi yêu cầu chấm công"
             onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[92dvh] w-full max-w-md flex-col gap-3.5 overflow-y-auto rounded-t-3xl bg-cream px-4 pb-5 pt-2.5 text-ink sm:rounded-3xl"
+            className="flex max-h-[92%] w-full max-w-md flex-col gap-3.5 overflow-y-auto overscroll-contain rounded-t-3xl bg-cream px-4 pb-5 pt-2.5 text-ink sm:rounded-3xl"
           >
-            <div className="mx-auto h-1 w-10 shrink-0 rounded bg-[#e2d3b0] sm:hidden" />
+            <div className="mx-auto h-1 w-10 shrink-0 rounded bg-line-strong sm:hidden" />
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-accent">Gửi yêu cầu chấm công</h2>
-              <button type="button" aria-label="Đóng" onClick={() => setOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white ring-1 ring-[#f1e6c8]">
+              <button type="button" aria-label="Đóng" onClick={() => setOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-card ring-1 ring-line">
                 <X size={16} />
               </button>
             </div>
-            <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl bg-[#f3e9cf] p-1">
+            <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1">
               {tabBtn("MISSING", "Quên chấm công", "Chấm bù ca bị thiếu")}
               {tabBtn("EDIT", "Sửa giờ ca đã chấm", "Quên check-out, vào sớm…")}
             </div>
@@ -361,7 +452,7 @@ export default function RequestSheet({
                     min={minDate}
                     max={today}
                     onChange={(e) => setDate(e.target.value)}
-                    className="h-12 rounded-xl bg-white px-3 text-base font-normal text-ink ring-1 ring-[#e2d3b0] focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="h-12 rounded-xl bg-card px-3 text-base font-normal text-ink ring-1 ring-line-strong focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </label>
                 {dayShifts.length > 0 && (
@@ -393,21 +484,17 @@ export default function RequestSheet({
                 </div>
                 <p className="-mt-1.5 text-xs text-ink/70">Cả giờ vào và giờ ra đều bắt buộc. Giờ ra nhỏ hơn giờ vào = làm qua đêm.</p>
                 {mSpan &&
-                  (clash ? (
-                    <div className="rounded-xl bg-[#fdecec] px-3 py-2.5 text-[13px] leading-relaxed text-[#9f1d1d] ring-1 ring-[#f5c2c2]">
+                  (mIssue ? (
+                    <div role="alert" className="rounded-xl bg-bad-soft px-3 py-2.5 text-[13px] leading-relaxed text-bad-fg ring-1 ring-bad-line">
+                      {mIssue}
+                    </div>
+                  ) : clash ? (
+                    <div className="rounded-xl bg-bad-soft px-3 py-2.5 text-[13px] leading-relaxed text-bad-fg ring-1 ring-bad-line">
                       <b>Trùng lượt đã chấm:</b> {clash.shiftLabel ?? "Ngoài ca"} {clash.inTime} → {clash.outTime ?? "quên check-out"}.
-                      {usable(clash) && (
-                        <button
-                          type="button"
-                          onClick={() => editAtt(clash.id, { inT: normalizeTime(mIn) || undefined, outT: normalizeTime(mOut) || undefined, reason: mReason })}
-                          className="mt-2 block rounded-lg bg-white px-3 py-2 font-bold text-accent ring-1 ring-[#f5c2c2]"
-                        >
-                          Sửa giờ lượt {clash.inTime} → {clash.outTime ?? "…"} thay vì chấm bù
-                        </button>
-                      )}
+                      {usable(clash) && <div className="mt-2">{jumpBtn(clash, "")}</div>}
                     </div>
                   ) : (
-                    <div className="rounded-xl bg-[#eef7f0] px-3 py-2.5 text-[13px] leading-relaxed ring-1 ring-[#bfe3c8]">
+                    <div className="rounded-xl bg-ok-soft px-3 py-2.5 text-[13px] leading-relaxed ring-1 ring-ok-line">
                       {dayAtts.length > 0 ? (
                         <>
                           Hôm {ddmm(date)} app đã có: <b>{dayAtts.map((a) => `${a.shiftLabel ?? "Ngoài ca"} ${a.inTime} → ${a.outTime ?? "quên check-out"}`).join("; ")}</b>. Không trùng → sẽ{" "}
@@ -428,7 +515,7 @@ export default function RequestSheet({
               <>
                 <p className="text-sm font-semibold">Chọn lượt cần sửa</p>
                 {picks.length === 0 ? (
-                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-ink/70 ring-1 ring-[#f1e6c8]">Chưa có lượt chấm công nào trong tháng này và tháng trước.</p>
+                  <p className="rounded-xl bg-card px-3 py-3 text-sm text-ink/70 ring-1 ring-line">Chưa có lượt chấm công nào trong tháng này và tháng trước.</p>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {shown.map((a) => {
@@ -440,7 +527,7 @@ export default function RequestSheet({
                           type="button"
                           disabled={!ok}
                           onClick={() => editAtt(a.id)}
-                          className={`flex items-center gap-2.5 rounded-2xl p-3 text-left ${ok ? `bg-white ring-1 ${missing ? "ring-[#f5c2c2]" : "ring-[#f1e6c8]"} active:bg-primary-light` : "bg-[#f6f0e0] text-ink/60 ring-1 ring-[#f1e6c8]"}`}
+                          className={`flex items-center gap-2.5 rounded-2xl p-3 text-left ${ok ? `bg-card ring-1 ${missing ? "ring-bad-line" : "ring-line"} active:bg-primary-light` : "bg-muted text-ink/60 ring-1 ring-line"}`}
                         >
                           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span className="text-sm font-bold">
@@ -452,17 +539,17 @@ export default function RequestSheet({
                             </span>
                           </span>
                           {a.pending ? (
-                            <span className="whitespace-nowrap rounded-full bg-[#fef3c7] px-2 py-0.5 text-xs font-semibold text-[#854d0e]">Đang chờ duyệt</span>
+                            <span className="whitespace-nowrap rounded-full bg-wait-bg px-2 py-0.5 text-xs font-semibold text-wait-fg">Đang chờ duyệt</span>
                           ) : a.locked ? (
-                            <span className="whitespace-nowrap rounded-full bg-[#eee] px-2 py-0.5 text-xs font-semibold">Đã trả lương</span>
+                            <span className="whitespace-nowrap rounded-full bg-mute-bg px-2 py-0.5 text-xs font-semibold">Đã trả lương</span>
                           ) : a.status === "OPEN" ? (
                             <span className="whitespace-nowrap rounded-full bg-primary-light px-2 py-0.5 text-xs font-semibold">Đang trong ca</span>
                           ) : missing ? (
                             <span className="whitespace-nowrap rounded-full bg-[#b91c1c] px-2 py-0.5 text-xs font-semibold text-white">Quên check-out</span>
                           ) : a.late ? (
-                            <span className="whitespace-nowrap rounded-full bg-[#ffedd5] px-2 py-0.5 text-xs font-semibold text-[#9a3412]">Muộn {mins(a.late)}</span>
+                            <span className="whitespace-nowrap rounded-full bg-late-bg px-2 py-0.5 text-xs font-semibold text-late-fg">Đi muộn {mins(a.late)}</span>
                           ) : a.early ? (
-                            <span className="whitespace-nowrap rounded-full bg-[#ffedd5] px-2 py-0.5 text-xs font-semibold text-[#9a3412]">Sớm {mins(a.early)}</span>
+                            <span className="whitespace-nowrap rounded-full bg-late-bg px-2 py-0.5 text-xs font-semibold text-late-fg">Về sớm {mins(a.early)}</span>
                           ) : null}
                           {ok && <ChevronRight size={18} className="shrink-0" aria-hidden />}
                         </button>
@@ -476,7 +563,7 @@ export default function RequestSheet({
                   </div>
                 )}
                 <p className="text-xs leading-relaxed text-ink/70">Lượt quên check-out luôn ở trên cùng. Chỉ hiện tháng này và tháng trước; lượt đang chờ duyệt hoặc tháng đã trả lương không chọn được.</p>
-                <p className="rounded-xl bg-white px-3 py-2.5 text-[13px] leading-relaxed ring-1 ring-[#f1e6c8]">
+                <p className="rounded-xl bg-card px-3 py-2.5 text-[13px] leading-relaxed ring-1 ring-line">
                   Không thấy lượt nào cho ca bạn đã làm? Đó là quên chấm công → dùng tab{" "}
                   <button type="button" onClick={() => setTab("MISSING")} className="font-bold text-accent underline">
                     Quên chấm công
@@ -486,7 +573,7 @@ export default function RequestSheet({
               </>
             ) : (
               <>
-                <div className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 ring-2 ring-primary">
+                <div className="flex flex-col gap-1.5 rounded-2xl bg-card p-3 ring-2 ring-primary">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-ink/70">LƯỢT CẦN SỬA</span>
                     <button type="button" onClick={() => setChoosing(true)} className="text-[13px] font-semibold text-accent underline">
@@ -546,7 +633,12 @@ export default function RequestSheet({
                   />
                   <TimeBox label="Giờ ra" value={eOut} onChange={setEOut} hint={att.shiftEnd ? `Ca kết thúc ${att.shiftEnd}` : undefined} />
                 </div>
-                {changed && eSpan && (
+                {eIssue && (
+                  <div role="alert" className="rounded-xl bg-bad-soft px-3 py-2.5 text-[13px] leading-relaxed text-bad-fg ring-1 ring-bad-line">
+                    {eIssue}
+                  </div>
+                )}
+                {changed && eSpan && !eIssue && (
                   <div className="rounded-xl bg-primary-light px-3 py-2.5 text-[13px] leading-relaxed">
                     <b>Sau khi admin duyệt</b>
                     <div className="grid grid-cols-[72px_1fr] gap-x-2">
@@ -570,17 +662,9 @@ export default function RequestSheet({
             )}
 
             {error && (
-              <div role="alert" className="flex flex-col gap-2 rounded-xl bg-[#fdecec] px-3 py-2.5 text-[13px] leading-relaxed text-[#9f1d1d] ring-1 ring-[#f5c2c2]">
+              <div ref={errorRef} role="alert" className="flex flex-col gap-2 rounded-xl bg-bad-soft px-3 py-2.5 text-[13px] leading-relaxed text-bad-fg ring-1 ring-bad-line">
                 <span>{error.msg}</span>
-                {tab === "MISSING" && overlapAtt && usable(overlapAtt) && !clash && (
-                  <button
-                    type="button"
-                    onClick={() => editAtt(overlapAtt.id, { inT: normalizeTime(mIn) || undefined, outT: normalizeTime(mOut) || undefined, reason: mReason })}
-                    className="self-start rounded-lg bg-white px-3 py-2 font-bold text-accent ring-1 ring-[#f5c2c2]"
-                  >
-                    Sửa giờ lượt {overlapAtt.inTime} → {overlapAtt.outTime ?? "…"} thay vì chấm bù
-                  </button>
-                )}
+                {tab === "MISSING" && overlapAtt && usable(overlapAtt) && !clash && jumpBtn(overlapAtt, "self-start")}
               </div>
             )}
             {!(tab === "EDIT" && (choosing || !att)) && (
@@ -589,7 +673,7 @@ export default function RequestSheet({
                   type="button"
                   onClick={send}
                   disabled={sending}
-                  className="flex h-[50px] items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-ink disabled:opacity-70"
+                  className="flex h-[50px] items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-on-primary disabled:opacity-70"
                 >
                   {sending && <Loader2 size={18} className="animate-spin" aria-hidden />}
                   {sending ? "Đang gửi…" : error ? "Gửi lại" : tab === "EDIT" ? "Gửi yêu cầu sửa giờ" : "Gửi yêu cầu chấm bù"}

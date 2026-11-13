@@ -199,8 +199,8 @@ export async function buildExport(f: ExportFilter) {
           { header: "Format", key: "f", width: 8 },
           { header: "Giờ tính công", key: "r", width: 12, fmt: "0.0#" },
           { header: "Ca", key: "ca", width: 22 },
-          { header: "Muộn (phút)", key: "late", width: 10 },
-          { header: "Sớm (phút)", key: "early", width: 10 },
+          { header: "Đi muộn (phút)", key: "late", width: 13 },
+          { header: "Về sớm (phút)", key: "early", width: 13 },
           { header: "Nguồn", key: "src", width: 12 },
           { header: "Ghi chú", key: "note", width: 40 },
         ]);

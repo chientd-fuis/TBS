@@ -58,7 +58,7 @@ function QtyInput({ value, onChange }: { value: number; onChange: (n: number) =>
         if (v != null) onChange(v);
       }}
       onBlur={() => setT(qtyText(value))}
-      className="w-14 rounded-lg border border-[#e9d9a8] px-1 py-1 text-center text-base"
+      className="w-14 rounded-lg border border-line-strong px-1 py-1 text-center text-base"
     />
   );
 }
@@ -220,7 +220,7 @@ export default function GoodsForm({
   return (
     <div className="space-y-3">
       {mode === "admin" && stores ? (
-        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 text-sm">
+        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full rounded-xl border border-line-strong bg-card px-3 py-2 text-sm">
           <option value="">— Chọn cơ sở —</option>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -235,12 +235,12 @@ export default function GoodsForm({
           onChange={(e) => setText(e.target.value)}
           rows={2}
           placeholder={stock ? "Gõ số còn: tồn 3mn, 1nl, 2 bột na, hết sầu múi" : "Gõ như nhắn nhóm: nhận 5mn, 2nl, 3 bột na"}
-          className="w-full resize-none rounded-xl border border-[#e9d9a8] bg-white px-3 py-2 text-base"
+          className="w-full resize-none rounded-xl border border-line-strong bg-card px-3 py-2 text-base"
         />
         {text.trim() && (
           <div className="mt-1.5 space-y-1 text-sm">
             {preview.lines.length > 0 && (
-              <p className="text-secondary-dark">
+              <p className="text-good">
                 Hiểu là: <b>{preview.lines.map((l) => `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`).join(" · ")}</b>
               </p>
             )}
@@ -272,7 +272,7 @@ export default function GoodsForm({
       </div>
 
       {drafts.map((d, di) => (
-        <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-[#fff4e5] ring-warn/40" : "bg-white ring-[#f1e6c8]"}`}>
+        <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-warn-soft ring-warn/40" : "bg-card ring-line"}`}>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
             <span className="font-bold text-accent">{drafts.length > 1 ? `Lần ${di + 1}` : stock ? "Đồ còn tồn" : "Đồ đã nhận"}</span>
             {isUser ? (
@@ -301,7 +301,7 @@ export default function GoodsForm({
           {d.lines.length === 0 ? (
             <p className="py-2 text-center text-sm text-ink/50">Chưa có món – gõ ở ô trên hoặc chọn bên dưới</p>
           ) : (
-            <ul className="divide-y divide-[#f1e6c8]">
+            <ul className="divide-y divide-line">
               {d.lines.map((l, li) => (
                 <li key={`${l.name}|${l.unit}`} className="flex items-center gap-2 py-1.5">
                   <span className="min-w-0 flex-1 truncate font-semibold">{l.name}</span>
@@ -316,7 +316,7 @@ export default function GoodsForm({
                     value={l.unit}
                     placeholder="đv"
                     onChange={(e) => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, unit: e.target.value.slice(0, 20) } : x)))}
-                    className="w-14 rounded-lg border border-transparent px-1 py-1 text-xs text-ink/70 focus:border-[#e9d9a8]"
+                    className="w-14 rounded-lg border border-transparent px-1 py-1 text-xs text-ink/70 focus:border-line-strong"
                   />
                   <button type="button" aria-label="Xoá" onClick={() => setLines(d.key, (ls) => ls.filter((_, k) => k !== li))} className="text-ink/40 hover:text-danger">
                     <X size={17} />
@@ -331,7 +331,7 @@ export default function GoodsForm({
               const name = e.target.value;
               if (name) setLines(d.key, (ls) => mergeLines([...ls, { name, qty: 1, unit: unitOf.get(name) ?? "" }]));
             }}
-            className="mt-2 w-full rounded-xl border border-dashed border-[#e9d9a8] bg-white px-3 py-2 text-sm text-ink/70"
+            className="mt-2 w-full rounded-xl border border-dashed border-line-strong bg-card px-3 py-2 text-sm text-ink/70"
           >
             <option value="">+ Thêm món…</option>
             {catalog.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
@@ -340,7 +340,7 @@ export default function GoodsForm({
             value={d.note}
             onChange={(e) => patch(d.key, { note: e.target.value })}
             placeholder="Ghi chú (tuỳ chọn) – VD thiếu 1 hộp, hàng hỏng…"
-            className="mt-2 w-full rounded-xl border border-[#e9d9a8] px-3 py-2 text-sm"
+            className="mt-2 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
           />
         </div>
       ))}

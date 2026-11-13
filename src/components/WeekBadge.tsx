@@ -1,7 +1,7 @@
 /** Nhãn tuần: chữ thường, in đậm – "Tuần này" xanh lá, "Tuần sau" cam, tuần khác xám. */
 export function WeekBadge({ label }: { label?: string | null }) {
   if (!label) return null;
-  const tone = label === "Tuần này" ? "text-secondary-dark" : label === "Tuần sau" ? "text-warn" : "text-ink/60";
+  const tone = label === "Tuần này" ? "text-good" : label === "Tuần sau" ? "text-warn" : "text-ink/60";
   return <span className={`text-sm font-bold ${tone}`}>{label}</span>;
 }
 

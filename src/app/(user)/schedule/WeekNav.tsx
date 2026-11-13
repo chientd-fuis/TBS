@@ -7,7 +7,7 @@ export function WeekNav({ ws, href, min, label }: { ws: string; href: (w: string
   const prev = addDays(ws, -7);
   const canPrev = !min || prev >= min;
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]">
+    <div className="flex items-center justify-between gap-2 rounded-xl bg-card p-1 ring-1 ring-line">
       {canPrev ? (
         <Link href={href(prev)} className="rounded-lg p-2 hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
       ) : (

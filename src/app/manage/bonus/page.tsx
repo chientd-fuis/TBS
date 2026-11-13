@@ -51,7 +51,7 @@ export default async function ManageBonus() {
         {!mine.length ? (
           <Empty>Chưa có</Empty>
         ) : (
-          <ul className="divide-y divide-[#f1e6c8]">
+          <ul className="divide-y divide-line">
             {mine.map((b) => (
               <li key={String(b._id)} className="space-y-1 py-2.5 text-sm">
                 <p className="flex flex-wrap items-center gap-2">

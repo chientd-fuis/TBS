@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 /* Bảng màu Tiệm Bơ Sầu – spec 1.1 */
-@theme {
+/* static: luôn xuất mọi biến màu ra :root – các theme (.theme-x) ghi đè, và style inline (lịch ca) đọc var(--color-...) mà Tailwind không quét được */
+@theme static {
   --color-primary: #fccc18;
   --color-primary-dark: #e4b414;
   --color-primary-light: #fff4cc;
@@ -14,12 +15,227 @@
   --color-warn: #e8590c;
   --color-danger: #d64545;
   --color-bonus: #3c9c54;
+
+  /* ===== Token theo theme (app nhân viên đổi màu – lib/themes.ts). Giá trị dưới = theme Vàng bơ mặc định / trang admin ===== */
+  --color-on-primary: #542424; /* chữ trên nền primary (nút chính, đầu bảng, tab đang chọn) */
+  --color-header: #fccc18; /* thanh đầu trang app nhân viên */
+  --color-on-header: #542424;
+  --color-on-accent: #ffffff; /* chữ trên nền accent */
+  --color-card: #ffffff; /* thẻ, ô nhập, popup, menu dưới */
+  --color-chip: rgb(255 255 255 / 0.7); /* nút nhỏ trên thanh đầu trang (Trợ giúp, Nội quy…) */
+  --color-line: #f1e6c8; /* viền thẻ / đường kẻ */
+  --color-line-strong: #e9d9a8; /* viền ô nhập */
+  --color-muted: #f3e9cf; /* nền nhóm tab, chip bị tắt */
+  --color-shade: #542424; /* nền phủ sau popup, khung camera */
+  --color-good: #18783c; /* chữ báo tốt / đã duyệt / khớp */
+  --color-live: #166534; /* tên đang trong ca */
+  --color-tag: #1d4ed8; /* nhãn CS hỗ trợ trên lịch */
+  /* màu trạng thái (giữ nguyên ở mọi theme sáng, đổi bản tối ở theme Tối) */
+  --color-ok-bg: #e3f3e7;
+  --color-ok-soft: #eef7f0;
+  --color-ok-line: #bfe3c8;
+  --color-bad-bg: #fde2e2;
+  --color-bad-soft: #fdecec;
+  --color-bad-line: #f5c2c2;
+  --color-bad-fg: #9f1d1d;
+  --color-info-bg: #dbeafe;
+  --color-info-soft: #eef6ff;
+  --color-info-line: #93c5fd;
+  --color-info-fg: #1e40af;
+  --color-warn-soft: #fff4e5;
+  --color-warn-line: #fde2c4;
+  --color-late-bg: #ffe8d9;
+  --color-late-strong: #ffd8b8;
+  --color-late-fg: #9a3412;
+  --color-wait-bg: #fef3c7;
+  --color-wait-fg: #854d0e;
+  --color-violet-bg: #f3e8ff;
+  --color-violet-soft: #fdfcff;
+  --color-violet-line: #ddd6fe;
+  --color-violet-fg: #6b21a8;
+  --color-rose-bg: #fbe4df;
+  --color-mute-bg: #f3f4f6;
+  --color-mute-line: #e5e7eb;
+  --color-mute-fg: #4b5563;
+  /* lịch ca (WeekGrid / MonthShiftBoard) */
+  --color-grid-line: #c9d6e8;
+  --color-grid-border: #9fb3cf;
+  --color-grid-head: #a9c4ea;
+  --color-grid-1: #d9e6f6;
+  --color-grid-2: #fdf0c4;
+  --color-grid-3: #f6dbe4;
+  --color-grid-4: #dff1e4;
+  --color-grid-5: #e9e1f6;
+  --color-grid-6: #fde3cf;
+  --color-holiday: #fecaca;
+  --color-weather-warn: #fde4cf;
+  --color-weather-fg: #b45309;
+  /* tô dòng bảng chấm công */
+  --color-row-late: #fff1e6;
+  --color-row-missing: #fde8e8;
+  --color-row-manual: #ecf7ee;
+
   --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
   --radius-xl: 14px;
 }
 
 html,
 body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
+/* ===== Theme màu app nhân viên (Tài khoản → Màu giao diện; lib/themes.ts) =====
+   Class đặt ở khung app (app/(user)/layout.tsx); :root:has(...) để cả nền trang / vùng kéo quá đà cũng đổi theo. */
+.theme-red,
+:root:has(.theme-red) {
+  --color-primary: #d62f36;
+  --color-primary-dark: #b3242a;
+  --color-primary-light: #fdeaea;
+  --color-secondary: #7f1d22;
+  --color-secondary-dark: #64151a;
+  --color-accent: #a3222a;
+  --color-ink: #3b1517;
+  --color-cream: #fff7f6;
+  --color-on-primary: #ffffff;
+  --color-header: #d62f36;
+  --color-on-header: #ffffff;
+  --color-chip: rgb(255 255 255 / 0.85);
+  --color-line: #f6dcda;
+  --color-line-strong: #efc3c0;
+  --color-muted: #fbe3e1;
+  --color-shade: #3b1517;
+}
+.theme-pink,
+:root:has(.theme-pink) {
+  --color-primary: #f7a9c9;
+  --color-primary-dark: #ee8bb5;
+  --color-primary-light: #fdebf3;
+  --color-secondary: #c93a78;
+  --color-secondary-dark: #a52d62;
+  --color-accent: #ad2866;
+  --color-ink: #4d1a33;
+  --color-cream: #fff6fa;
+  --color-on-primary: #5c1838;
+  --color-header: #f7a9c9;
+  --color-on-header: #5c1838;
+  --color-line: #f7dbe7;
+  --color-line-strong: #f0c2d5;
+  --color-muted: #fbe4ee;
+  --color-shade: #4d1a33;
+}
+.theme-jade,
+:root:has(.theme-jade) {
+  --color-primary: #86d5b8;
+  --color-primary-dark: #62c49f;
+  --color-primary-light: #e3f6ee;
+  --color-secondary: #0e8466;
+  --color-secondary-dark: #0b6d54;
+  --color-accent: #0b6d54;
+  --color-ink: #11332b;
+  --color-cream: #f3fbf8;
+  --color-on-primary: #0f3d31;
+  --color-header: #86d5b8;
+  --color-on-header: #0f3d31;
+  --color-line: #d3ebe1;
+  --color-line-strong: #b8decf;
+  --color-muted: #e2f2eb;
+  --color-shade: #11332b;
+}
+.theme-blue,
+:root:has(.theme-blue) {
+  --color-primary: #b3d1ff;
+  --color-primary-dark: #8fb9fb;
+  --color-primary-light: #eaf2ff;
+  --color-secondary: #2563eb;
+  --color-secondary-dark: #1d4ed8;
+  --color-accent: #1d4ed8;
+  --color-ink: #14213d;
+  --color-cream: #f6f9ff;
+  --color-on-primary: #12306b;
+  --color-header: #b3d1ff;
+  --color-on-header: #12306b;
+  --color-line: #dde7fb;
+  --color-line-strong: #c6d7f7;
+  --color-muted: #e6eefc;
+  --color-shade: #14213d;
+}
+/* Tối (dark mode): nền đen nhẹ, thẻ xám than, chữ sáng – mọi màu trạng thái đổi sang bản tối */
+.theme-dark,
+:root:has(.theme-dark) {
+  color-scheme: dark;
+  --color-primary: #e4e4e7;
+  --color-primary-dark: #d4d4d8;
+  --color-primary-light: #3f3f46;
+  --color-secondary: #5b5b63;
+  --color-secondary-dark: #4a4a52;
+  --color-accent: #fafafa;
+  --color-ink: #e4e4e7;
+  --color-cream: #18181b;
+  --color-blush: #4a2b2b;
+  --color-warn: #fb923c;
+  --color-danger: #ef5350;
+  --color-bonus: #4ade80;
+  --color-on-primary: #18181b;
+  --color-header: #202024;
+  --color-on-header: #f4f4f5;
+  --color-on-accent: #18181b;
+  --color-card: #27272a;
+  --color-chip: #3f3f46;
+  --color-line: #34343a;
+  --color-line-strong: #52525b;
+  --color-muted: #323238;
+  --color-shade: #000000;
+  --color-good: #4ade80;
+  --color-live: #4ade80;
+  --color-tag: #93c5fd;
+  --color-ok-bg: #1c3324;
+  --color-ok-soft: #1a2e21;
+  --color-ok-line: #2f5a3d;
+  --color-bad-bg: #3a1f22;
+  --color-bad-soft: #33201f;
+  --color-bad-line: #6b2b2b;
+  --color-bad-fg: #fca5a5;
+  --color-info-bg: #1e2a44;
+  --color-info-soft: #1b2538;
+  --color-info-line: #3b5b8f;
+  --color-info-fg: #93c5fd;
+  --color-warn-soft: #33261a;
+  --color-warn-line: #5a3a1f;
+  --color-late-bg: #3b2314;
+  --color-late-strong: #4a2c17;
+  --color-late-fg: #fdba74;
+  --color-wait-bg: #3a3115;
+  --color-wait-fg: #fcd34d;
+  --color-violet-bg: #2e2140;
+  --color-violet-soft: #241d30;
+  --color-violet-line: #4c3a75;
+  --color-violet-fg: #d8b4fe;
+  --color-rose-bg: #3b2626;
+  --color-mute-bg: #3f3f46;
+  --color-mute-line: #52525b;
+  --color-mute-fg: #d4d4d8;
+  --color-grid-line: #3a3f4a;
+  --color-grid-border: #4a5160;
+  --color-grid-head: #2c3a52;
+  --color-grid-1: #232a35;
+  --color-grid-2: #2f2a1c;
+  --color-grid-3: #33232a;
+  --color-grid-4: #1f2e25;
+  --color-grid-5: #2a2536;
+  --color-grid-6: #33261d;
+  --color-holiday: #4a2323;
+  --color-weather-warn: #3b2a1c;
+  --color-weather-fg: #fbbf24;
+  --color-row-late: #2e2219;
+  --color-row-missing: #33201f;
+  --color-row-manual: #1c2b21;
+}
+.theme-red,
+.theme-pink,
+.theme-jade,
+.theme-blue,
+.theme-dark {
   background: var(--color-cream);
   color: var(--color-ink);
 }
@@ -32,8 +248,9 @@ body {
   height: 4px;
   width: 0;
   border-radius: 0 3px 3px 0;
-  background: var(--color-accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  /* màu chữ thanh đầu trang → luôn nổi trên nền đầu trang ở mọi theme */
+  background: var(--color-on-header);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-on-header) 55%, transparent);
   z-index: 40;
   pointer-events: none;
   animation: tbs-navbar-go 12s cubic-bezier(0.08, 0.75, 0.2, 1) forwards;
@@ -60,7 +277,8 @@ body {
 }
 
 /* Nhân viên THỬ VIỆC (lib/probation.ts): app nhân viên chủ đạo hồng tím – ghi đè token màu trong vùng app */
-.theme-trial {
+.theme-trial,
+:root:has(.theme-trial) {
   --color-primary: #e3b5f0;
   --color-primary-dark: #c98ae0;
   --color-primary-light: #f8ecfc;
@@ -69,6 +287,15 @@ body {
   --color-accent: #7a2e8e;
   --color-ink: #4a2453;
   --color-cream: #fcf5fd;
+  --color-on-primary: #4a2453;
+  --color-header: #e3b5f0;
+  --color-on-header: #4a2453;
+  --color-line: #ecdcf2;
+  --color-line-strong: #e3c6f0;
+  --color-muted: #f3e4f8;
+  --color-shade: #4a2453;
+}
+.theme-trial {
   background: var(--color-cream);
   color: var(--color-ink);
 }
@@ -85,7 +312,7 @@ table.tbs {
 }
 table.tbs th {
   background: var(--color-primary);
-  color: var(--color-ink);
+  color: var(--color-on-primary);
   font-weight: 600;
   text-align: left;
   padding: 0.5rem 0.625rem;
@@ -96,12 +323,12 @@ table.tbs th {
 }
 table.tbs td {
   padding: 0.45rem 0.625rem;
-  border-bottom: 1px solid #f1e6c8;
+  border-bottom: 1px solid var(--color-line);
   vertical-align: top;
 }
-table.tbs tr.row-late td { background: #fff1e6; }
-table.tbs tr.row-missing td { background: #fde8e8; }
-table.tbs tr.row-manual td { background: #ecf7ee; }
+table.tbs tr.row-late td { background: var(--color-row-late); }
+table.tbs tr.row-missing td { background: var(--color-row-missing); }
+table.tbs tr.row-manual td { background: var(--color-row-manual); }
 
 /* ===== Ô nhập trên mobile (iOS Safari) =====
    - date/month/time native có độ rộng tối thiểu riêng → tràn khung, cần bỏ appearance + min-width
@@ -143,7 +370,7 @@ input::-webkit-calendar-picker-indicator {
   50% { opacity: 0.45; }
 }
 .tbs-live {
-  color: #166534;
+  color: var(--color-live);
   font-weight: 700;
   animation: tbs-live-blink 2.4s ease-in-out infinite;
 }

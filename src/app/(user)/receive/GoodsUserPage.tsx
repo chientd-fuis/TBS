@@ -43,7 +43,7 @@ export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
         {!recent.length ? (
           <p className="text-sm text-ink/60">Chưa có</p>
         ) : (
-          <ul className="divide-y divide-[#f1e6c8] text-sm">
+          <ul className="divide-y divide-line text-sm">
             {recent.map((r) => {
               const tg = TG[(r.telegram?.status ?? "PENDING") as keyof typeof TG];
               const mine = String(r.byUserId) === String(user._id) && !r.byAdmin && Date.now() - new Date(r.createdAt ?? 0).getTime() < 24 * 3600_000;

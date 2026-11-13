@@ -14,7 +14,7 @@ export default async function RegRequestAlert({ userId, tz }: { userId: Types.Ob
   return (
     <div className="space-y-2">
       {reqs.map((r) => (
-        <div key={String(r._id)} className="rounded-2xl bg-[#fff4e5] p-3 text-sm text-warn ring-1 ring-warn/40">
+        <div key={String(r._id)} className="rounded-2xl bg-warn-soft p-3 text-sm text-warn ring-1 ring-warn/40">
           <p className="flex items-start gap-2">
             <TriangleAlert size={18} className="mt-0.5 shrink-0" />
             <span>

@@ -12,6 +12,7 @@ Next.js 15 (App Router) + MongoDB + Google Drive (lưu ảnh). Code theo `SPEC_c
 | | Làm tròn giờ công (bước 0,5h, làm tròn xuống, có tuỳ chọn dung sai), cảnh báo đi muộn / về sớm theo ca | 4.3, 4.4 |
 | | Xem chấm công tháng, lịch ca, bảng lương (sau khi công bố), gửi yêu cầu điều chỉnh, khiếu nại lương | 4.5, 4.6 |
 | | Đăng ký ca theo tuần (chỉ tuần tương lai), xem lịch của mình dạng bảng ca × ngày theo tuần / tháng | 4.7 |
+| | **Màu giao diện** (Tài khoản → Màu giao diện): Vàng bơ (mặc định), Đỏ son, Hồng phấn, Ngọc bích, Xanh lam, Tối (dark mode) – lưu theo tài khoản, áp dụng cả khu Quản lý; thử việc luôn màu tím. Token màu ở `globals.css` (.theme-x), danh sách ở `lib/themes.ts` – thêm màu mới dùng token (bg-card, ring-line, text-on-primary…), không ghi cứng mã màu | – |
 | Admin | Đăng nhập bằng **Gmail**: Chủ (OWNER_EMAIL) + admin do Admin Tổng thêm Gmail ở **Quản lý admin**; phân quyền từng chức năng (mặc định admin không có quyền tài chính, lương, xuất Excel, cơ sở, duyệt chấm công bù…) | 2.1 |
 | | Dashboard hôm nay, duyệt đăng ký (+ thiết bị đầu tiên), nhân viên (lương giờ có ngày hiệu lực), thiết bị + cảnh báo nghi chấm hộ | 3.1, 3.3 |
 | | Cơ sở (3 cơ sở tạo sẵn), ca mẫu (hỗ trợ qua đêm), xếp ca hàng loạt, copy tuần trước | 1.2, 3.2, 3.4 |

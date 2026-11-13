@@ -171,7 +171,7 @@ export default function ClosingForm({
               aria-checked={shiftKey === c.key}
               onClick={() => pickShift(c.key)}
               className={`rounded-xl px-2 py-2.5 text-center text-sm ring-1 transition ${
-                shiftKey === c.key ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200"
+                shiftKey === c.key ? "bg-secondary font-bold text-white ring-secondary-dark" : "bg-mute-bg text-mute-fg ring-mute-line hover:bg-mute-line"
               }`}
             >
               Ca {c.name}
@@ -203,7 +203,7 @@ export default function ClosingForm({
               )}
               {ocr?.state === "error" && <p className="text-danger">{ocr.text}</p>}
               {ocr?.state === "done" && (
-                <p className="flex items-center gap-1.5 text-secondary-dark">
+                <p className="flex items-center gap-1.5 text-good">
                   <Sparkles size={16} /> Đã điền {ocr.found.length} ô từ ảnh{ocr.date ? ` · ngày ${dm(ocr.date)}` : ""}. Kiểm tra lại trước khi gửi.
                 </p>
               )}
@@ -215,9 +215,9 @@ export default function ClosingForm({
           </div>
         )}
         {warnings.length > 0 && (
-          <ul className={`mt-3 space-y-1 rounded-xl px-3 py-2 text-xs ${openWarn ? "bg-[#fde2e2] text-danger" : "bg-[#e3f3e7] text-secondary-dark"}`}>
+          <ul className={`mt-3 space-y-1 rounded-xl px-3 py-2 text-xs ${openWarn ? "bg-bad-bg text-danger" : "bg-ok-bg text-good"}`}>
             {warnings.map((w) => (
-              <li key={w.text} className={`flex gap-1.5 ${w.fixed ? "text-secondary-dark" : ""}`}>
+              <li key={w.text} className={`flex gap-1.5 ${w.fixed ? "text-good" : ""}`}>
                 {w.fixed ? <CheckCircle2 size={14} className="mt-px shrink-0" /> : <TriangleAlert size={14} className="mt-px shrink-0" />}
                 <span>{w.text}{w.fixed ? " – đã nhập tay" : ""}</span>
               </li>
@@ -228,12 +228,12 @@ export default function ClosingForm({
 
       <Card title="Số liệu ca">
         {done && (
-          <p className="mb-3 rounded-lg bg-[#fff4e5] px-3 py-2 text-xs text-warn">
+          <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
             Ca này đã chốt lúc <b>{done.at}</b>{done.by ? ` (${done.by})` : ""}. Lần này sẽ <b>sửa lại</b> bản chốt đó và gửi bản cập nhật vào nhóm.
           </p>
         )}
         {ocr?.state === "done" && scaled && (
-          <p className="mb-2 rounded-lg bg-[#eef6ff] px-3 py-1.5 text-[11px] text-[#1e40af]">Tờ ghi theo đơn vị nghìn (VD 2487 = 2.487.000đ) → đã tự nhân 1000, kiểm tra lại.</p>
+          <p className="mb-2 rounded-lg bg-info-soft px-3 py-1.5 text-[11px] text-info-fg">Tờ ghi theo đơn vị nghìn (VD 2487 = 2.487.000đ) → đã tự nhân 1000, kiểm tra lại.</p>
         )}
         <p className="mb-3 text-xs text-ink/70">Gõ được phép cộng, VD <b>10000 + 20000 + 20k</b>. Rời ô sẽ tự hiện tổng. Ô có * bắt buộc (không có thì nhập 0), ô khác bỏ trống = 0.</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -261,7 +261,7 @@ export default function ClosingForm({
             <span className="font-semibold tabular-nums">{counted.toLocaleString("vi-VN")} đ</span>
           </div>
           {hasTotal && (
-            <p className={`mt-1 flex items-center gap-1.5 text-sm font-semibold ${totalDiff === 0 ? "text-secondary-dark" : "text-danger"}`}>
+            <p className={`mt-1 flex items-center gap-1.5 text-sm font-semibold ${totalDiff === 0 ? "text-good" : "text-danger"}`}>
               {totalDiff === 0 ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
               {totalDiff === 0
                 ? "Tổng ghi trên tờ cộng ĐÚNG"
@@ -270,9 +270,9 @@ export default function ClosingForm({
           )}
         </div>
 
-        <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 ${!hasDt ? "bg-cream" : diff === 0 ? "bg-[#e3f3e7]" : "bg-[#fde2e2]"}`}>
+        <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 ${!hasDt ? "bg-cream" : diff === 0 ? "bg-ok-bg" : "bg-bad-bg"}`}>
           <span className="text-sm font-semibold">Âm / Dương</span>
-          <span className={`text-lg font-bold tabular-nums ${!hasDt ? "text-ink/40" : diff === 0 ? "text-secondary-dark" : "text-danger"}`}>
+          <span className={`text-lg font-bold tabular-nums ${!hasDt ? "text-ink/40" : diff === 0 ? "text-good" : "text-danger"}`}>
             {hasDt ? `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} đ` : "—"}
           </span>
         </div>
@@ -281,12 +281,12 @@ export default function ClosingForm({
         </p>
 
         {isDayEnd && (
-          <div className="mt-3 rounded-xl bg-[#eef6ff] p-3 text-xs text-[#1e40af]">
+          <div className="mt-3 rounded-xl bg-info-soft p-3 text-xs text-info-fg">
             <p className="font-semibold">Ca Tối = doanh thu CẢ NGÀY (số luỹ kế) – chốt xong sẽ ghi lên Google Sheet.</p>
             {dayBefore.map((x) => (
               <p key={x.label} className="flex justify-between"><span>{x.label} (luỹ kế)</span><span className="tabular-nums">{x.dt.toLocaleString("vi-VN")} đ{x.diff ? ` (lệch ${x.diff.toLocaleString("vi-VN")})` : ""}</span></p>
             ))}
-            <p className="mt-1 flex justify-between border-t border-[#bfdbfe] pt-1 font-bold"><span>Doanh thu thật cả ngày (TK + TM + Shopee/Grab + két)</span><span className="tabular-nums">{dayThu.toLocaleString("vi-VN")} đ</span></p>
+            <p className="mt-1 flex justify-between border-t border-info-line pt-1 font-bold"><span>Doanh thu thật cả ngày (TK + TM + Shopee/Grab + két)</span><span className="tabular-nums">{dayThu.toLocaleString("vi-VN")} đ</span></p>
             {dayBefore.length > 0 && (
               <p className="flex justify-between"><span>Riêng ca Tối</span><span className="tabular-nums">{(dayThu - dayBefore[dayBefore.length - 1].dt).toLocaleString("vi-VN")} đ</span></p>
             )}
@@ -314,7 +314,7 @@ export default function ClosingForm({
       </Card>
 
       {shooting && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-ink p-4">
+        <div className="fixed inset-0 z-50 flex flex-col bg-shade p-4">
           <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-3 overflow-y-auto">
             <div className="flex items-center justify-between text-white">
               <p className="font-bold">Chụp ảnh chốt ca</p>

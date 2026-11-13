@@ -31,10 +31,10 @@ export default function PayExplain({ month, netPay, left: left0, limit }: { mont
         {pending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Vì sao lương tháng này là {netPay} ₫?
       </Button>
       {left != null && <p className="text-center text-xs text-ink/60">còn {left}/{limit} lượt tháng này</p>}
-      {err && <p className="rounded-xl bg-[#fffaf3] p-2 text-sm text-warn">{err}</p>}
+      {err && <p className="rounded-xl bg-warn-soft p-2 text-sm text-warn">{err}</p>}
       {text && (
-        <div className="rounded-2xl border border-[#ddd6fe] bg-[#fdfcff] p-3 text-sm whitespace-pre-line">
-          <p className="mb-1 text-xs font-bold text-[#6d28d9]">AI giải thích</p>
+        <div className="rounded-2xl border border-violet-line bg-violet-soft p-3 text-sm whitespace-pre-line">
+          <p className="mb-1 text-xs font-bold text-violet-fg">AI giải thích</p>
           {text}
           <p className="mt-2 text-xs text-ink/60">AI chỉ đọc bảng lương của chính bạn. Thấy sai? Gửi phản hồi bên dưới để admin kiểm tra.</p>
         </div>

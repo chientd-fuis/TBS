@@ -430,6 +430,7 @@ export default async function RequestsPage() {
                     <TimeInput name="inTime" defaultValue={r.checkInTime} className="flex-1" title="Giờ vào" required={!!kind} />
                     <TimeInput name="outTime" defaultValue={r.checkOutTime} className="flex-1" title="Giờ ra" required={!!kind} />
                   </div>
+                  <p className="text-[11px] text-ink/60">Duyệt = tính đủ giờ đã chốt (kể cả ngoài giờ / ngoài ca), không phải xác nhận làm ngoài giờ lần nữa.</p>
                 </ApproveRejectForm>
                 )}
               </div>

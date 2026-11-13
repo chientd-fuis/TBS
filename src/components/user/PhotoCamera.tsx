@@ -66,7 +66,7 @@ export default function PhotoCamera({
 
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-2xl bg-ink ring-4 ring-primary">
+      <div className="relative overflow-hidden rounded-2xl bg-shade ring-4 ring-primary">
         <video ref={videoRef} playsInline muted className={`aspect-[3/4] w-full object-cover ${facing === "user" ? "-scale-x-100" : ""}`} />
         {flash && <div className="absolute inset-0 bg-white/80" />}
         {status === "loading" && (
@@ -90,7 +90,7 @@ export default function PhotoCamera({
           {photos.map((p, i) => (
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p} alt={`Ảnh ${i + 1}`} className="aspect-square w-full rounded-lg object-cover ring-1 ring-[#f1e6c8]" />
+              <img src={p} alt={`Ảnh ${i + 1}`} className="aspect-square w-full rounded-lg object-cover ring-1 ring-line" />
               <button
                 type="button"
                 onClick={() => onChange(photos.filter((_, j) => j !== i))}

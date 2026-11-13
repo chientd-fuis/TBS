@@ -3,6 +3,7 @@ import { AlarmClock, CirclePlus, LogOut } from "lucide-react";
 import { ROW_COLORS } from "@/components/WeekGrid";
 import type { BoardChip, BoardTpl } from "@/lib/attendance-board";
 import { weekdayVi } from "@/lib/time";
+import { minutesVi } from "@/lib/format";
 import ScrollToToday from "./ScrollToToday";
 import type { WeatherBadge } from "@/lib/weather";
 
@@ -44,26 +45,26 @@ export default function MonthShiftBoard({
   /** dự báo thời tiết từng ngày (Cài đặt → AI → thời tiết → Lịch làm việc); warn = nên giảm ca */
   weather?: Record<string, WeatherBadge>;
 }) {
-  const border = "1px solid #9fb3cf";
+  const border = "1px solid var(--color-grid-border)";
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink/70">
         <span className="inline-flex items-center gap-1"><AlarmClock size={13} className="text-warn" /> đi muộn / về sớm</span>
         <span className="inline-flex items-center gap-1"><CirclePlus size={13} className="text-secondary" /> làm thêm ca (không có lịch)</span>
         <span className="inline-flex items-center gap-1"><LogOut size={13} className="text-danger" /> quên check-out</span>
-        <span className="inline-flex items-center gap-1"><b className="text-[10px] text-[#1d4ed8]">CS2</b> đi hỗ trợ / từ cơ sở khác sang</span>
+        <span className="inline-flex items-center gap-1"><b className="text-[10px] text-tag">CS2</b> đi hỗ trợ / từ cơ sở khác sang</span>
         <span className="inline-flex items-center gap-1"><span className="text-danger line-through">Tên</span> {compactLegend ? "bỏ ca" : "bỏ ca (có lịch, không chấm công)"}</span>
         <span className="inline-flex items-center gap-1"><span className="tbs-live">Tên</span> đang trong ca (nhấp nháy ở mọi ca nếu làm xuyên ca)</span>
         <span><b>Tên đậm</b> = ca sắp tới · <span className="text-ink/55">tên mờ</span> = ca đã qua</span>
         {compactLegend && <span>Tên <i className="text-warn">(Chờ duyệt)</i></span>}
-        <span className="inline-flex items-center gap-1"><span className="rounded bg-[#fecaca] px-1 text-[10px] font-bold text-danger">🎉 Lễ ×2</span> ngày lễ – đi làm được nhân lương</span>
+        <span className="inline-flex items-center gap-1"><span className="rounded bg-holiday px-1 text-[10px] font-bold text-danger">🎉 Lễ ×2</span> ngày lễ – đi làm được nhân lương</span>
       </div>
-      <div className="overflow-x-auto rounded-xl ring-1 ring-[#c9d6e8]" data-month-board>
+      <div className="overflow-x-auto rounded-xl ring-1 ring-grid-line" data-month-board>
         <ScrollToToday />
         <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, tableLayout: "fixed" }}>
           <thead>
             <tr>
-              <th className="sticky left-0 z-20" style={{ width: 92, minWidth: 92, background: "#a9c4ea", border, padding: "6px 4px" }}>Ca</th>
+              <th className="sticky left-0 z-20" style={{ width: 92, minWidth: 92, background: "var(--color-grid-head)", border, padding: "6px 4px" }}>Ca</th>
               {days.map((d) => {
                 const h = holidays[d];
                 const w = weather?.[d];
@@ -72,7 +73,7 @@ export default function MonthShiftBoard({
                     key={d}
                     data-today={d === today ? "1" : undefined}
                     title={[h ? `Ngày lễ: ${h.name} – đi làm được ×${h.multiplier} lương` : "", w?.warn ? `⚠ ${w.warn}` : ""].filter(Boolean).join(" · ") || undefined}
-                    style={{ width: 118, minWidth: 118, background: d === today ? "#fccc18" : h ? "#fecaca" : w?.warn ? "#fde4cf" : "#a9c4ea", border, padding: "4px 2px" }}
+                    style={{ width: 118, minWidth: 118, background: d === today ? "var(--color-primary)" : h ? "var(--color-holiday)" : w?.warn ? "var(--color-weather-warn)" : "var(--color-grid-head)", color: d === today ? "var(--color-on-primary)" : undefined, border, padding: "4px 2px" }}
                   >
                     <div style={{ fontWeight: 700 }}>{WD_SHORT[weekdayVi(d)] ?? weekdayVi(d)}</div>
                     <div style={{ fontSize: 11, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
@@ -82,7 +83,7 @@ export default function MonthShiftBoard({
                       </div>
                     )}
                     {w && (
-                      <div style={{ fontSize: 10, fontWeight: w.warn ? 700 : 400, color: w.warn ? "#b45309" : undefined }}>
+                      <div style={{ fontSize: 10, fontWeight: w.warn ? 700 : 400, color: w.warn ? "var(--color-weather-fg)" : undefined }}>
                         {w.icon} {w.tMin}–{w.tMax}° ☔{w.rainPct}%{w.warn ? " ⚠" : ""}
                       </div>
                     )}
@@ -124,8 +125,8 @@ export default function MonthShiftBoard({
 function Chip({ c, month, storeNames, href, linkable, me = false }: { c: BoardChip; month: string; storeNames: Record<string, string>; href?: string; linkable: boolean; me?: boolean }) {
   const title = [
     c.state === "missed" ? "Bỏ ca – có lịch nhưng không chấm công" : c.state === "upcoming" ? "Ca chưa tới" : c.state === "pending" ? "Đăng ký – chờ duyệt" : "",
-    c.late ? `Đi muộn ${c.late} phút` : "",
-    c.early ? `Về sớm ${c.early} phút` : "",
+    c.late ? `Đi muộn ${minutesVi(c.late)}` : "",
+    c.early ? `Về sớm ${minutesVi(c.early)}` : "",
     c.extra ? "Làm thêm ca (không có lịch)" : "",
     c.missingOut ? "Quên check-out" : "",
     c.live ? "Đang trong ca (chưa check-out)" : "",
@@ -140,7 +141,7 @@ function Chip({ c, month, storeNames, href, linkable, me = false }: { c: BoardCh
       {(c.late || c.early) && <AlarmClock size={12} className="shrink-0 text-warn" />}
       {c.extra && <CirclePlus size={12} className="shrink-0 text-secondary" />}
       {c.missingOut && <LogOut size={12} className="shrink-0 text-danger" />}
-      {c.tag && <b className="shrink-0 text-[9px] leading-none text-[#1d4ed8]">{c.tag.label}</b>}
+      {c.tag && <b className="shrink-0 text-[9px] leading-none text-tag">{c.tag.label}</b>}
     </>
   );
   // không nền: đang trong ca = xanh lá đậm nhấp nháy · bỏ ca = chữ đỏ gạch ngang · sắp tới = đậm · đã qua = mờ nhẹ · chờ duyệt = bình thường + "(Chờ duyệt)"
@@ -153,7 +154,7 @@ function Chip({ c, month, storeNames, href, linkable, me = false }: { c: BoardCh
         : c.state === "pending"
           ? ""
           : "text-ink/55";
-  const cls = `flex items-center gap-0.5 rounded px-1 leading-6 ${stateCls}${me ? " bg-primary font-bold ring-1 ring-accent/40" : ""}`;
+  const cls = `flex items-center gap-0.5 rounded px-1 leading-6 ${stateCls}${me ? " bg-primary font-bold text-on-primary ring-1 ring-accent/40" : ""}`;
   return linkable ? (
     <Link
       href={href ?? `/admin/attendance?store=${c.linkStoreId}&user=${c.userId}&month=${month}`}

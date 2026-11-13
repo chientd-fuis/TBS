@@ -36,7 +36,7 @@ export default function WorkflowView({ content, fixed }: { content: Record<Posit
               key={p.key}
               type="button"
               onClick={() => pick(p.key)}
-              className="flex flex-col items-center gap-1 rounded-2xl bg-white px-3 py-5 text-[15px] font-bold text-accent ring-1 ring-[#f1e6c8] hover:bg-primary-light active:scale-[.98]"
+              className="flex flex-col items-center gap-1 rounded-2xl bg-card px-3 py-5 text-[15px] font-bold text-accent ring-1 ring-line hover:bg-primary-light active:scale-[.98]"
             >
               <span className="text-3xl" aria-hidden>{p.icon}</span>
               {p.label}
@@ -58,7 +58,7 @@ export default function WorkflowView({ content, fixed }: { content: Record<Posit
             disabled={!!fixed && p.key !== pos}
             className={cn(
               "rounded-full px-3 py-1.5 text-sm",
-              p.key === pos ? "bg-secondary font-bold text-white" : "bg-white text-ink/70 ring-1 ring-[#f1e6c8]",
+              p.key === pos ? "bg-secondary font-bold text-white" : "bg-card text-ink/70 ring-1 ring-line",
               fixed && p.key !== pos && "opacity-40",
             )}
           >

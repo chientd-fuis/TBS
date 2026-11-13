@@ -1,3 +1,4 @@
+import { minutesVi } from "./format";
 import { Store } from "./models";
 import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "./telegram";
 import { localTime, viDate, weekdayVi } from "./time";
@@ -29,9 +30,9 @@ const h = (n?: number | null) => (n == null ? "" : `${String(n).replace(".", ","
 /** Nội dung tin nhắn (thuần – có unit test). */
 export function formatAttendanceCaption(n: AttendanceNotice) {
   const warn: string[] = [];
-  if (n.action === "CHECK_IN" && n.lateMinutes) warn.push(`⚠️ Đi muộn ${n.lateMinutes} phút`);
-  if (n.action === "CHECK_OUT" && n.earlyMinutes) warn.push(`⚠️ Về sớm ${n.earlyMinutes} phút`);
-  if (n.action === "CHECK_OUT" && n.lateMinutes) warn.push(`(Vào muộn ${n.lateMinutes} phút)`);
+  if (n.action === "CHECK_IN" && n.lateMinutes) warn.push(`⚠️ Đi muộn ${minutesVi(n.lateMinutes)}`);
+  if (n.action === "CHECK_OUT" && n.earlyMinutes) warn.push(`⚠️ Về sớm ${minutesVi(n.earlyMinutes)}`);
+  if (n.action === "CHECK_OUT" && n.lateMinutes) warn.push(`(Đi muộn ${minutesVi(n.lateMinutes)})`);
   if (n.outOfShift) warn.push("⚠️ Ngoài ca (không có ca được xếp)");
   if (n.action === "CHECK_OUT" && n.actualCheckOutAt && n.checkOutAt)
     warn.push(`⏱️ Bấm check-out lúc ${hhmm(n.actualCheckOutAt, n.tz)} – chỉ tính công tới ${hhmm(n.checkOutAt, n.tz)} (giờ chốt ca tối)`);

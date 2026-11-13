@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { formatDuration } from "@/lib/calc";
-import { hoursVi } from "@/lib/format";
+import { hoursVi, minutesVi } from "@/lib/format";
 import { localTime, viDate } from "@/lib/time";
 import { Badge, Empty } from "@/components/ui";
 import AttEditButton from "@/components/user/AttEditButton";
+import ClampNote from "@/components/ClampNote";
 
 export type AttRow = {
   _id: unknown;
@@ -32,8 +33,22 @@ export type AttRow = {
   /** ca thử việc (3 ca đầu của nhân viên thử việc) · hệ số giờ công (0,5 = 50%) */
   trial?: boolean | null;
   payFactor?: number | null;
+  /** làm ngoài giờ / ngoài ca chờ admin xác nhận (lib/overtime.ts) */
+  overtime?: { status?: string | null; deltaHours?: number | null; outOfShift?: boolean | null } | null;
 };
 const trialText = (r: AttRow) => `Ca thử việc${r.payFactor != null && r.payFactor < 1 ? ` · tính ${Math.round(r.payFactor * 100)}% giờ công` : ""}`;
+
+/** Nhãn ngắn ở cột Cảnh báo thay cho câu ghi chú dài: "Ngoài ca +5h · chờ duyệt" */
+function OvertimeBadge({ ot }: { ot: NonNullable<AttRow["overtime"]> }) {
+  if (!ot.status) return null;
+  const what = `${ot.outOfShift ? "Ngoài ca" : "Ngoài giờ"}${ot.deltaHours ? ` +${hoursVi(ot.deltaHours)}h` : ""}`;
+  if (ot.status === "PENDING") return <Badge tone="orange">{what} · chờ duyệt</Badge>;
+  if (ot.status === "APPROVED") return <Badge tone="green">{what} · đã duyệt</Badge>;
+  if (ot.status === "REJECTED") return <Badge tone="red">{what} · không duyệt</Badge>;
+  return null;
+}
+/** ghi chú tự sinh lúc check-out "… chờ admin xác nhận (mặc định vẫn tính)" – nhãn ở cột Cảnh báo đã nói, không lặp lại */
+const autoOvertimeNote = (r: AttRow) => r.overtime?.status === "PENDING" && !!r.staffNote?.includes("chờ admin xác nhận");
 
 /** Bảng chấm công theo mẫu: Ngày | Giờ Đến | Giờ Về | Tổng | Format | Giờ tính công | Ca | Cảnh báo | Ảnh | Ghi chú (spec 5) */
 export function AttendanceTable({
@@ -54,12 +69,12 @@ export function AttendanceTable({
   select?: { formId: string; header?: ReactNode; disabled?: boolean };
   /** dòng tổng cuối bảng: tổng giờ thực tế · tổng giờ tính công · chênh */
   totals?: boolean;
-  /** trang nhân viên: lượt bấm được để gửi yêu cầu sửa giờ (nhãn Quên check-out / Muộn / Sớm) · lượt đã gửi, chờ duyệt */
+  /** trang nhân viên: lượt bấm được để gửi yêu cầu sửa giờ (nhãn Quên check-out / Đi muộn / Về sớm) · lượt đã gửi, chờ duyệt */
   staffEdit?: { editable: Set<string>; pending: Set<string> };
 }) {
   if (!rows.length) return <Empty>Chưa có dữ liệu chấm công</Empty>;
   return (
-    <div className="max-h-[70vh] overflow-auto rounded-xl ring-1 ring-[#f1e6c8]">
+    <div className="max-h-[70vh] overflow-auto rounded-xl ring-1 ring-line">
       <table className="tbs">
         <thead>
           <tr>
@@ -67,12 +82,13 @@ export function AttendanceTable({
             <th>Ngày</th>
             <th>Giờ Đến</th>
             <th>Giờ Về</th>
-            <th className="text-right">Tổng</th>
-            <th>Format</th>
+            {/* trang nhân viên (Lịch sử): ẩn Tổng / Format / Ảnh cho gọn – chỉ cần giờ đến, giờ về, giờ công */}
+            {!staffView && <th className="text-right">Tổng</th>}
+            {!staffView && <th>Format</th>}
             <th className="text-right">Giờ công</th>
             <th>Ca</th>
             <th>Cảnh báo</th>
-            <th>Ảnh</th>
+            {!staffView && <th>Ảnh</th>}
             <th>Ghi chú</th>
             {actions && <th></th>}
           </tr>
@@ -100,13 +116,13 @@ export function AttendanceTable({
                 <td className="whitespace-nowrap">{viDate(r.workDate)}</td>
                 <td>{localTime(r.checkInAt, tz)}</td>
                 <td>{r.checkOutAt ? localTime(r.checkOutAt, tz) : ""}</td>
-                <td className="text-right">{hoursVi(r.totalHours)}</td>
-                <td>{r.checkOutAt ? formatDuration(r.checkInAt, r.checkOutAt) : ""}</td>
+                {!staffView && <td className="text-right">{hoursVi(r.totalHours)}</td>}
+                {!staffView && <td>{r.checkOutAt ? formatDuration(r.checkInAt, r.checkOutAt) : ""}</td>}
                 <td className="text-right font-bold">
                   {hoursVi(r.roundedHours)}
-                  {!!r.extraHours && <span className="block text-[10px] font-semibold text-secondary-dark" title="Admin cộng thêm cho ca này">gồm +{hoursVi(r.extraHours)}h</span>}
+                  {!!r.extraHours && <span className="block text-[10px] font-semibold text-good" title="Admin cộng thêm cho ca này">gồm +{hoursVi(r.extraHours)}h</span>}
                   {r.trial && r.payFactor != null && r.payFactor < 1 && (
-                    <span className="block text-[10px] font-semibold text-[#7e3a9c]" title={trialText(r)}>
+                    <span className="block text-[10px] font-semibold text-violet-fg" title={trialText(r)}>
                       thử việc {Math.round(r.payFactor * 100)}%
                     </span>
                   )}
@@ -117,8 +133,8 @@ export function AttendanceTable({
                     const warn = !!r.lateMinutes || !!r.earlyMinutes || r.status === "MISSING_CHECKOUT";
                     const badges = (
                       <>
-                        {!!r.lateMinutes && <Badge tone="orange">Muộn {r.lateMinutes}&apos;</Badge>}
-                        {!!r.earlyMinutes && <Badge tone="orange">Sớm {r.earlyMinutes}&apos;</Badge>}
+                        {!!r.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(r.lateMinutes)}</Badge>}
+                        {!!r.earlyMinutes && <Badge tone="orange">Về sớm {minutesVi(r.earlyMinutes)}</Badge>}
                         {r.status === "MISSING_CHECKOUT" && <Badge tone="red">Quên check-out</Badge>}
                       </>
                     );
@@ -132,40 +148,49 @@ export function AttendanceTable({
                     if (warn && staffEdit?.editable.has(id)) return <AttEditButton id={id}>{badges}</AttEditButton>;
                     return badges;
                   })()}
+                  {r.overtime && <OvertimeBadge ot={r.overtime} />}
                   {r.status === "OPEN" && <Badge tone="yellow">Đang trong ca</Badge>}
                 </td>
-                <td className="whitespace-nowrap text-xs">
-                  {hasIn && (
-                    <a className="text-accent underline" href={`/api/photo?att=${id}&dir=in`} target="_blank">
-                      in
-                    </a>
-                  )}{" "}
-                  {hasOut && (
-                    <a className="text-accent underline" href={`/api/photo?att=${id}&dir=out`} target="_blank">
-                      out
-                    </a>
-                  )}
-                </td>
-                {staffView ? (
-                  <td className="min-w-32 text-xs">
-                    {r.trial && (
-                      <span className="mb-0.5 block">
-                        <Badge tone="pink">{trialText(r)}</Badge>
-                      </span>
+                {!staffView && (
+                  <td className="whitespace-nowrap text-xs">
+                    {hasIn && (
+                      <a className="text-accent underline" href={`/api/photo?att=${id}&dir=in`} target="_blank">
+                        in
+                      </a>
+                    )}{" "}
+                    {hasOut && (
+                      <a className="text-accent underline" href={`/api/photo?att=${id}&dir=out`} target="_blank">
+                        out
+                      </a>
                     )}
-                    {r.staffNote}
+                  </td>
+                )}
+                {staffView ? (
+                  <td className="text-xs">
+                    {/* cột rộng cố định, ghi chú dài gọn 2 dòng (chạm Xem thêm) → không kéo cao / vỡ bảng trên điện thoại */}
+                    <div className="w-44">
+                      {r.trial && (
+                        <span className="mb-0.5 block">
+                          <Badge tone="pink">{trialText(r)}</Badge>
+                        </span>
+                      )}
+                      {r.staffNote && !autoOvertimeNote(r) && <ClampNote>{r.staffNote}</ClampNote>}
+                    </div>
                   </td>
                 ) : (
-                <td className="min-w-40 text-xs">
-                  {r.trial && <><Badge tone="pink">{trialText(r)}</Badge>{" "}</>}
-                  {r.supportLabel && <><Badge tone="blue">⇄ {r.supportLabel}</Badge>{" "}</>}
-                  {r.source === "ADMIN_MANUAL" && (
-                    <span>
-                      <Badge tone="green">Chấm hộ</Badge> bởi {r.createdByAdminName}: {r.manualReason}
-                    </span>
-                  )}
-                  {r.source === "REQUEST" && <Badge tone="pink">Theo yêu cầu điều chỉnh</Badge>} {r.note}
-                  {r.staffNote && <div className="mt-0.5 text-secondary-dark">📝 Cho NV: {r.staffNote}</div>}
+                <td className="text-xs">
+                  <div className="w-56">
+                    {r.trial && <><Badge tone="pink">{trialText(r)}</Badge>{" "}</>}
+                    {r.supportLabel && <><Badge tone="blue">⇄ {r.supportLabel}</Badge>{" "}</>}
+                    {r.source === "ADMIN_MANUAL" && (
+                      <span>
+                        <Badge tone="green">Chấm hộ</Badge> bởi {r.createdByAdminName}: {r.manualReason}
+                      </span>
+                    )}
+                    {r.source === "REQUEST" && <Badge tone="pink">Theo yêu cầu điều chỉnh</Badge>}
+                    {r.note && <ClampNote className="mt-0.5">{r.note}</ClampNote>}
+                    {r.staffNote && <ClampNote className="mt-0.5 text-good">📝 Cho NV: {r.staffNote}</ClampNote>}
+                  </div>
                 </td>
                 )}
                 {actions && <td className="whitespace-nowrap">{actions(r)}</td>}
@@ -185,7 +210,7 @@ export function AttendanceTable({
                   <td className="text-right" title="Tổng giờ thực tế">{hoursVi(s.totalActual)}</td>
                   <td></td>
                   <td className="text-right" title="Tổng giờ tính công">{hoursVi(s.totalRounded)}</td>
-                  <td colSpan={4 + (actions ? 1 : 0)} className={`text-sm ${diff > 0 ? "text-secondary-dark" : diff < 0 ? "text-danger" : "text-ink/60"}`}>
+                  <td colSpan={4 + (actions ? 1 : 0)} className={`text-sm ${diff > 0 ? "text-good" : diff < 0 ? "text-danger" : "text-ink/60"}`}>
                     Chênh (tính công − thực tế): {diff > 0 ? "+" : diff < 0 ? "−" : ""}
                     {hoursVi(Math.abs(diff))}h
                   </td>

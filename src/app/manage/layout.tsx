@@ -7,8 +7,13 @@ import { Logo } from "@/components/Logo";
 import ManageTabs from "./ManageTabs";
 import NavProgress from "@/components/NavProgress";
 import { Suspense } from "react";
+import { cn } from "@/lib/format";
+import { THEME_ROOT_ID, themeClass, themeOf } from "@/lib/themes";
+import { themeViewport } from "@/lib/theme-server";
 
 export const dynamic = "force-dynamic";
+// cùng màu giao diện nhân viên chọn ở app (Tài khoản → Màu giao diện)
+export const generateViewport = themeViewport;
 
 const HREF: Record<string, string> = { schedule: "/manage/schedule", bonus: "/manage/bonus", cover: "/manage/requests" };
 
@@ -18,12 +23,12 @@ export default async function ManageLayout({ children }: { children: React.React
   const perms = STAFF_PERMS.filter((p) => user.managerPerms?.includes(p.key));
   if (!perms.length) redirect("/");
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center gap-3 bg-primary px-4 py-2 shadow-sm">
+    <div id={THEME_ROOT_ID} className={cn("min-h-screen", themeClass(themeOf(user)))}>
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-header px-4 py-2 text-on-header shadow-sm">
         <Suspense fallback={null}>
           <NavProgress />
         </Suspense>
-        <Link href="/" className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold hover:bg-white/40">
+        <Link href="/" className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold hover:bg-chip">
           <ArrowLeft size={16} /> App
         </Link>
         <Logo size={32} />

@@ -36,9 +36,9 @@ export default function ExprMoneyInput({
           onBlur={() => setFocus(false)}
           onChange={(e) => onChange(e.target.value)}
           className={cn(
-            "block w-full min-w-0 rounded-xl border bg-white py-2 pr-7 pl-3 text-sm outline-none focus:ring-2 focus:ring-primary/40",
+            "block w-full min-w-0 rounded-xl border bg-card py-2 pr-7 pl-3 text-sm outline-none focus:ring-2 focus:ring-primary/40",
             focus ? "text-left" : "text-right font-semibold tabular-nums",
-            !r.ok && value.trim() ? "border-danger" : "border-[#e9d9a8] focus:border-primary-dark",
+            !r.ok && value.trim() ? "border-danger" : "border-line-strong focus:border-primary-dark",
           )}
         />
         <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-ink/50">đ</span>

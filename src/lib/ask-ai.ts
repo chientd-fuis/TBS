@@ -8,6 +8,7 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { APPROVED_SHIFT, Attendance, PayrollItem, ShiftAssignment, Store, User } from "./models";
 import { can } from "./permissions";
+import { minutesVi } from "./format";
 import { addDays, localDate, localMonth, monthRange, nextMonth, prevMonth, weekStartOf } from "./time";
 import { loadHolidays } from "./holiday";
 import { geminiGenerate } from "./ocr";
@@ -185,7 +186,7 @@ export const TOOLS: Tool[] = [
       return {
         date: ctx.today,
         working: atts.filter((x) => x.status === "OPEN").map((x) => names.get(String(x.userId))),
-        late: atts.filter((x) => (x.lateMinutes ?? 0) > 0).map((x) => `${names.get(String(x.userId))} (${x.lateMinutes} phút)`),
+        late: atts.filter((x) => (x.lateMinutes ?? 0) > 0).map((x) => `${names.get(String(x.userId))} (${minutesVi(x.lateMinutes)})`),
         notCheckedIn: shifts.filter((s) => !came.has(String(s.userId))).map((s) => `${names.get(String(s.userId))} – ca ${s.shiftName} ${s.startTime}`),
       };
     },

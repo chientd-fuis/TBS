@@ -5,7 +5,7 @@ import { Pencil } from "lucide-react";
 /** Sự kiện mở popup "Sửa giờ ca đã chấm" cho 1 lượt – RequestSheet (trang Lịch sử) lắng nghe */
 export const ATT_EDIT_EVENT = "tbs:att-edit";
 
-/** Bọc các nhãn cảnh báo (Quên check-out / Muộn / Sớm) của 1 lượt → bấm mở popup sửa giờ đúng lượt đó */
+/** Bọc các nhãn cảnh báo (Quên check-out / Đi muộn / Về sớm) của 1 lượt → bấm mở popup sửa giờ đúng lượt đó */
 export default function AttEditButton({ id, children }: { id: string; children: ReactNode }) {
   return (
     <button

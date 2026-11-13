@@ -18,8 +18,8 @@ export default function RulesView({ text, empty }: { text: string; empty?: strin
             <B text={b.text} />
           </h3>
         ) : b.kind === "item" ? (
-          <div key={i} className="flex gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#f1e6c8]">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-ink">{b.no}</span>
+          <div key={i} className="flex gap-3 rounded-2xl bg-card p-3 ring-1 ring-line">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">{b.no}</span>
             <div className="min-w-0">
               <p><B text={b.text} /></p>
               {b.sub.length > 0 && (

@@ -5,7 +5,7 @@ import { can } from "@/lib/permissions";
 import { Attendance, ShiftTemplate, Store, User } from "@/lib/models";
 import { geminiConfigured } from "@/lib/ocr";
 import { localDate, localMonth, localTime, viDate } from "@/lib/time";
-import { hoursVi } from "@/lib/format";
+import { hoursVi, minutesVi } from "@/lib/format";
 import { isMonthLocked, payStoreFilter } from "@/lib/attendance";
 import { labelSupport } from "@/lib/support";
 import { AttendanceTable, summarize, type AttRow } from "@/components/AttendanceTable";
@@ -60,7 +60,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageTitle sub="Tô màu: cam = muộn/sớm · đỏ = quên check-out · xanh = chấm hộ">Bảng chấm công</PageTitle>
+      <PageTitle sub="Tô màu: cam = đi muộn / về sớm · đỏ = quên check-out · xanh = chấm hộ">Bảng chấm công</PageTitle>
       <Card>
         <AutoFilterForm key={`${store?._id}|${sp.user}|${month}|${sp.status}`} className="flex flex-wrap items-end gap-2" resetOnChange={{ store: ["user"] }}>
           <Field label="Cơ sở">
@@ -125,7 +125,7 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
                   <Link
                     className="text-danger underline"
                     href={`/admin/bonus-penalty?store=${store?._id}&user=${(r as AttRow & { userId: unknown }).userId}&date=${r.workDate}&att=${r._id}&content=${encodeURIComponent(
-                      r.status === "MISSING_CHECKOUT" ? `Quên check-out ngày ${viDate(r.workDate)}` : r.lateMinutes ? `Đi muộn ${r.lateMinutes} phút ngày ${viDate(r.workDate)}` : `Về sớm ${r.earlyMinutes} phút ngày ${viDate(r.workDate)}`,
+                      r.status === "MISSING_CHECKOUT" ? `Quên check-out ngày ${viDate(r.workDate)}` : r.lateMinutes ? `Đi muộn ${minutesVi(r.lateMinutes)} ngày ${viDate(r.workDate)}` : `Về sớm ${minutesVi(r.earlyMinutes)} ngày ${viDate(r.workDate)}`,
                     )}#form`}
                   >
                     Thêm phạt
@@ -216,8 +216,8 @@ function SummaryLine({ rows }: { rows: { status: string; roundedHours?: number |
         {hoursVi(Math.abs(diff))}h
       </Badge>
       <Badge tone="yellow">Ngày công: {s.workDays}</Badge>
-      <Badge tone="orange">Muộn: {s.late}</Badge>
-      <Badge tone="orange">Sớm: {s.early}</Badge>
+      <Badge tone="orange">Đi muộn: {s.late}</Badge>
+      <Badge tone="orange">Về sớm: {s.early}</Badge>
       <Badge tone="red">Quên check-out: {s.missing}</Badge>
       <Badge tone="green">Chấm hộ: {s.manual}</Badge>
     </div>
@@ -230,7 +230,7 @@ function SummaryTable({ rows, staff, storeId, month }: { rows: (AttRow & { userI
     <div className="overflow-x-auto">
       <table className="tbs">
         <thead>
-          <tr><th>Nhân viên</th><th className="text-center">Giờ tính công</th><th className="text-center">Ngày công</th><th className="text-center">Muộn</th><th className="text-center">Sớm</th><th className="text-center">Quên check-out</th><th className="text-center">Chấm hộ</th><th></th></tr>
+          <tr><th>Nhân viên</th><th className="text-center">Giờ tính công</th><th className="text-center">Ngày công</th><th className="text-center">Đi muộn</th><th className="text-center">Về sớm</th><th className="text-center">Quên check-out</th><th className="text-center">Chấm hộ</th><th></th></tr>
         </thead>
         <tbody>
           {staff.map((u) => {

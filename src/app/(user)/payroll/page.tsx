@@ -87,8 +87,8 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <dt>Thưởng</dt><dd className="text-right text-bonus">+{vnd(item.totalBonus)}</dd>
               <dt>Phạt</dt><dd className="text-right text-danger">−{vnd(item.totalPenalty)}</dd>
               <dt>Tạm ứng</dt><dd className="text-right">−{vnd(item.advance)}</dd>
-              <dt className="border-t border-[#f1e6c8] pt-2 text-base font-bold">Thực nhận</dt>
-              <dd className="border-t border-[#f1e6c8] pt-2 text-right text-lg font-bold text-secondary-dark">{vnd(item.netPay)}</dd>
+              <dt className="border-t border-line pt-2 text-base font-bold">Thực nhận</dt>
+              <dd className="border-t border-line pt-2 text-right text-lg font-bold text-good">{vnd(item.netPay)}</dd>
             </dl>
             <p className="mt-2 text-xs text-ink/60">
               {item.paidAt ? "✅ Quán đã trả lương tháng này." : "Số liệu cập nhật theo chấm công, thưởng / phạt mới nhất – chốt khi quán trả lương."}
@@ -128,7 +128,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
             {feedbacks.map((f) => (
               <div key={String(f._id)} className="mt-3 rounded-xl bg-cream p-2 text-sm">
                 <p>{f.content}</p>
-                {f.adminReply ? <p className="text-xs text-secondary-dark">Admin: {f.adminReply}</p> : <p className="text-xs text-ink/60">Chờ phản hồi</p>}
+                {f.adminReply ? <p className="text-xs text-good">Admin: {f.adminReply}</p> : <p className="text-xs text-ink/60">Chờ phản hồi</p>}
               </div>
             ))}
           </Card>

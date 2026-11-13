@@ -4,7 +4,7 @@ import type { CheckinLock } from "@/lib/auto-checkout";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, LogIn, LogOut, MapPin, TriangleAlert, Wifi } from "lucide-react";
 import { Alert, Button, Card } from "@/components/ui";
-import { cn } from "@/lib/format";
+import { cn, minutesVi } from "@/lib/format";
 import FaceCamera, { type FaceCapture } from "./FaceCamera";
 import { DeviceNotice } from "./DeviceNotice";
 import { fingerprint, useDevice } from "./useDevice";
@@ -126,9 +126,9 @@ export default function CheckInWidget({
       // 1 thông báo duy nhất: "thành công" + lưu ý (nếu có) ngay bên dưới – không hiện thêm ô cảnh báo riêng như báo lỗi
       const notes = [
         res.action === "CHECK_IN" && res.outOfShift ? "Bạn không có ca được xếp vào giờ này – giờ làm sẽ được gửi quản lý xác nhận. Nhớ CHECK-OUT khi về." : "",
-        res.action === "CHECK_IN" && res.lateMinutes ? `Đi muộn ${res.lateMinutes} phút.` : "",
+        res.action === "CHECK_IN" && res.lateMinutes ? `Đi muộn ${minutesVi(res.lateMinutes)}.` : "",
         res.cappedAt ? `Quá giờ chốt ca tối – chỉ tính công tới ${res.cappedAt}.` : "",
-        res.earlyMinutes ? `Về sớm ${res.earlyMinutes} phút.` : "",
+        res.earlyMinutes ? `Về sớm ${minutesVi(res.earlyMinutes)}.` : "",
         res.overtimeNote ?? "",
       ].filter(Boolean);
       toast(
@@ -169,11 +169,11 @@ export default function CheckInWidget({
                 t.tone === "ok" ? "bg-secondary text-white ring-secondary-dark" : "bg-primary-light text-ink ring-primary",
               )}
             >
-              <CheckCircle2 size={18} className={cn("mt-0.5 shrink-0", t.tone === "warn" && "text-secondary-dark")} />
+              <CheckCircle2 size={18} className={cn("mt-0.5 shrink-0", t.tone === "warn" && "text-good")} />
               <span className="min-w-0">
                 <span className={cn("block", t.tone === "warn" && "font-semibold")}>{t.text}</span>
                 {t.notes?.map((n) => (
-                  <span key={n} className="mt-1 flex items-start gap-1 text-[13px] text-[#9a3412]">
+                  <span key={n} className="mt-1 flex items-start gap-1 text-[13px] text-late-fg">
                     <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden />
                     {n}
                   </span>

@@ -66,8 +66,8 @@ export default function RegisterForm({
               className={cn(
                 "flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md text-xs font-bold transition",
                 st === "APPROVED" && "cursor-default bg-secondary text-white",
-                st !== "APPROVED" && on && "bg-[#ffd8b8] text-warn ring-2 ring-warn",
-                st !== "APPROVED" && !on && "bg-white/40 text-ink/40 hover:bg-white/80",
+                st !== "APPROVED" && on && "bg-late-strong text-warn ring-2 ring-warn",
+                st !== "APPROVED" && !on && "bg-card/40 text-ink/40 hover:bg-card/80",
               )}
             >
               {st === "APPROVED" ? (

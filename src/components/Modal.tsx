@@ -22,8 +22,8 @@ export default function Modal({ label, title, children, className }: { label: Re
       </button>
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label={title}>
-            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-shade/40 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label={title}>
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-card p-4 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <b className="text-accent">{title}</b>
                 <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-cream">

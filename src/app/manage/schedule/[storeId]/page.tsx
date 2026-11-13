@@ -26,7 +26,7 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
   const thisWeek = weekStartOf(today);
   const weekNav = (
     <div className="flex flex-wrap items-center gap-2">
-      <Link href={link(addDays(ws, -7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
+      <Link href={link(addDays(ws, -7))} className="rounded-xl bg-card p-2 ring-1 ring-line hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
       <span className="text-center font-bold sm:min-w-56">
         {viDate(ws)} – {viDate(addDays(ws, 6))}
         {weekLabel(ws, thisWeek, addDays) && (
@@ -35,7 +35,7 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
           </span>
         )}
       </span>
-      <Link href={link(addDays(ws, 7))} className="rounded-xl bg-white p-2 ring-1 ring-[#f1e6c8] hover:bg-primary-light" aria-label="Tuần sau"><ChevronRight size={18} /></Link>
+      <Link href={link(addDays(ws, 7))} className="rounded-xl bg-card p-2 ring-1 ring-line hover:bg-primary-light" aria-label="Tuần sau"><ChevronRight size={18} /></Link>
       {ws !== thisWeek && <Link href={link(thisWeek)} className="text-sm text-accent underline">Về tuần này</Link>}
     </div>
   );

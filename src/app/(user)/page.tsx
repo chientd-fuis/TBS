@@ -3,6 +3,7 @@ import { requireActiveUser } from "@/lib/guards";
 import { APPROVED_SHIFT, Attendance, ShiftAssignment, Store } from "@/lib/models";
 import { localDate, localTime, viDate } from "@/lib/time";
 import { Badge, Card } from "@/components/ui";
+import { minutesVi } from "@/lib/format";
 import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
@@ -85,7 +86,7 @@ export default async function HomePage() {
       ) : (
       <Link
         href="/closing"
-        className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
+        className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
       >
         <span>
           <span className="block font-bold text-accent">📷 Chốt ca</span>
@@ -97,7 +98,7 @@ export default async function HomePage() {
       {goodsOn && (
       <Link
         href="/receive"
-        className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
+        className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
       >
         <span>
           <span className="block font-bold text-accent">📦 Nhận hàng</span>
@@ -109,7 +110,7 @@ export default async function HomePage() {
       {stockOn && (
         <Link
           href="/stock"
-          className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#f1e6c8] hover:bg-primary-light"
+          className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
         >
           <span>
             <span className="block font-bold text-accent">📋 Tồn kho</span>
@@ -139,8 +140,8 @@ export default async function HomePage() {
                   {localTime(a.checkInAt, tz)} → {a.checkOutAt ? localTime(a.checkOutAt, tz) : "…"}
                 </span>
                 {a.roundedHours != null && <Badge tone="yellow">{a.roundedHours}h</Badge>}
-                {!!a.lateMinutes && <Badge tone="orange">Muộn {a.lateMinutes}&apos;</Badge>}
-                {!!a.earlyMinutes && <Badge tone="orange">Sớm {a.earlyMinutes}&apos;</Badge>}
+                {!!a.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(a.lateMinutes)}</Badge>}
+                {!!a.earlyMinutes && <Badge tone="orange">Về sớm {minutesVi(a.earlyMinutes)}</Badge>}
                 {a.source === "ADMIN_MANUAL" && <Badge tone="green">Chấm hộ</Badge>}
                 {supportOf(a.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(a.storeId)}</Badge>}
               </div>

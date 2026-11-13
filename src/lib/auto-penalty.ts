@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { connectDB } from "./db";
 import { APPROVED_SHIFT, Attendance, AutoPenaltyWaiver, BonusPenalty, ShiftAssignment, Store, User } from "./models";
 import { getSettings } from "./settings";
+import { minutesVi } from "./format";
 import { isMonthLocked, shiftWindow } from "./attendance";
 import { addDays, DEFAULT_TZ, localDate, zonedToDate } from "./time";
 
@@ -52,7 +53,7 @@ export async function runAutoPenalties(now = new Date()) {
         userId: a.userId,
         date: a.workDate,
         amountVnd: late + perMin * lm,
-        content: `Đi muộn ${lm} phút${a.shiftLabel ? ` (${a.shiftLabel})` : ""} – phạt tự động`,
+        content: `Đi muộn ${minutesVi(lm)}${a.shiftLabel ? ` (${a.shiftLabel})` : ""} – phạt tự động`,
         attendanceId: a._id,
       });
     }

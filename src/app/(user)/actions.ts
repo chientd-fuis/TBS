@@ -144,3 +144,15 @@ export async function updateMyProfile(_: FormState, fd: FormData): Promise<FormS
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/** Tài khoản → Màu giao diện: lưu theo tài khoản (đổi điện thoại vẫn giữ). Thử việc luôn màu tím – không đổi được. */
+export async function setMyTheme(theme: string): Promise<{ ok?: boolean; error?: string }> {
+  const user = await requireActiveUser();
+  const { isThemeId } = await import("@/lib/themes");
+  if (!isThemeId(theme)) return { error: "Màu không hợp lệ" };
+  if (user.probation) return { error: "Đang thử việc – app dùng màu tím thử việc, lên nhân viên chính thức là đổi được màu." };
+  const { User } = await import("@/lib/models");
+  await User.updateOne({ _id: user._id }, { $set: { theme } });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

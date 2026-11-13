@@ -41,7 +41,7 @@ export default function CoverForm({ shiftId, label, candidates }: { shiftId: str
         )}
       </Select>
       <Textarea rows={2} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / lời nhắn (không bắt buộc)" />
-      {msg && <p className={`text-xs ${msg.ok ? "text-secondary-dark" : "text-danger"}`}>{msg.text}</p>}
+      {msg && <p className={`text-xs ${msg.ok ? "text-good" : "text-danger"}`}>{msg.text}</p>}
       <Button
         type="button"
         variant="secondary"

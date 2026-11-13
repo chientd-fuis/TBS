@@ -26,14 +26,14 @@ export default function SwapForm({ shiftId, label, peers }: { shiftId: string; l
           setOpen(true);
           setMsg(null);
         }}
-        className="flex items-center gap-1 rounded-lg bg-[#dbeafe] px-2.5 py-1 text-xs font-semibold text-[#1e40af] ring-1 ring-[#93c5fd]"
+        className="flex items-center gap-1 rounded-lg bg-info-bg px-2.5 py-1 text-xs font-semibold text-info-fg ring-1 ring-info-line"
       >
         <ArrowLeftRight size={14} /> Đổi ca
       </button>
     );
   return (
-    <div className="mt-2 w-full space-y-2 rounded-xl bg-[#eff6ff] p-2.5">
-      <div className="flex items-center justify-between text-xs font-semibold text-[#1e40af]">
+    <div className="mt-2 w-full space-y-2 rounded-xl bg-info-soft p-2.5">
+      <div className="flex items-center justify-between text-xs font-semibold text-info-fg">
         <span>Đổi {label}</span>
         <button type="button" onClick={() => setOpen(false)} aria-label="Đóng">
           <X size={16} />
@@ -71,7 +71,7 @@ export default function SwapForm({ shiftId, label, peers }: { shiftId: string; l
         )}
       </Select>
       {noShift && (
-        <p className="rounded-lg bg-[#fde2e2] px-2 py-1.5 text-xs text-danger">
+        <p className="rounded-lg bg-bad-bg px-2 py-1.5 text-xs text-danger">
           {peer.name} chưa có ca nào đã được duyệt trong 2 tuần tới – chỉ đổi được khi cả 2 người đều có ca đã duyệt.
         </p>
       )}
@@ -86,7 +86,7 @@ export default function SwapForm({ shiftId, label, peers }: { shiftId: string; l
         </Select>
       )}
       <Textarea rows={2} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / lời nhắn (không bắt buộc)" />
-      {msg && <p className={`text-xs ${msg.ok ? "text-secondary-dark" : "text-danger"}`}>{msg.text}</p>}
+      {msg && <p className={`text-xs ${msg.ok ? "text-good" : "text-danger"}`}>{msg.text}</p>}
       <Button
         type="button"
         variant="secondary"

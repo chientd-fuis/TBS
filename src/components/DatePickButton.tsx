@@ -32,7 +32,7 @@ export function DatePickButton({
     <label
       title="Chọn ngày"
       className={cn(
-        "relative flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[#e9d9a8] bg-white px-2.5 text-sm font-semibold text-ink focus-within:border-primary-dark focus-within:ring-2 focus-within:ring-primary/40",
+        "relative flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-line-strong bg-card px-2.5 text-sm font-semibold text-ink focus-within:border-primary-dark focus-within:ring-2 focus-within:ring-primary/40",
         small ? "h-8 rounded-lg px-2 text-xs" : "h-[38px]",
         v ? "bg-primary-light" : small ? "w-8 px-0" : "w-[38px] px-0",
         className,

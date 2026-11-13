@@ -58,13 +58,13 @@ export function ColumnToggle({
     <div className={scope}>
       {css && <style>{css}</style>}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-xl bg-white px-3 py-1.5 font-semibold ring-1 ring-[#e9d9a8] hover:bg-primary-light">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-xl bg-card px-3 py-1.5 font-semibold ring-1 ring-line-strong hover:bg-primary-light">
           👁 Ẩn / hiện cột{hidden.length ? ` (đang ẩn ${hidden.length})` : ""}
         </button>
         <button
           type="button"
           onClick={() => save(minimal ? [] : presetHidden)}
-          className={cn("rounded-xl px-3 py-1.5 ring-1", minimal ? "bg-secondary font-semibold text-white ring-secondary" : "bg-white ring-[#e9d9a8] hover:bg-primary-light")}
+          className={cn("rounded-xl px-3 py-1.5 ring-1", minimal ? "bg-secondary font-semibold text-white ring-secondary" : "bg-card ring-line-strong hover:bg-primary-light")}
         >
           {minimal ? "Hiện đủ cột" : minimalLabel}
         </button>
@@ -79,7 +79,7 @@ export function ColumnToggle({
                 key={c.n}
                 type="button"
                 onClick={() => toggle(c.n)}
-                className={cn("rounded-lg px-2.5 py-1 ring-1", on ? "bg-white font-semibold ring-[#e9d9a8]" : "bg-transparent text-ink/50 line-through ring-transparent")}
+                className={cn("rounded-lg px-2.5 py-1 ring-1", on ? "bg-card font-semibold ring-line-strong" : "bg-transparent text-ink/50 line-through ring-transparent")}
               >
                 {on ? "☑" : "☐"} {c.label}
               </button>

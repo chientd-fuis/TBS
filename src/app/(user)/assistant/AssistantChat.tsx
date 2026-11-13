@@ -44,7 +44,7 @@ export default function AssistantChat({ enabled, left: left0, limit }: { enabled
       {!msgs.length && (
         <div className="flex flex-wrap gap-1.5">
           {SUGGEST.map((s) => (
-            <button key={s} type="button" onClick={() => ask(s)} className="rounded-full border border-[#f1e6c8] bg-white px-3 py-1 text-xs">
+            <button key={s} type="button" onClick={() => ask(s)} className="rounded-full border border-line bg-card px-3 py-1 text-xs">
               {s}
             </button>
           ))}
@@ -53,14 +53,14 @@ export default function AssistantChat({ enabled, left: left0, limit }: { enabled
       <div className="space-y-2.5">
         {msgs.map((m, i) =>
           m.role === "q" ? (
-            <div key={i} className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm font-medium">
+            <div key={i} className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm font-medium text-on-primary">
               {m.text}
             </div>
           ) : (
             <div
               key={i}
               className={`max-w-[94%] rounded-2xl rounded-bl-md border px-3 py-2 text-sm whitespace-pre-line ${
-                m.status === "OUT_OF_SCOPE" || m.status === "ERROR" ? "border-[#fde2c4] bg-[#fffaf3]" : m.status === "MISSING" ? "border-[#f1e6c8] bg-cream" : "border-[#f1e6c8] bg-white"
+                m.status === "OUT_OF_SCOPE" || m.status === "ERROR" ? "border-warn-line bg-warn-soft" : m.status === "MISSING" ? "border-line bg-cream" : "border-line bg-card"
               }`}
             >
               {m.text}
@@ -75,7 +75,7 @@ export default function AssistantChat({ enabled, left: left0, limit }: { enabled
         <div ref={end} />
       </div>
       <form
-        className="sticky bottom-20 flex gap-2 rounded-2xl bg-cream p-2 ring-1 ring-[#f1e6c8]"
+        className="sticky bottom-20 flex gap-2 rounded-2xl bg-cream p-2 ring-1 ring-line"
         onSubmit={(e) => {
           e.preventDefault();
           ask(q);

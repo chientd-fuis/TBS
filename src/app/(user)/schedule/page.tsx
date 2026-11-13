@@ -71,7 +71,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const list = supportShifts.filter((m) => days.includes(m.date));
     if (!list.length) return null;
     return (
-      <div className="mt-2 rounded-xl bg-[#dbeafe] p-3 text-sm text-[#1e40af]">
+      <div className="mt-2 rounded-xl bg-info-bg p-3 text-sm text-info-fg">
         <p className="mb-1 font-bold">⇄ Ca hỗ trợ cơ sở khác</p>
         <ul className="space-y-0.5">
           {list.map((m) => (
@@ -130,19 +130,19 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .flatMap((c) => [[String(c.shiftAssignmentId), c] as const, ...(c.toShiftAssignmentId ? [[String(c.toShiftAssignmentId), c] as const] : [])]),
   );
   const dmy = (d?: string | null) => (d ? `${d.slice(8)}/${d.slice(5, 7)}` : "");
-  const COVER_ST = { PENDING: ["Chờ admin duyệt", "text-warn"], APPROVED: ["Đã duyệt", "text-secondary-dark"], REJECTED: ["Bị từ chối", "text-danger"], CANCELLED: ["Đã huỷ", "text-ink/50"] } as const;
+  const COVER_ST = { PENDING: ["Chờ admin duyệt", "text-warn"], APPROVED: ["Đã duyệt", "text-good"], REJECTED: ["Bị từ chối", "text-danger"], CANCELLED: ["Đã huỷ", "text-ink/50"] } as const;
 
   return (
     <>
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-bold text-accent">Lịch làm việc</h1>
-        <div className="flex rounded-xl bg-white p-1 text-sm ring-1 ring-[#f1e6c8]">
-          <Link href={`/schedule?week=${ws}${q}`} className={cn("rounded-lg px-3 py-1", view === "week" && "bg-primary font-bold")}>Tuần</Link>
-          <Link href={`/schedule?view=month&month=${month}${q}`} className={cn("rounded-lg px-3 py-1", view === "month" && "bg-primary font-bold")}>Tháng</Link>
+        <div className="flex rounded-xl bg-card p-1 text-sm ring-1 ring-line">
+          <Link href={`/schedule?week=${ws}${q}`} className={cn("rounded-lg px-3 py-1", view === "week" && "bg-primary font-bold text-on-primary")}>Tuần</Link>
+          <Link href={`/schedule?view=month&month=${month}${q}`} className={cn("rounded-lg px-3 py-1", view === "month" && "bg-primary font-bold text-on-primary")}>Tháng</Link>
         </div>
       </div>
       {/* lịch của tôi / cả cửa hàng */}
-      <div className="grid grid-cols-2 rounded-xl bg-white p-1 text-sm ring-1 ring-[#f1e6c8]">
+      <div className="grid grid-cols-2 rounded-xl bg-card p-1 text-sm ring-1 ring-line">
         {[
           { on: !all, label: "👤 Lịch của tôi", qs: "" },
           { on: all, label: "🏪 Cả cửa hàng", qs: "&all=1" },
@@ -156,7 +156,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           </Link>
         ))}
       </div>
-      {all && <p className="text-xs text-ink/60">Lịch làm việc của {store?.name}. Tên <b className="rounded bg-primary px-1">được tô vàng</b> là bạn.</p>}
+      {all && <p className="text-xs text-ink/60">Lịch làm việc của {store?.name}. Tên <b className="rounded bg-primary px-1 text-on-primary">được tô màu</b> là bạn.</p>}
 
       <LinkButton href={`/schedule/register?week=${ws >= nextWeek ? ws : nextWeek}`} className="w-full">
         📝 Đăng ký ca {ws >= nextWeek ? "tuần này đang xem" : "tuần sau"}
@@ -178,7 +178,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </>
       ) : (
         <>
-          <div className="flex items-center justify-between rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]">
+          <div className="flex items-center justify-between rounded-xl bg-card p-1 ring-1 ring-line">
             <Link href={`/schedule?view=month&month=${prevMonth(month)}${q}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">‹</Link>
             <span className="text-sm font-bold">Tháng {viMonth(month)}</span>
             <Link href={`/schedule?view=month&month=${nextMonth(month)}${q}`} className="rounded-lg px-3 py-1.5 hover:bg-primary-light">›</Link>
@@ -201,7 +201,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         {!upcoming.length ? (
           <p className="text-sm text-ink/60">Bạn chưa có ca đã duyệt trong 2 tuần tới.</p>
         ) : (
-          <ul className="divide-y divide-[#f1e6c8]">
+          <ul className="divide-y divide-line">
             {upcoming.map((m) => {
               const label = `${m.shiftName ?? ""} ${m.startTime}–${m.endTime} ${weekdayVi(m.date)} ${m.date.slice(8)}/${m.date.slice(5, 7)}`;
               const p = pendingCover.get(String(m._id));
@@ -231,7 +231,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           </ul>
         )}
         {covers.length > 0 && (
-          <div className="mt-3 border-t border-[#f1e6c8] pt-2">
+          <div className="mt-3 border-t border-line pt-2">
             <p className="mb-1 text-xs font-semibold text-accent">Yêu cầu nhờ làm hộ / đổi ca</p>
             <ul className="space-y-1 text-xs">
               {covers.map((c) => {

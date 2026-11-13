@@ -48,7 +48,7 @@ export default async function ExportPage() {
             theo ngày × cơ sở · C. Chi tiết từng lượt chốt ca (âm/dương, NV cộng đúng/sai) · D. Chi phí admin nhập · E. Mặt bằng · F. Chấm công theo cơ sở (không chi tiết
             từng nhân viên).
           </li>
-          <li><b>Bảng chấm công chi tiết + Tổng hợp</b>: mỗi nhân viên 1 sheet (Ngày, Giờ Đến, Giờ Về, Tổng, Format, Giờ tính công, Ca, Muộn, Sớm, Nguồn, Ghi chú) + sheet Summary.</li>
+          <li><b>Bảng chấm công chi tiết + Tổng hợp</b>: mỗi nhân viên 1 sheet (Ngày, Giờ Đến, Giờ Về, Tổng, Format, Giờ tính công, Ca, Đi muộn, Về sớm, Nguồn, Ghi chú) + sheet Summary.</li>
           <li><b>Tổng hợp</b>: mỗi nhân viên 1 dòng – giờ công, ngày công, số lần muộn/sớm, quên check-out, chấm hộ.</li>
           <li><b>Bảng lương</b>: giờ công, lương giờ, lương CB, phụ cấp, thưởng, phạt, tạm ứng, thực nhận, trạng thái.</li>
           <li><b>Thưởng / phạt</b>: ngày, nhân viên, loại, số tiền, nội dung, người nhập.</li>

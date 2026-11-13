@@ -73,7 +73,7 @@ export default function PullToRefresh() {
       style={{ transform: `translateY(${pull - 40}px)`, transition: st.current.on ? "none" : "transform .2s" }}
     >
       <div
-        className={`flex h-10 w-10 items-center justify-center rounded-full text-ink shadow-md ${ready || loading ? "bg-primary" : "bg-white"}`}
+        className={`flex h-10 w-10 items-center justify-center rounded-full shadow-md ${ready || loading ? "bg-primary text-on-primary" : "bg-card text-ink"}`}
         style={{ opacity: Math.min(1, pull / 40) }}
       >
         <svg

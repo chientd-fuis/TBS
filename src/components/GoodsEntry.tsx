@@ -14,7 +14,7 @@ export function GoodsEntry({ raw, items, note, sender }: { raw?: string | null; 
       )}
       <ul className="flex flex-wrap gap-1.5">
         {items.map((l) => (
-          <li key={l.name} className={`rounded-lg px-2 py-0.5 text-sm ring-1 ${l.qty === 0 ? "bg-[#fdecec] ring-danger/30" : "bg-white ring-[#f1e6c8]"}`}>
+          <li key={l.name} className={`rounded-lg px-2 py-0.5 text-sm ring-1 ${l.qty === 0 ? "bg-bad-soft ring-danger/30" : "bg-card ring-line"}`}>
             {l.name}{" "}
             {l.qty === 0 ? (
               <b className="text-danger">hết</b>

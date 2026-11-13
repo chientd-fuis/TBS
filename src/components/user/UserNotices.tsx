@@ -5,10 +5,10 @@ import { UserNotice } from "@/lib/models";
 import DismissNotice from "./DismissNotice";
 
 const TONE = {
-  green: "bg-[#e3f3e7] text-secondary-dark ring-secondary/40",
-  orange: "bg-[#fff4e5] text-warn ring-warn/40",
-  red: "bg-[#fde2e2] text-danger ring-danger/40",
-  blue: "bg-[#dbeafe] text-[#1e40af] ring-[#93c5fd]",
+  green: "bg-ok-bg text-good ring-secondary/40",
+  orange: "bg-warn-soft text-warn ring-warn/40",
+  red: "bg-bad-bg text-danger ring-danger/40",
+  blue: "bg-info-bg text-info-fg ring-info-line",
 } as const;
 
 /** Thông báo chưa xem (VD được nhờ làm hộ ca) – hiện đầu mọi màn hình nhân viên. */

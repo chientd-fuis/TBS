@@ -133,7 +133,7 @@ export default function FaceCamera({
 
   return (
     <div className="space-y-3">
-      <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-ink/90 ring-4 ring-primary">
+      <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-shade/90 ring-4 ring-primary">
         <video ref={videoRef} playsInline muted className="h-full w-full -scale-x-100 object-cover" />
         <div
           className={`pointer-events-none absolute inset-8 rounded-[45%] border-4 border-dashed ${faceOk ? "border-secondary" : "border-white/60"}`}

@@ -6,7 +6,7 @@ import { cn } from "@/lib/format";
 export default function ManageTabs({ tabs }: { tabs: { href: string; label: string }[] }) {
   const path = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto rounded-xl bg-white p-1 ring-1 ring-[#f1e6c8]">
+    <nav className="flex gap-1 overflow-x-auto rounded-xl bg-card p-1 ring-1 ring-line">
       {tabs.map((t) => (
         <Link
           key={t.href}

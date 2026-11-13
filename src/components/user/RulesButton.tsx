@@ -57,7 +57,7 @@ export default function RulesButton({ rules, assistant = true }: { rules: string
         type="button"
         onClick={openRules}
         aria-label={isNew ? "Nội quy cửa hàng (có cập nhật mới)" : "Nội quy cửa hàng"}
-        className="relative flex items-center gap-1 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30"
+        className="relative flex items-center gap-1 rounded-xl bg-chip px-2.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30"
       >
         <BookOpenText size={15} /> Nội quy
         {isNew && (
@@ -67,20 +67,20 @@ export default function RulesButton({ rules, assistant = true }: { rules: string
 
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label="Nội quy cửa hàng">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-shade/50 sm:items-center sm:p-4" onClick={() => setOpen(false)} role="dialog" aria-modal="true" aria-label="Nội quy cửa hàng">
             <div className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-3xl bg-cream shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between gap-2 border-b border-[#f1e6c8] px-4 py-3">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
                 <b className="flex items-center gap-2 text-accent">
                   <BookOpenText size={20} /> Nội quy cửa hàng
                 </b>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-full bg-white ring-1 ring-[#f1e6c8]">
+                <button type="button" onClick={() => setOpen(false)} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-full bg-card ring-1 ring-line">
                   <X size={22} />
                 </button>
               </div>
               <div className="overflow-y-auto px-4 py-4">
                 <RulesView text={rules} />
               </div>
-              <div className="border-t border-[#f1e6c8] px-4 py-3 text-center text-sm">
+              <div className="border-t border-line px-4 py-3 text-center text-sm">
                 Còn thắc mắc?{" "}
                 {assistant ? (
                   <Link href="/assistant" className="font-semibold text-accent underline" onClick={() => setOpen(false)}>
