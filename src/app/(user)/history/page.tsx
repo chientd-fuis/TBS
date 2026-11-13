@@ -101,11 +101,12 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
       </div>
       {sum.missing > 0 && (
         <p className="rounded-xl bg-bad-soft px-3 py-2.5 text-sm text-bad-fg ring-1 ring-bad-line">
-          Có <b>{sum.missing} lượt quên check-out</b>. Bấm vào chữ <b>Quên check-out</b> trong bảng để gửi yêu cầu sửa giờ.
+          Có <b>{sum.missing} lượt quên check-out</b>. Bấm chữ <b>Quên check-out</b> trong bảng, hoặc nút <b>Gửi yêu cầu chấm công</b> ngay dưới bảng.
         </p>
       )}
-      <RequestSheet atts={picks} shifts={shifts} today={today} minDate={minDate} round={round} />
       <AttendanceTable rows={rows} tz={tz} staffView staffEdit={{ editable, pending: pendingIds }} />
+      {/* khung gửi yêu cầu: nằm DƯỚI bảng, bấm là mở ngay trong trang (không popup) */}
+      <RequestSheet atts={picks} shifts={shifts} today={today} minDate={minDate} round={round} />
 
       {requests.length > 0 && (
         <Card title="Yêu cầu của tôi">

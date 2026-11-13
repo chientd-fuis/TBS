@@ -76,7 +76,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav {...nav} />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:static lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none tbs-navbar-on-dark">
+        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 bg-secondary-dark pr-2 pl-1 text-sm shadow-sm lg:relative lg:h-auto lg:justify-end lg:border-b lg:border-[#f1e6c8] lg:bg-white lg:px-4 lg:py-2 lg:shadow-none tbs-navbar-on-dark">
           {/* loading chuyển trang / lọc (chỉ điện thoại): vạch vàng dưới header. Menu có vòng xoay riêng (data-no-navbar), nút có loading trong nút */}
           <Suspense fallback={null}>
             <NavProgress mobileOnly />

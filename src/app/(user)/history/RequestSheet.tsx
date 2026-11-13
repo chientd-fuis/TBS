@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, Loader2, Plus } from "lucide-react";
 import { normalizeTime } from "@/components/TimeInput";
 import { roundedHours, type RoundingConfig } from "@/lib/calc";
-import { ATT_EDIT_EVENT } from "@/components/user/AttEditButton";
+import { ATT_EDIT_EVENT, ATT_EDITING_EVENT } from "@/components/user/AttEditButton";
 import { minutesVi as mins } from "@/lib/format";
 import { submitAdjustment } from "../actions";
 
@@ -199,11 +199,14 @@ export default function RequestSheet({
     [byId],
   );
 
+  /** khung form nằm ngay trong trang (dưới bảng chấm công) – cuộn tới đầu khung khi mở / chuyển tab */
+  const panelRef = useRef<HTMLElement>(null);
+  const scrollToPanel = () => window.setTimeout(() => panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+
   /**
    * Nút "Sửa giờ lượt … thay vì chấm bù": hiện đang mở (vòng xoay) cho người dùng thấy đã bấm,
-   * rồi chuyển sang tab Sửa giờ (mang theo giờ + lý do đã điền) và cuộn popup lên đầu để thấy form.
+   * rồi chuyển sang tab Sửa giờ (mang theo giờ + lý do đã điền) và cuộn lên đầu khung để thấy form.
    */
-  const sheetRef = useRef<HTMLElement>(null);
   const [jumping, setJumping] = useState<string | null>(null);
   const jumpToEdit = (a: PickAtt) => {
     if (jumping) return;
@@ -212,7 +215,7 @@ export default function RequestSheet({
     window.setTimeout(() => {
       editAtt(a.id, carry);
       setJumping(null);
-      sheetRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToPanel();
     }, 350);
   };
   const jumpBtn = (a: PickAtt, className: string) => (
@@ -243,39 +246,17 @@ export default function RequestSheet({
       if (!a || !usable(a)) return;
       editAtt(id);
       setOpen(true);
+      scrollToPanel(); // nhãn ở trong bảng phía trên → cuộn xuống khung form
     };
     window.addEventListener(ATT_EDIT_EVENT, on);
     return () => window.removeEventListener(ATT_EDIT_EVENT, on);
   }, [byId, editAtt]);
-  // mở popup: khoá cuộn trang phía sau
-  /**
-   * iPhone (Safari): popup cố định có ô nhập → bật bàn phím, Safari tự cuộn trang phía sau làm popup lệch khỏi chỗ chạm
-   * (chạm ô Giờ vào không được, chạm nhiều lần như bị đơ). Cách chữa:
-   *  - khoá hẳn trang phía sau (body position: fixed, giữ vị trí cuộn, trả lại khi đóng)
-   *  - khung popup bám theo vùng nhìn thấy (visualViewport) → bàn phím mở thì popup co lại phía trên bàn phím
-   */
-  const [vv, setVv] = useState<{ top: number; h: number } | null>(null);
+  // báo cho nhãn trong bảng biết lượt nào đang được sửa → nhãn đó hiện "Đang sửa ↓"
+  const editingId = open && tab === "EDIT" && !choosing ? attId : null;
   useEffect(() => {
-    if (!open) return;
-    const y = window.scrollY;
-    const b = document.body.style;
-    const prev = { position: b.position, top: b.top, left: b.left, right: b.right, overflow: b.overflow };
-    Object.assign(b, { position: "fixed", top: `-${y}px`, left: "0", right: "0", overflow: "hidden" });
-    const v = window.visualViewport;
-    // chỉ bám theo vùng nhìn thấy khi bàn phím đang mở (vùng nhìn thấy thấp hơn hẳn cửa sổ); bình thường để popup phủ kín như cũ
-    const fit = () => v && setVv(v.height < window.innerHeight - 120 ? { top: v.offsetTop, h: v.height } : null);
-    fit();
-    v?.addEventListener("resize", fit);
-    v?.addEventListener("scroll", fit);
-    return () => {
-      v?.removeEventListener("resize", fit);
-      v?.removeEventListener("scroll", fit);
-      Object.assign(b, prev);
-      window.scrollTo(0, y);
-      setVv(null);
-    };
-  }, [open]);
-  // gửi bị lỗi → cuộn tới ô báo lỗi (tránh lỗi nằm khuất dưới đáy popup / sau thanh trình duyệt)
+    window.dispatchEvent(new CustomEvent(ATT_EDITING_EVENT, { detail: editingId }));
+  }, [editingId]);
+  // gửi bị lỗi → cuộn tới ô báo lỗi (tránh lỗi nằm khuất dưới đáy khung)
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -294,6 +275,7 @@ export default function RequestSheet({
     }
     setError(null);
     setOpen(true);
+    scrollToPanel();
   };
 
   /* ---- tab Quên chấm công ---- */
@@ -395,15 +377,10 @@ export default function RequestSheet({
   );
   const overlapAtt = error?.overlapId ? byId.get(error.overlapId) : undefined;
 
+  // Không dùng popup nữa (popup cố định + bàn phím iPhone hay lệch / đơ): khung form MỞ NGAY TRONG TRANG, dưới bảng chấm công.
+  // Thu gọn vẫn giữ dữ liệu đang điền; gửi thành công mới xoá + thu gọn.
   return (
     <>
-      <button
-        type="button"
-        onClick={openSheet}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-on-accent active:scale-[.99]"
-      >
-        <Plus size={18} aria-hidden /> Gửi yêu cầu chấm công
-      </button>
       {toast && (
         <div role="status" className="fixed inset-x-0 top-3 z-[60] flex justify-center px-4">
           <div className="flex max-w-md items-center gap-2 rounded-2xl bg-secondary-dark px-4 py-3 text-sm text-white shadow-lg">
@@ -411,27 +388,40 @@ export default function RequestSheet({
           </div>
         </div>
       )}
-      {open && (
-        <div
-          className="fixed inset-x-0 top-0 bottom-0 z-50 flex touch-manipulation items-end justify-center bg-shade/50 sm:items-center sm:p-4"
-          style={vv ? { top: vv.top, height: vv.h, bottom: "auto" } : undefined}
-          onClick={() => !sending && setOpen(false)}
+      <section
+        ref={panelRef}
+        aria-label="Gửi yêu cầu chấm công"
+        className={`scroll-mt-20 overflow-hidden rounded-2xl ${open ? "border-2 border-accent bg-card shadow-md" : ""}`}
+      >
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            if (sending) return;
+            if (open) setOpen(false);
+            else openSheet();
+          }}
+          className={`flex min-h-[60px] w-full items-center gap-3 bg-accent px-4 py-2.5 text-left text-on-accent active:opacity-90 ${open ? "" : "rounded-2xl"}`}
         >
-          <section
-            ref={sheetRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Gửi yêu cầu chấm công"
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[92%] w-full max-w-md flex-col gap-3.5 overflow-y-auto overscroll-contain rounded-t-3xl bg-cream px-4 pb-5 pt-2.5 text-ink sm:rounded-3xl"
-          >
-            <div className="mx-auto h-1 w-10 shrink-0 rounded bg-line-strong sm:hidden" />
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-accent">Gửi yêu cầu chấm công</h2>
-              <button type="button" aria-label="Đóng" onClick={() => setOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-card ring-1 ring-line">
-                <X size={16} />
-              </button>
-            </div>
+          {!open && (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-on-accent/20">
+              <Plus size={18} aria-hidden />
+            </span>
+          )}
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[15px] font-bold">Gửi yêu cầu chấm công</span>
+            {!open && <span className="text-xs opacity-85">Quên chấm công · Sửa giờ ca đã chấm</span>}
+          </span>
+          {open ? (
+            <span className="flex items-center gap-1 text-[13px] font-semibold opacity-90">
+              Thu gọn <ChevronUp size={18} aria-hidden />
+            </span>
+          ) : (
+            <ChevronDown size={20} aria-hidden />
+          )}
+        </button>
+        {open && (
+          <div className="flex flex-col gap-3.5 px-3.5 pb-4 pt-3.5 text-ink">
             <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1">
               {tabBtn("MISSING", "Quên chấm công", "Chấm bù ca bị thiếu")}
               {tabBtn("EDIT", "Sửa giờ ca đã chấm", "Quên check-out, vào sớm…")}
@@ -683,9 +673,9 @@ export default function RequestSheet({
                 </p>
               </div>
             )}
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+      </section>
     </>
   );
 }
