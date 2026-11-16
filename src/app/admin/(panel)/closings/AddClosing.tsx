@@ -183,7 +183,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           </Select>
         </Field>
         <Field label="Ngày">
-          <DatePickButton value={date} max={today} onChange={(v) => v && (setDate(v), setOverwrite(false))} weekday className="w-full [&>label]:w-full" />
+          <DatePickButton value={date} max={today} onChange={(v) => v && (setDate(v), setOverwrite(false))} weekday className="w-full [&>span]:w-full" />
         </Field>
         <Field label="Ca chốt">
           <div className="flex gap-1">

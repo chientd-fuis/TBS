@@ -60,7 +60,8 @@ export function DatePickButton({
 
   return (
     <span className={cn("relative inline-flex shrink-0", sz === "lg" && "flex w-full", className)}>
-      <label
+      {/* span (không phải label): nút hay nằm trong <Field> (là label) – label lồng nhau làm bấm ✕ lại mở lịch */}
+      <span
         title="Chọn ngày"
         className={cn(
           "relative flex cursor-pointer items-center gap-2 border font-bold text-ink focus-within:ring-2 focus-within:ring-primary/40",
@@ -101,13 +102,18 @@ export function DatePickButton({
           }}
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
-      </label>
+      </span>
       {clearable && v && (
         <button
           type="button"
-          aria-label="Bỏ chọn ngày"
-          onClick={clear}
-          className="absolute top-1/2 right-1.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-ink/60 hover:bg-card hover:text-danger"
+          aria-label="Bỏ chọn ngày – xem tất cả"
+          onClick={(e) => {
+            // chặn label cha (Field) chuyển cú bấm sang ô ngày → mở lịch / iOS tự điền hôm nay
+            e.preventDefault();
+            e.stopPropagation();
+            clear();
+          }}
+          className="absolute top-1/2 right-1 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-card/80 text-ink/70 ring-1 ring-line hover:text-danger"
         >
           <X size={14} />
         </button>
