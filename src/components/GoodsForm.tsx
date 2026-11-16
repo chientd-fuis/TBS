@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2, Minus, Plus, Sparkles, X } from "lucide-react";
+import { Camera, Loader2, Minus, PencilLine, Plus, Sparkles, X } from "lucide-react";
 import { Alert, Button } from "@/components/ui";
 import { DatePickButton } from "@/components/DatePickButton";
 import { mergeLines, parseGoodsText, qtyVi, RETURN_REASONS, type GoodsItem, type GoodsKind, type GoodsLine } from "@/lib/goods";
@@ -84,7 +84,10 @@ export default function GoodsForm({
   doneHref,
   allowReturn = false,
   ocrByKind,
+  monthNote,
 }: {
+  /** tồn kho (nhân viên): dòng tổng tháng "Tháng 11: đã nhận 42 lần · trả 3 lần" */
+  monthNote?: string;
   /** đọc ảnh AI bật / tắt riêng từng chế độ (Cài đặt → Đọc ảnh bằng AI); thiếu → theo ocrEnabled */
   ocrByKind?: Partial<Record<GoodsKind, boolean>>;
   mode: "user" | "admin";
@@ -133,6 +136,9 @@ export default function GoodsForm({
   const stock = k === "STOCK";
   const ret = k === "RETURN";
   const isUser = mode === "user";
+  // tồn kho của nhân viên: giao diện kiểm kê mới (2 nút lớn + 1 dòng gõ nhanh)
+  const stockUser = stock && isUser && !initial;
+  const textRef = useRef<HTMLInputElement>(null);
   const ocrOn = ocrEnabled && (ocrByKind?.[k] ?? true);
   const preview = useMemo(() => parseGoodsText(ret ? stripReturnWords(text) : text, catalog), [text, catalog, ret]);
   const unitOf = useMemo(() => new Map(catalog.map((c) => [c.name, c.unit])), [catalog]);
@@ -271,7 +277,73 @@ export default function GoodsForm({
         storeName && <p className="text-sm">Cơ sở: <b>{storeName}</b></p>
       )}
 
-      {/* ô gõ nhanh – giống nhắn nhóm */}
+      {/* Tồn kho (nhân viên): 2 nút lớn Chụp phiếu kiểm kê / Gõ số còn + 1 dòng gõ nhanh */}
+      {stockUser ? (
+        <div className="space-y-2.5 rounded-2xl bg-card p-3 ring-1 ring-line">
+          <div className={`grid gap-2 ${ocrOn ? "grid-cols-2" : "grid-cols-1"}`}>
+            {ocrOn && (
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() => fileRef.current?.click()}
+                className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-line-strong bg-cream text-[13px] font-bold disabled:opacity-60"
+              >
+                {busy === "ai" ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
+                {busy === "ai" ? "AI đang đọc…" : "Chụp phiếu kiểm kê"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => textRef.current?.focus()}
+              className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-line-strong bg-cream text-[13px] font-bold"
+            >
+              <PencilLine size={22} />
+              Gõ số còn
+            </button>
+          </div>
+          {ocrOn && <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPhotos(e.target.files)} />}
+          <label className="block space-y-1 text-xs text-ink/60">
+            <span>VD: “tồn 3mn, 1nl, hết sầu múi” – hoặc dán tin nhắn messenger</span>
+            <span className="flex gap-2">
+              <input
+                ref={textRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addText();
+                  }
+                }}
+                enterKeyHint="done"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-card px-3 text-base text-ink"
+              />
+              <Button type="button" variant="secondary" disabled={!preview.lines.length || !!busy} onClick={addText} className="h-11 shrink-0 px-3">
+                <Plus size={16} /> Thêm
+              </Button>
+            </span>
+          </label>
+          {text.trim() && (
+            <div className="space-y-1 text-sm">
+              {preview.lines.length > 0 && (
+                <p className="text-good">
+                  Hiểu là: <b>{preview.lines.map((l) => (l.qty === 0 ? `${l.name} hết` : `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`)).join(" · ")}</b>
+                </p>
+              )}
+              {preview.unknown.length > 0 && (
+                <p className="text-warn">
+                  Chưa hiểu: “{preview.unknown.join("”, “")}”
+                  {ocrOn && (
+                    <button type="button" disabled={!!busy} onClick={() => askAi({ text })} className="ml-1 inline-flex items-center gap-1 font-semibold text-accent underline">
+                      <Sparkles size={13} /> Nhờ AI đọc
+                    </button>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="rounded-2xl bg-cream p-3">
         <textarea
           value={text}
@@ -313,6 +385,7 @@ export default function GoodsForm({
           )}
         </div>
       </div>
+      )}
 
       {drafts.map((d, di) => (
         <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-warn-soft ring-warn/40" : "bg-card ring-line"}`}>
@@ -350,6 +423,7 @@ export default function GoodsForm({
                   <span className="min-w-0 flex-1 truncate font-semibold">
                     {ret && <span className="mr-1 text-late-fg">−</span>}
                     {l.name}
+                    {stock && l.qty === 0 && <span className="ml-1.5 rounded-full bg-bad-bg px-2 py-0.5 text-[11px] font-bold text-bad-fg">Hết</span>}
                   </span>
                   <button type="button" aria-label="Bớt" onClick={() => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: Math.max(stock ? 0 : 1, x.qty - 1) } : x)))} className="grid h-8 w-8 place-items-center rounded-full bg-cream">
                     <Minus size={15} />
@@ -418,9 +492,11 @@ export default function GoodsForm({
           Báo vào nhóm Telegram của cơ sở
         </label>
       )}
+      {stockUser && monthNote && <p className="text-xs text-ink/60">{monthNote}</p>}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <Button type="button" onClick={onSave} disabled={!!busy || (!total && !preview.lines.length)} className="w-full py-3 text-base">
         {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : stock ? "📋" : ret ? "↩" : "📦"} {initial ? "Lưu sửa" : stock ? "Lưu tồn kho" : ret ? "Lưu trả hàng" : "Lưu nhận hàng"}
+        {stockUser && total > 0 && ` · ${total} món`}
       </Button>
     </div>
   );

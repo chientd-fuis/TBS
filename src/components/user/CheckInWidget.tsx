@@ -28,6 +28,15 @@ type Result = {
   pressedAt?: string | null;
 };
 
+/** "Nguyễn Thu Nga" → "TN" (2 chữ cuối), "Đức" → "Đ" */
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(-2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) =>
     navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }),
@@ -42,7 +51,19 @@ export default function CheckInWidget({
   wifiNames = [],
   lock = null,
   capNote,
+  shift = null,
+  openAtMs = null,
+  dateLabel,
+  coworkers = [],
 }: {
+  /** ca hôm nay đang / sắp làm → hiện giờ ca + đếm ngược tới giờ vào */
+  shift?: { name: string; start: string; end: string; startMs: number } | null;
+  /** giờ check-in của lượt đang mở (ms) → đếm "đã làm" */
+  openAtMs?: number | null;
+  /** "T2 17/11" */
+  dateLabel?: string;
+  /** người cùng ca (cùng cơ sở, giờ ca giao nhau) – inAt: giờ đã check-in "07:52" */
+  coworkers?: { name: string; inAt?: string | null }[];
   openSince: string | null;
   storeName: string;
   supportNote?: string;
@@ -78,6 +99,16 @@ export default function CheckInWidget({
     return () => window.clearTimeout(t);
   }, [locked, router]);
   const isCheckOut = locked ? locked.button === "CHECK-OUT" : !!openNow;
+  // đồng hồ: "đã làm 4h 12′" / "còn 12 phút tới giờ vào ca" – cập nhật mỗi 30 giây
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const [localOpenAt, setLocalOpenAt] = useState<number | null | undefined>(undefined);
+  const openAt = localOpenAt !== undefined ? localOpenAt : openAtMs;
+  const workedMin = openNow && openAt ? Math.max(0, Math.floor((now - openAt) / 60_000)) : 0;
+  const toStart = shift ? Math.ceil((shift.startMs - now) / 60_000) : null;
 
   const start = async () => {
     setError("");
@@ -139,6 +170,7 @@ export default function CheckInWidget({
         notes,
       );
       setLocalOpen(res.action === "CHECK_IN" ? res.time : null);
+      setLocalOpenAt(res.action === "CHECK_IN" ? Date.now() : null);
       setStep("idle"); // quay về màn chính → thấy ngay nút CHECK-OUT sau khi check-in
       router.refresh();
     },
@@ -201,40 +233,110 @@ export default function CheckInWidget({
           <Button variant="ghost" className="mt-2 w-full" onClick={() => setStep("idle")}>Huỷ</Button>
         </Card>
       ) : (
-        <Card>
-          <div className="space-y-3 text-center">
-            <p className="text-sm text-ink/70">{storeName}</p>
-            {supportNote && <Alert tone="blue">⇄ {supportNote}</Alert>}
-            {capNote && openNow && <Alert tone="yellow">⏰ {capNote}</Alert>}
-            {locked ? (
-              <Alert tone={locked.kind === "auto" ? "blue" : "yellow"}>
-                {locked.kind === "auto" ? "🤖 " : "🌙 "}
-                {locked.message}
-              </Alert>
-            ) : isCheckOut ? (
-              <p>Bạn đang trong ca từ <b>{openNow}</b></p>
+        <section className="flex flex-col items-center gap-3.5 rounded-3xl bg-card p-4 text-center shadow-[0_6px_18px_rgba(122,74,20,.08)] ring-1 ring-line">
+          {/* trạng thái + ngày */}
+          <div className="flex w-full items-center justify-between gap-2">
+            {isCheckOut && !locked ? (
+              <span className="flex animate-pulse items-center gap-1.5 rounded-full bg-ok-bg px-2.5 py-1 text-xs font-bold text-good motion-reduce:animate-none">
+                <span className="h-1.5 w-1.5 rounded-full bg-good" aria-hidden /> Đang trong ca
+              </span>
             ) : (
-              <p>Bạn chưa check-in</p>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-ink/70">Chưa check-in</span>
             )}
-            <Button
-              variant={isCheckOut ? "secondary" : "primary"}
-              className="h-20 w-full rounded-2xl text-xl"
+            <span className="truncate text-xs font-semibold text-ink/60">
+              {storeName}
+              {dateLabel ? ` · ${dateLabel}` : ""}
+            </span>
+          </div>
+          {supportNote && <Alert tone="blue">⇄ {supportNote}</Alert>}
+          {capNote && openNow && <Alert tone="yellow">⏰ {capNote}</Alert>}
+          {locked ? (
+            <Alert tone={locked.kind === "auto" ? "blue" : "yellow"}>
+              {locked.kind === "auto" ? "🤖 " : "🌙 "}
+              {locked.message}
+            </Alert>
+          ) : isCheckOut ? (
+            <div>
+              <p className="text-[13px] text-ink/70">Vào lúc {openNow?.slice(0, 5)} · đã làm</p>
+              <p className="text-4xl font-extrabold tracking-tight text-accent tabular-nums">
+                {Math.floor(workedMin / 60)}h {String(workedMin % 60).padStart(2, "0")}′
+              </p>
+            </div>
+          ) : shift ? (
+            <div>
+              <p className="text-[13px] text-ink/70">Ca hôm nay</p>
+              <p className="text-2xl font-extrabold tracking-tight text-accent">
+                {shift.name} · {shift.start} – {shift.end}
+              </p>
+              {toStart != null && toStart > 0 ? (
+                <p className="mt-0.5 text-[13px] font-semibold text-warn">Còn {minutesVi(toStart)} tới giờ vào ca</p>
+              ) : toStart != null && toStart < 0 ? (
+                <p className="mt-0.5 text-[13px] font-semibold text-danger">Đã quá giờ vào ca {minutesVi(-toStart)}</p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm text-ink/70">Hôm nay bạn không có ca được xếp</p>
+          )}
+
+          {isCheckOut ? (
+            <button
+              type="button"
               disabled={!deviceOk || !!locked || step === "locating" || step === "sending"}
               aria-disabled={!!locked || undefined}
               title={locked?.message}
               onClick={start}
+              className="flex h-16 w-full items-center justify-center gap-2.5 rounded-2xl bg-accent text-[19px] font-extrabold tracking-wide text-on-accent shadow-[0_8px_18px_rgba(123,52,52,.28)] disabled:opacity-50"
             >
-              {step === "locating" || step === "sending" ? <Loader2 className="animate-spin" /> : isCheckOut ? <LogOut /> : <LogIn />}
-              {step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi nhận…" : isCheckOut ? "CHECK-OUT" : "CHECK-IN"}
-            </Button>
-            {methods.wifi && (
-              <p className="flex items-center justify-center gap-1 text-xs text-ink/70">
-                <Wifi size={14} /> Kết nối WiFi của quán{wifiNames.length ? ` (${wifiNames.join(" / ")})` : ""} trước khi chấm công
-              </p>
-            )}
-            {device.state === "loading" && <p className="text-xs text-ink/60">Đang kiểm tra thiết bị…</p>}
-          </div>
-        </Card>
+              {step === "locating" || step === "sending" ? <Loader2 className="animate-spin" /> : <LogOut />}
+              {step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi nhận…" : "CHECK-OUT"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!deviceOk || !!locked || step === "locating" || step === "sending"}
+              aria-disabled={!!locked || undefined}
+              title={locked?.message}
+              onClick={start}
+              className="my-2 flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full border border-primary-dark bg-primary text-on-primary shadow-[0_0_0_10px_var(--color-primary-light),0_10px_24px_rgba(0,0,0,.15)] active:scale-[.98] disabled:opacity-50"
+            >
+              {step === "locating" || step === "sending" ? <Loader2 size={30} className="animate-spin" /> : <LogIn size={30} />}
+              <span className="text-xl font-extrabold tracking-wide">{step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi…" : "CHECK-IN"}</span>
+              {step === "idle" && <span className="text-[11px] font-medium opacity-80">{methods.face ? "Chụp mặt & ghi nhận" : "Bấm để ghi nhận"}</span>}
+            </button>
+          )}
+
+          {/* người cùng ca – chỉ hiện trước khi check-in */}
+          {coworkers.length > 0 && !isCheckOut && (
+            <div className="flex w-full items-center gap-2.5 rounded-2xl bg-cream px-3 py-2.5 text-left">
+              <span className="flex shrink-0">
+                {coworkers.slice(0, 3).map((c, i) => (
+                  <span
+                    key={c.name + i}
+                    className={cn("grid h-8 w-8 place-items-center rounded-full border-2 border-card text-[11px] font-bold", i % 3 === 0 ? "bg-rose-bg" : i % 3 === 1 ? "bg-info-bg" : "bg-ok-bg", i > 0 && "-ml-2")}
+                    aria-hidden
+                  >
+                    {initials(c.name)}
+                  </span>
+                ))}
+              </span>
+              <span className="min-w-0 flex-1 text-[13px]">
+                <b>Cùng ca:</b> {coworkers.map((c) => c.name).join(", ")}
+                {coworkers.some((c) => c.inAt) && (
+                  <span className="font-semibold text-good">
+                    {" "}
+                    · {coworkers.filter((c) => c.inAt).map((c) => `${c.name.split(" ").pop()} đã vào ${c.inAt}`).join(", ")}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {methods.wifi && wifiNames.length > 0 && !isCheckOut && (
+            <p className="flex items-center justify-center gap-1 text-xs text-ink/60">
+              <Wifi size={13} /> Bắt WiFi quán ({wifiNames.join(" / ")}) trước khi chấm
+            </p>
+          )}
+          {device.state === "loading" && <p className="text-xs text-ink/60">Đang kiểm tra thiết bị…</p>}
+        </section>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/guards";
-import { APPROVED_SHIFT, Attendance, ShiftAssignment, Store } from "@/lib/models";
-import { localDate, localTime, viDate } from "@/lib/time";
-import { Badge, Card } from "@/components/ui";
+import { APPROVED_SHIFT, Attendance, ShiftAssignment, Store, User } from "@/lib/models";
+import { localDate, localTime, viDate, zonedToDate } from "@/lib/time";
+import { Badge } from "@/components/ui";
+import { Camera, ChevronRight, Package } from "lucide-react";
 import { minutesVi } from "@/lib/format";
 import CheckInWidget from "@/components/user/CheckInWidget";
 import { anyMethods, methodsOf } from "@/lib/checkin-methods";
@@ -61,6 +62,42 @@ export default async function HomePage() {
     : await unseenFor(`user:${user._id}`, { kind: "USER", storeId: user.storeId, since: user.joinedAt ?? user.registeredAt ?? null }).catch(() => []);
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
 
+  // ca đang / sắp làm: ca đầu tiên chưa kết thúc, hết thì ca cuối (ca qua đêm: giờ ra < giờ vào → +1 ngày)
+  const nowMs = Date.now();
+  const span = (s: { startTime: string; endTime: string }) => {
+    const a = zonedToDate(today, s.startTime, tz).getTime();
+    let b = zonedToDate(today, s.endTime, tz).getTime();
+    if (b <= a) b += 24 * 3600_000;
+    return [a, b] as const;
+  };
+  const cur = shifts.find((s) => span(s)[1] > nowMs) ?? shifts[shifts.length - 1] ?? null;
+  // người cùng ca: cùng cơ sở, cùng ngày, giờ ca giao nhau – kèm giờ đã check-in hôm nay
+  let coworkers: { name: string; inAt: string | null }[] = [];
+  if (cur) {
+    const [a, b] = span(cur);
+    const mates = (await ShiftAssignment.find({ storeId: cur.storeId, date: today, userId: { $ne: user._id }, ...APPROVED_SHIFT }).select("userId startTime endTime").lean()).filter(
+      (m) => {
+        const [x, y] = span(m);
+        return x < b && y > a;
+      },
+    );
+    const ids = [...new Set(mates.map((m) => String(m.userId)))];
+    if (ids.length) {
+      const [people, atts] = await Promise.all([
+        User.find({ _id: { $in: ids } }).select("name").lean(),
+        Attendance.find({ userId: { $in: ids }, workDate: today }).select("userId checkInAt").sort({ checkInAt: 1 }).lean(),
+      ]);
+      const firstIn = new Map<string, Date>();
+      for (const t of atts) if (!firstIn.has(String(t.userId))) firstIn.set(String(t.userId), t.checkInAt);
+      coworkers = people.map((p) => {
+        const t = firstIn.get(String(p._id));
+        return { name: p.name || "?", inAt: t ? localTime(t, tz).slice(0, 5) : null };
+      });
+    }
+  }
+  const wd = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"][new Date(`${today}T00:00:00`).getDay()];
+  const tile = "flex min-h-28 flex-col gap-2 rounded-2xl bg-card p-3.5 ring-1 ring-line hover:bg-primary-light";
+
   return (
     <>
       {news.length > 0 && <WhatsNew items={news} as="user" helpHref="/whats-new" />}
@@ -70,6 +107,10 @@ export default async function HomePage() {
         openSince={open ? localTime(open.checkInAt, tz) : null}
         lock={lock}
         capNote={capNote}
+        shift={cur ? { name: cur.shiftName, start: cur.startTime, end: cur.endTime, startMs: span(cur)[0] } : null}
+        openAtMs={open ? new Date(open.checkInAt).getTime() : null}
+        dateLabel={`${wd} ${today.slice(8)}/${today.slice(5, 7)}`}
+        coworkers={coworkers}
         storeName={(open && supportOf(open.storeId)) || store?.name || ""}
         supportNote={
           open && supportOf(open.storeId)
@@ -92,73 +133,89 @@ export default async function HomePage() {
           </span>
         </div>
       ) : (
-      <Link
-        href="/closing"
-        className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
-      >
-        <span>
-          <span className="block font-bold text-accent">📷 Chốt ca</span>
-          <span className="text-xs text-ink/70">Chụp ảnh tờ chốt ca sáng / chiều / tối. Không chụp ghi nhận 1 lỗi phạt</span>
-        </span>
-        <span className="text-xl text-accent">›</span>
-      </Link>
-      )}
-      {goodsOn && (
-      <Link
-        href="/receive"
-        className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
-      >
-        <span>
-          <span className="block font-bold text-accent">📦 Nhận / Trả hàng</span>
-          <span className="text-xs text-ink/70">Chụp ảnh tin nhắn đã nhận hàng trong nhóm Facebook hoặc copy nội dung đã nhận – app tự đọc &amp; ghi</span>
-        </span>
-        <span className="text-xl text-accent">›</span>
-      </Link>
-      )}
-      {stockOn && (
-        <Link
-          href="/stock"
-          className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
-        >
-          <span>
-            <span className="block font-bold text-accent">📋 Tồn kho</span>
-            <span className="text-xs text-ink/70">Cuối ngày chụp phiếu kiểm kê nguyên liệu hoặc gõ số còn: “tồn 3mn, 1nl, hết sầu múi…”</span>
-          </span>
-          <span className="text-xl text-accent">›</span>
-        </Link>
-      )}
-      <Card title={`Hôm nay · ${viDate(today)}`}>
-        <div className="space-y-2 text-sm">
-          <p className="font-semibold text-accent">Ca được xếp</p>
-          {shifts.length ? (
-            shifts.map((s) => (
-              <p key={String(s._id)} className="flex flex-wrap items-center gap-2">
-                <span>{s.shiftName}: {s.startTime} – {s.endTime}</span>
-                {supportOf(s.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(s.storeId)}</Badge>}
-              </p>
-            ))
-          ) : (
-            <p className="text-ink/60">Không có ca</p>
+        <>
+          {/* đang trong ca → nhắc chốt ca trước khi về */}
+          {open && (
+            <Link href="/closing" className="flex items-center gap-3 rounded-2xl bg-primary-light px-3.5 py-3 ring-1 ring-primary hover:brightness-[.98]">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-on-primary">
+                <Camera size={19} aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold">Trước khi về: chốt ca{cur?.shiftName ? ` ${cur.shiftName}` : ""}</span>
+                <span className="block text-xs text-ink/70">Chụp tờ chốt ca – không chụp bị ghi 1 lỗi</span>
+              </span>
+              <ChevronRight size={20} className="shrink-0 text-accent" aria-hidden />
+            </Link>
           )}
-          <p className="pt-2 font-semibold text-accent">Lượt chấm công</p>
-          {todayAtts.length ? (
-            todayAtts.map((a) => (
-              <div key={String(a._id)} className="flex flex-wrap items-center gap-2">
-                <span>
-                  {localTime(a.checkInAt, tz)} → {a.checkOutAt ? localTime(a.checkOutAt, tz) : "…"}
+          <section className="space-y-2">
+            <h2 className="text-[13px] font-bold tracking-wide text-accent uppercase">Việc trong ca</h2>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Link href="/closing" className={tile}>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-light text-accent">
+                  <Camera size={21} aria-hidden />
                 </span>
-                {a.roundedHours != null && <Badge tone="yellow">{a.roundedHours}h</Badge>}
-                {!!a.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(a.lateMinutes)}</Badge>}
-                {!!a.earlyMinutes && <Badge tone="orange">Về sớm {minutesVi(a.earlyMinutes)}</Badge>}
-                {a.source === "ADMIN_MANUAL" && <Badge tone="green">Chấm hộ</Badge>}
-                {supportOf(a.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(a.storeId)}</Badge>}
-              </div>
-            ))
-          ) : (
-            <p className="text-ink/60">Chưa có</p>
-          )}
+                <span className="text-[15px] font-bold">Chốt ca</span>
+                <span className="text-xs text-ink/60">Chụp tờ chốt ca</span>
+              </Link>
+              {goodsOn && (
+                <Link href="/receive" className={tile}>
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-rose-bg text-accent">
+                    <Package size={21} aria-hidden />
+                  </span>
+                  <span className="text-[15px] font-bold">Hàng hoá</span>
+                  <span className="text-xs text-ink/60">{stockOn ? "Nhận · Trả · Tồn kho" : "Nhận · Trả hàng"}</span>
+                </Link>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+      <section className="space-y-2.5 rounded-2xl bg-card p-3.5 text-sm ring-1 ring-line">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[15px] font-bold text-accent">Hôm nay</h2>
+          <Link href="/history" className="text-xs font-semibold text-accent underline">Lịch sử ›</Link>
         </div>
-      </Card>
+        {shifts.length ? (
+          shifts.map((s) => (
+            <div key={String(s._id)} className="flex flex-wrap items-center gap-2.5">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span className="flex-1">Ca {s.shiftName}</span>
+              {supportOf(s.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(s.storeId)}</Badge>}
+              <b>
+                {s.startTime} – {s.endTime}
+              </b>
+            </div>
+          ))
+        ) : (
+          <div className="flex items-center gap-2.5 text-ink/60">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-line-strong" aria-hidden />
+            <span className="flex-1">Ca được xếp</span>
+            <span>Không có ca</span>
+          </div>
+        )}
+        {todayAtts.length ? (
+          todayAtts.map((a) => (
+            <div key={String(a._id)} className="flex flex-wrap items-center gap-2">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${a.checkOutAt ? "bg-line-strong" : "bg-good"}`} aria-hidden />
+              <span className="flex-1">
+                {localTime(a.checkInAt, tz).slice(0, 5)} → {a.checkOutAt ? localTime(a.checkOutAt, tz).slice(0, 5) : "…"}
+              </span>
+              {a.roundedHours != null && <Badge tone="yellow">{a.roundedHours}h</Badge>}
+              {!!a.lateMinutes && <Badge tone="orange">Đi muộn {minutesVi(a.lateMinutes)}</Badge>}
+              {!!a.earlyMinutes && <Badge tone="orange">Về sớm {minutesVi(a.earlyMinutes)}</Badge>}
+              {!a.lateMinutes && !a.earlyMinutes && a.shiftAssignmentId && <Badge tone="green">Đúng giờ</Badge>}
+              {a.source === "ADMIN_MANUAL" && <Badge tone="green">Chấm hộ</Badge>}
+              {supportOf(a.storeId) && <Badge tone="blue">Hỗ trợ {supportOf(a.storeId)}</Badge>}
+            </div>
+          ))
+        ) : (
+          <div className="flex items-center gap-2.5 text-ink/60">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-line-strong" aria-hidden />
+            <span className="flex-1">Lượt chấm công</span>
+            <span>Chưa có</span>
+          </div>
+        )}
+      </section>
     </>
   );
 }
