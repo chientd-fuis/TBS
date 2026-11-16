@@ -38,7 +38,9 @@ const SettingsSchema = new Schema(
     revenueGapMin: { type: Number, default: 10000 },
     revenueGapOn: { type: Boolean, default: true },
     // đọc ảnh bằng AI TẮT ở các màn này (lib/ai-photo.ts): closing | receive | return | stock – mặc định bật hết
-    aiPhotoOff: { type: [String], default: [] }, // bật / tắt tự tạo yêu cầu bù doanh thu (phạt thiếu tiền)
+    aiPhotoOff: { type: [String], default: [] },
+    // ảnh chấm công: Drive lỗi → lưu tạm vào DB (PendingPhoto) chờ cron đẩy lại. Tắt → chỉ đẩy thẳng Drive, ảnh gốc vẫn gửi Telegram
+    photoTempDb: { type: Boolean, default: true },
     financeReportDaily: { type: Boolean, default: true },
     financeReportWeekly: { type: Boolean, default: true },
     financeReportMonthly: { type: Boolean, default: true },

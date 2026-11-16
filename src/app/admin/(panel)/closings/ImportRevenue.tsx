@@ -21,10 +21,18 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
   const [pv, setPv] = useState<ImportPreview | null>(null);
   const [done, setDone] = useState<(ApplyResult & { storeId: string }) | null>(null);
   const [showSame, setShowSame] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // file + tuỳ chọn giữ lại → đổi cơ sở / tuỳ chọn ở màn so sánh thì so sánh lại ngay, không phải chọn lại file
+  const [file, setFile] = useState<File | null>(null);
+  const [opts, setOpts] = useState({ storeId: "", includeToday: false, missing: "skip" });
 
-  const preview = () => {
-    const fd = new FormData(formRef.current!);
+  const preview = (f: File | null = file, o = opts) => {
+    if (!f) return;
+    const fd = new FormData();
+    fd.set("file", f);
+    if (o.storeId) fd.set("storeId", o.storeId);
+    if (o.includeToday) fd.set("includeToday", "on");
+    fd.set("missing", o.missing);
     setError("");
     setDone(null);
     start(async () => {
@@ -32,6 +40,19 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
       if (r.error) setError(r.error);
       else setPv(r);
     });
+  };
+  /** đổi tuỳ chọn ở màn so sánh → so sánh lại */
+  const reopt = (patch: Partial<typeof opts>) => {
+    const o = { ...opts, ...patch };
+    setOpts(o);
+    preview(file, o);
+  };
+  const reset = () => {
+    setPv(null);
+    setFile(null);
+    setError("");
+    setOpts((o) => ({ ...o, storeId: "" }));
+    if (fileRef.current) fileRef.current.value = "";
   };
   const toUpdate = pv?.rows?.filter((r) => r.status === "update") ?? [];
   const apply = () => {
@@ -79,57 +100,76 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
       {open && (
         <div className="space-y-3 p-4 text-sm">
           {!pv && !done && (
-            <form ref={formRef} onSubmit={(e) => (e.preventDefault(), preview())} className="space-y-3">
+            <div className="space-y-3">
               <p className="text-ink/70">
                 App lấy cột <b>Thời gian</b> + <b>Doanh thu</b>, ghi vào <b>DT máy của ca Tối</b> (ca cuối ngày). Doanh thu ngày bên Tài chính tự tính lại theo; ngày thiếu tiền
                 tự có <b>yêu cầu bù doanh thu</b> gửi admin.
               </p>
-              <input type="file" name="file" required accept=".xls,.xlsx,.csv,.pdf,.htm,.html" className="block w-full rounded-xl bg-card p-2 ring-1 ring-line-strong" />
-              <label className="flex flex-col gap-1 font-semibold">
-                Ghi vào cơ sở
-                <select name="storeId" className="h-11 rounded-xl bg-card px-2 font-normal ring-1 ring-line-strong">
-                  <option value="">Tự nhận theo “Chi nhánh” trong file</option>
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+              <label
+                className={`flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed p-4 text-center ${busy ? "border-primary-dark bg-primary-light" : "border-line-strong bg-cream hover:bg-primary-light"}`}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 size={22} className="animate-spin text-accent" aria-hidden />
+                    <b>Đang đọc {file?.name} &amp; so sánh…</b>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet size={22} className="text-accent" aria-hidden />
+                    <b>Chọn file báo cáo KiotViet</b>
+                    <span className="text-xs text-ink/60">.xls / .xlsx / .pdf – chọn xong là so sánh ngay</span>
+                  </>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xls,.xlsx,.csv,.pdf,.htm,.html"
+                  hidden
+                  disabled={busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setFile(f);
+                    preview(f);
+                  }}
+                />
               </label>
-              <fieldset className="space-y-2 rounded-xl p-3 ring-1 ring-line">
-                <legend className="px-1 font-semibold text-accent">Tuỳ chọn</legend>
-                <label className="flex items-start gap-2">
-                  <input type="checkbox" name="includeToday" className="mt-1 h-4 w-4" />
-                  <span>
-                    <b>Cập nhật cả hôm nay</b>
-                    <span className="block text-xs text-ink/60">Mặc định bỏ qua – hôm nay chưa hết ngày, có thể chưa chốt ca Tối.</span>
-                  </span>
-                </label>
-                <div>
-                  <span className="text-xs font-semibold">Ngày chưa có chốt ca Tối</span>
-                  <label className="flex items-center gap-2"><input type="radio" name="missing" value="skip" defaultChecked /> Bỏ qua, chỉ báo trong kết quả</label>
-                  <label className="flex items-center gap-2"><input type="radio" name="missing" value="latest" /> Ghi vào ca chốt gần nhất của ngày đó</label>
-                </div>
-              </fieldset>
-              <button type="submit" disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-bold text-on-primary disabled:opacity-70">
-                {busy && <Loader2 size={18} className="animate-spin" aria-hidden />} Xem so sánh trước khi cập nhật
-              </button>
-              <p className="text-center text-xs text-ink/60">Chưa ghi gì cho tới khi bấm Cập nhật ở bước sau.</p>
-            </form>
+              <p className="text-center text-xs text-ink/60">Cơ sở tự nhận theo “Chi nhánh” trong file. Chưa ghi gì cho tới khi bấm Cập nhật ở bước sau.</p>
+            </div>
           )}
 
           {pv && (
             <div className="space-y-3">
-              <div className="rounded-xl bg-warn-soft px-3 py-2 text-[13px]">
-                <b>{pv.fileName}</b> · {pv.days} ngày{pv.from ? ` · kỳ ${dm(pv.from)} – ${dm(pv.to ?? pv.from)}` : ""}
-                {pv.total != null && ` · tổng ${vnd(pv.total)}`}
-                <span className="block">
-                  Chi nhánh trong file: <b>{pv.branch || "?"}</b> → {pv.storeId ? <b>{stores.find((s) => s.id === pv.storeId)?.name}</b> : <b className="text-danger">chưa nhận được cơ sở</b>}
-                  {pv.storeMatched && " (tự nhận)"}
-                </span>
+              <div className="space-y-2 rounded-xl bg-warn-soft px-3 py-2 text-[13px]">
+                <p>
+                  <b className="break-all">{pv.fileName}</b> · {pv.days} ngày{pv.from ? ` · kỳ ${dm(pv.from)} – ${dm(pv.to ?? pv.from)}` : ""}
+                  {pv.total != null && ` · tổng ${vnd(pv.total)}`}
+                </p>
+                <p>
+                  Chi nhánh trong file: <b>{pv.branch || "?"}</b>
+                  {pv.storeId && pv.storeMatched && <span className="text-good"> ✓ tự nhận</span>}
+                </p>
+                <label className="flex flex-wrap items-center gap-2 font-semibold">
+                  Ghi vào cơ sở
+                  <select
+                    value={pv.storeId ?? ""}
+                    disabled={busy}
+                    onChange={(e) => reopt({ storeId: e.target.value })}
+                    className={`h-10 min-w-0 flex-1 rounded-xl bg-card px-2 font-normal ring-1 ${pv.storeId ? "ring-line-strong" : "ring-2 ring-danger"}`}
+                  >
+                    {!pv.storeId && <option value="">— Chọn cơ sở —</option>}
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {busy && <Loader2 size={16} className="animate-spin" aria-hidden />}
+                </label>
               </div>
               {!pv.storeId ? (
-                <p className="rounded-xl bg-bad-soft px-3 py-2 text-bad-fg ring-1 ring-bad-line">Không khớp được cơ sở theo tên chi nhánh – quay lại chọn cơ sở.</p>
+                <p className="rounded-xl bg-bad-soft px-3 py-2 text-bad-fg ring-1 ring-bad-line">
+                  Không tìm thấy cơ sở khớp chi nhánh “{pv.branch || "?"}” – chọn cơ sở ở ô trên để so sánh.
+                </p>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-2">
@@ -143,7 +183,24 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
                       Tổng DT máy {toUpdate.length} ngày cập nhật: <b>{vnd(newSum)}</b> (đang có {vnd(curSum)}) → <b className="text-late-fg">chênh {sgn(newSum - curSum)}</b>
                     </p>
                   )}
-                  <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={showSame} onChange={(e) => setShowSame(e.target.checked)} /> Hiện cả các ngày khớp</label>
+                  <fieldset disabled={busy} className="space-y-1.5 rounded-xl p-3 text-[13px] ring-1 ring-line">
+                    <legend className="px-1 font-semibold text-accent">Tuỳ chọn (đổi là so sánh lại)</legend>
+                    <label className="flex items-start gap-2">
+                      <input type="checkbox" checked={opts.includeToday} onChange={(e) => reopt({ includeToday: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                      <span>
+                        <b>Cập nhật cả hôm nay</b> <span className="text-ink/60">– mặc định bỏ qua, hôm nay có thể chưa chốt ca Tối</span>
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2">
+                      <input type="checkbox" checked={opts.missing === "latest"} onChange={(e) => reopt({ missing: e.target.checked ? "latest" : "skip" })} className="mt-0.5 h-4 w-4" />
+                      <span>
+                        <b>Ngày chưa có chốt ca Tối</b> → ghi vào ca chốt gần nhất của ngày đó <span className="text-ink/60">(không tích = bỏ qua)</span>
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={showSame} onChange={(e) => setShowSame(e.target.checked)} className="h-4 w-4" /> Hiện cả các ngày khớp
+                    </label>
+                  </fieldset>
                   <div className="overflow-hidden rounded-xl ring-1 ring-line">
                     <div className="grid grid-cols-[52px_1fr_1fr_84px] bg-primary text-xs font-semibold text-on-primary">
                       <span className="p-2">Ngày</span><span className="p-2 text-right">File KiotViet</span><span className="p-2 text-right">Đang có</span><span className="p-2 text-right">Chênh</span>
@@ -175,7 +232,7 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
                 </>
               )}
               <div className="flex gap-2">
-                <button type="button" onClick={() => setPv(null)} className="h-11 rounded-xl px-4 font-semibold text-accent ring-1 ring-line-strong">‹ Quay lại</button>
+                <button type="button" onClick={reset} className="h-11 whitespace-nowrap rounded-xl px-4 font-semibold text-accent ring-1 ring-line-strong">‹ Chọn file khác</button>
                 <button type="button" onClick={apply} disabled={busy || !toUpdate.length} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary font-bold text-on-primary disabled:opacity-60">
                   {busy && <Loader2 size={16} className="animate-spin" aria-hidden />} {toUpdate.length ? `Cập nhật ${toUpdate.length} ngày` : "Không có ngày nào cần cập nhật"}
                 </button>
@@ -199,10 +256,19 @@ export default function ImportRevenue({ stores }: { stores: { id: string; name: 
                   <Link href="/admin/requests#bu-doanh-thu" className="underline">xem ở Yêu cầu</Link>
                 </p>
               )}
-              <div className="flex gap-2">
-                <Link href="/admin/finance/revenue" className="flex h-10 flex-1 items-center justify-center rounded-xl bg-primary font-bold text-on-primary">Xem Doanh thu ngày</Link>
-                <button type="button" onClick={undo} disabled={busy} className="h-10 rounded-xl px-4 font-semibold text-accent ring-1 ring-line-strong">Hoàn tác</button>
-                <button type="button" onClick={() => setDone(null)} className="h-10 rounded-xl px-3 text-ink/70">Import file khác</button>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <Link
+                  href="/admin/finance/revenue"
+                  className="col-span-2 flex h-11 items-center justify-center whitespace-nowrap rounded-xl border border-primary-dark bg-primary px-4 font-bold text-on-primary sm:flex-1"
+                >
+                  Xem Doanh thu ngày →
+                </Link>
+                <button type="button" onClick={undo} disabled={busy} className="h-11 whitespace-nowrap rounded-xl bg-card px-4 font-semibold text-accent ring-1 ring-line-strong disabled:opacity-50">
+                  {busy ? "Đang hoàn tác…" : "Hoàn tác"}
+                </button>
+                <button type="button" onClick={() => (setDone(null), reset())} className="h-11 whitespace-nowrap rounded-xl bg-chip px-4 font-semibold text-ink/80">
+                  Import file khác
+                </button>
               </div>
             </div>
           )}

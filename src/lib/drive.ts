@@ -140,12 +140,17 @@ async function uploadToDrive(buf: Buffer, meta: PhotoMeta, mimeType = "image/jpe
 
 /**
  * Lưu ảnh: upload Drive; nếu lỗi → giữ tạm trong MongoDB (PendingPhoto), cron upload lại sau.
- * Trả về { driveId } hoặc { pendingId }.
+ * Cài đặt "Lưu ảnh tạm vào database" TẮT → Drive lỗi thì bỏ qua (lost = true), ảnh gốc chỉ còn ở tin Telegram.
+ * Trả về { driveId } | { pendingId } | { lost }.
  */
-export async function savePhoto(buf: Buffer, meta: PhotoMeta): Promise<{ driveId?: string; pendingId?: string }> {
+export async function savePhoto(buf: Buffer, meta: PhotoMeta): Promise<{ driveId?: string; pendingId?: string; lost?: boolean }> {
   try {
     return { driveId: await uploadToDrive(buf, meta) };
   } catch (e) {
+    if ((await getSettings()).photoTempDb === false) {
+      console.error("[savePhoto] Drive lỗi, không lưu tạm DB:", (e as Error).message);
+      return { lost: true };
+    }
     const p = await PendingPhoto.create({
       data: buf,
       fileName: meta.fileName,

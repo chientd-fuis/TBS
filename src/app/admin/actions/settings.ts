@@ -284,6 +284,22 @@ export async function saveRequestChat(_: FormState, fd: FormData): Promise<FormS
   }
 }
 
+/** Admin Tổng: bật / tắt lưu ảnh chấm công tạm vào database khi Drive lỗi (lib/drive.ts savePhoto). */
+export async function savePhotoTempDb(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
+    const on = fd.get("photoTempDb") === "on";
+    await connectDB();
+    await Settings.updateOne({ key: "main" }, { $set: { photoTempDb: on } }, { upsert: true });
+    await audit(adminActor(admin), "settings.photoTempDb", { type: "Settings" }, null, { on });
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
 /** Admin Tổng: bật / tắt đọc ảnh bằng AI cho từng chức năng (lib/ai-photo.ts) – lưu danh sách TẮT. */
 export async function saveAiPhoto(_: FormState, fd: FormData): Promise<FormState> {
   try {

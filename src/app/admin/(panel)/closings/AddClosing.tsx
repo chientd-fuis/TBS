@@ -1,9 +1,10 @@
 "use client";
+import { DatePickButton } from "@/components/DatePickButton";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, ImageUp, Loader2, Send, Sparkles, X } from "lucide-react";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
-import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
+import { Alert, Button, Field, Select, Textarea } from "@/components/ui";
 import { closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue, type RevenueKey } from "@/lib/revenue";
 
 type StoreOpt = { id: string; name: string; staff: { id: string; name: string }[]; missing: string[] };
@@ -71,7 +72,8 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
   const totalEval = evalMoneyExpr(total);
   const hasTotal = !!total.trim() && totalEval.ok;
   const totalDiff = hasTotal ? totalEval.value - closingSum(revenue) : 0;
-  const missingReq = (["tm", "tk"] as const).filter((k) => !raw[k].trim());
+  const keepOld = exists && overwrite; // ghi đè: ô để trống = giữ số cũ
+  const missingReq = keepOld ? [] : (["tm", "tk"] as const).filter((k) => !raw[k].trim());
   const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok) || (!!total.trim() && !totalEval.ok);
   const ready = !!storeId && !missingReq.length && !invalid && (!exists || overwrite);
 
@@ -181,7 +183,7 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           </Select>
         </Field>
         <Field label="Ngày">
-          <Input type="date" value={date} max={today} onChange={(e) => (setDate(e.target.value), setOverwrite(false))} />
+          <DatePickButton value={date} max={today} onChange={(v) => v && (setDate(v), setOverwrite(false))} weekday className="w-full [&>label]:w-full" />
         </Field>
         <Field label="Ca chốt">
           <div className="flex gap-1">
@@ -231,6 +233,12 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           <label className="inline-flex items-center gap-1 font-semibold">
             <input type="checkbox" className="accent-danger" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> ghi đè bằng số mới
           </label>
+          {overwrite && (
+            <span className="mt-1 block text-xs">
+              Chỉ thay các ô bạn nhập (TM, TK, chi tiêu, ghi chú…). <b>Ô để trống giữ số cũ</b> – DT máy đã nhập / import KiotViet, ảnh, người chốt cũ được giữ
+              nguyên nếu không nhập mới.
+            </span>
+          )}
         </Alert>
       )}
 
@@ -275,8 +283,12 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
       {/* Số liệu */}
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {REVENUE_KEYS.map((k) => (
-          <Field key={k} label={`${REVENUE_LABEL[k]}${k === "tm" || k === "tk" ? " *" : ""}`}>
-            <ExprMoneyInput value={raw[k]} onChange={(v) => setRaw((o) => ({ ...o, [k]: v }))} placeholder={k === "dt" ? "admin cấp – có thì nhập" : k === "cp" ? "VD 30k sữa chua + 20k ship" : "0"} />
+          <Field key={k} label={`${REVENUE_LABEL[k]}${!keepOld && (k === "tm" || k === "tk") ? " *" : ""}`}>
+            <ExprMoneyInput
+              value={raw[k]}
+              onChange={(v) => setRaw((o) => ({ ...o, [k]: v }))}
+              placeholder={keepOld ? "trống = giữ số cũ" : k === "dt" ? "admin cấp – có thì nhập" : k === "cp" ? "VD 30k sữa chua + 20k ship" : "0"}
+            />
           </Field>
         ))}
         <Field label="Tổng NV ghi trên tờ">
@@ -284,10 +296,14 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
         </Field>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl bg-cream px-3 py-2 text-sm">
-        <span>
-          DT thật: <b>{vnd(thu)}</b>
-        </span>
-        {hasDt && (
+        {keepOld ? (
+          <span className="text-ink/60">Ghi đè: số tổng tính lại sau khi lưu (ô trống lấy số cũ)</span>
+        ) : (
+          <span>
+            DT thật: <b>{vnd(thu)}</b>
+          </span>
+        )}
+        {hasDt && !keepOld && (
           <span className={revenueDiff(revenue) === 0 ? "text-good" : "text-warn"}>
             Âm/Dương (DT máy − DT thật): <b>{vnd(revenue.dt - thu)}</b>
           </span>

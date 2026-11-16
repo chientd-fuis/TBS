@@ -1,3 +1,4 @@
+import { DatePickButton } from "@/components/DatePickButton";
 import { aiPhotoOn } from "@/lib/ai-photo";
 import { aiAllowed } from "@/lib/ai";
 import { isValidObjectId } from "mongoose";
@@ -17,6 +18,7 @@ import { addDays } from "@/lib/time";
 import { ocrConfigured } from "@/lib/ocr";
 import AddClosing from "./AddClosing";
 import ImportRevenue from "./ImportRevenue";
+import { ColsProvider, ColsToggle, FilterExpand } from "./ClosingCols";
 import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +85,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
       {can(admin, "revenue") && <ImportRevenue stores={stores.filter((s) => s.active !== false).map((s) => ({ id: String(s._id), name: s.name }))} />}
       <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured() && (await aiPhotoOn("closing")) && (await aiAllowed("closingOcr", `admin:${admin.accountId ?? "owner"}`))} />
+      <ColsProvider>
       <Card>
         <div className="mb-3 flex flex-wrap gap-2 text-sm">
           {[{ id: "", name: "Tất cả" }, ...stores.map((s) => ({ id: String(s._id), name: s.name.replace(/^TBS\s*/i, "") }))].map((s) => {
@@ -94,6 +97,13 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
             );
           })}
         </div>
+        <FilterExpand
+          summary={
+            [sp.shift && `Ca ${sp.shift}`, isYmd(sp.date) && `${sp.date!.slice(8)}/${sp.date!.slice(5, 7)}`, sp.status && `Telegram ${TG[sp.status as keyof typeof TG]?.[0] ?? sp.status}`]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+        >
         <AutoFilterForm className="flex flex-wrap items-end gap-2">
           {sp.store && <input type="hidden" name="store" value={sp.store} />}
           <Field label="Ca">
@@ -104,7 +114,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
               <option value="Tối">Tối</option>
             </Select>
           </Field>
-          <Field label="Ngày"><Input type="date" name="date" defaultValue={sp.date || ""} className="!w-44" /></Field>
+          <Field label="Ngày"><DatePickButton name="date" value={sp.date || ""} placeholder="Tất cả" clearable weekday /></Field>
           <Field label="Telegram">
             <Select name="status" defaultValue={sp.status || ""} className="!w-40">
               <option value="">Tất cả</option>
@@ -114,15 +124,31 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
             </Select>
           </Field>
         </AutoFilterForm>
+        <ColsToggle />
+        </FilterExpand>
       </Card>
 
       <Card>
         {list.length === 0 ? (
           <Empty>Chưa có lượt chốt ca</Empty>
         ) : (
-          <div className="overflow-x-auto">
+          <div id="closings-tbl" className="overflow-x-auto">
             <table className="tbs">
-              <thead><tr><th>Thời gian</th><th>Nhân viên</th><th>Cơ sở</th><th>Ca</th><th>Ảnh</th><th>Doanh thu</th><th>Ghi chú</th><th>Telegram</th><th>Google Sheet</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th className="ccol-mb">Ca</th>
+                  <th className="ccol-time">Thời gian</th>
+                  <th className="ccol-emp">Nhân viên</th>
+                  <th className="ccol-store">Cơ sở</th>
+                  <th className="ccol-shift">Ca</th>
+                  <th className="ccol-photo">Ảnh</th>
+                  <th className="ccol-rev">Doanh thu</th>
+                  <th className="ccol-note">Ghi chú</th>
+                  <th className="ccol-tg">Telegram</th>
+                  <th className="ccol-sheet">Google Sheet</th>
+                  <th className="ccol-act"></th>
+                </tr>
+              </thead>
               <tbody>
                 {list.map((c) => {
                   const store = storeMap.get(String(c.storeId));
@@ -131,15 +157,19 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                   const st = TG[(c.telegram?.status ?? "PENDING") as keyof typeof TG];
                   return (
                     <tr key={String(c._id)}>
-                      <td className="whitespace-nowrap">{viDate(c.workDate)}<div className="text-xs">{localTime(created, tz)}</div></td>
-                      <td className="font-semibold">{c.employeeName || users.get(String(c.userId))}{c.employeePhone && <div className="text-xs font-normal text-ink/60">{c.employeePhone}</div>}{c.addedByAdmin && <div><Badge tone="blue">Nhập bù · {c.addedByAdmin}</Badge></div>}</td>
-                      <td className="text-xs">{store?.name}{c.distanceM != null && <div className={c.distanceM > (store?.radiusM ?? 100) ? "text-danger" : "text-ink/60"}>cách quán {c.distanceM}m</div>}</td>
-                      <td className="text-xs">
+                      <td className="ccol-mb whitespace-nowrap">
+                        <b>{c.workDate.slice(8)}/{c.workDate.slice(5, 7)}</b>
+                        <div className="text-xs text-ink/70">(Ca {c.shiftName || c.shiftLabel || "?"})</div>
+                      </td>
+                      <td className="ccol-time whitespace-nowrap">{viDate(c.workDate)}<div className="text-xs">{localTime(created, tz)}</div></td>
+                      <td className="ccol-emp max-w-36 font-semibold break-words">{c.employeeName || users.get(String(c.userId))}{c.employeePhone && <div className="text-xs font-normal text-ink/60">{c.employeePhone}</div>}{c.addedByAdmin && <div><Badge tone="blue">Nhập bù · {c.addedByAdmin}</Badge></div>}</td>
+                      <td className="ccol-store text-xs">{store?.name}{c.distanceM != null && <div className={c.distanceM > (store?.radiusM ?? 100) ? "text-danger" : "text-ink/60"}>cách quán {c.distanceM}m</div>}</td>
+                      <td className="ccol-shift text-xs">
                         {c.shiftLabel || "Ngoài ca"} <span className="text-ink/50">(luỹ kế)</span>
                         {c.checkInAt && <div className="text-ink/60">Vào {localTime(new Date(c.checkInAt), tz).slice(0, 5)}{c.checkOutAt ? ` · Ra ${localTime(new Date(c.checkOutAt), tz).slice(0, 5)}` : ""}</div>}
                         {c.coworkers?.length ? <div className="text-ink/60">Cùng ca: {c.coworkers.join(", ")}</div> : null}
                       </td>
-                      <td>
+                      <td className="ccol-photo">
                         <div className="flex gap-1">
                           {c.photos.map((_: unknown, i: number) => (
                             <a key={i} href={`/api/photo?closing=${c._id}&i=${i}`} target="_blank">
@@ -149,7 +179,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                           ))}
                         </div>
                       </td>
-                      <td className="text-xs whitespace-nowrap">
+                      <td className="ccol-rev text-xs whitespace-nowrap">
                         {c.revenue?.tm != null ? (
                           <>
                             {c.revenue.dt != null ? (
@@ -200,13 +230,13 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                           </ActionForm>
                         </details>
                       </td>
-                      <td className="max-w-56 text-xs">{c.note}</td>
-                      <td className="text-xs">
+                      <td className="ccol-note max-w-56 min-w-32 text-xs">{c.note}</td>
+                      <td className="ccol-tg text-xs">
                         <Badge tone={st[1]}>{st[0]}</Badge>
                         {c.telegram?.error && <div className="mt-1 max-w-48 text-danger">{c.telegram.error}</div>}
                         {c.webhook?.status && <div className="mt-1 text-ink/60">Webhook: {c.webhook.status}</div>}
                       </td>
-                      <td className="text-xs">
+                      <td className="ccol-sheet text-xs">
                         {(() => {
                           const day = dayMap.get(`${c.storeId}|${c.workDate}`);
                           const ss = day?.sheet?.status as keyof typeof SHEET | undefined;
@@ -239,7 +269,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                           );
                         })()}
                       </td>
-                      <td>
+                      <td className="ccol-act">
                         <div className="flex flex-col gap-1">
                           {c.telegram?.status !== "SENT" && (
                             <ActionForm action={resendClosing} submitLabel="Gửi lại" variant="outline" successText="Đã gửi">
@@ -266,6 +296,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
         )}
         <p className="mt-2 text-xs text-ink/60">Hiển thị 100 lượt gần nhất · hôm nay {viDate(localDate(new Date()))}</p>
       </Card>
+      </ColsProvider>
     </>
   );
 }

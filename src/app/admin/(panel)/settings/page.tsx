@@ -11,7 +11,7 @@ import { AI_PHOTO_KEYS } from "@/lib/ai-photo";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveAiPhoto, saveProbationConfig, saveRequestChat, saveUserAppAccess } from "../../actions/settings";
+import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveAiPhoto, savePhotoTempDb, saveProbationConfig, saveRequestChat, saveUserAppAccess } from "../../actions/settings";
 import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
@@ -232,6 +232,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               )}
             </div>
             <p className="mt-2 text-xs text-ink/60">App chỉ xin quyền với các file do app tạo (drive.file).</p>
+            <ActionForm action={savePhotoTempDb} submitLabel="Lưu" successText="Đã lưu" className="mt-3 space-y-2 border-t border-line pt-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="photoTempDb" defaultChecked={s.photoTempDb !== false} className="mt-0.5 h-4 w-4 accent-secondary" />
+                <span>
+                  <b>Lưu ảnh tạm vào database</b> khi Drive lỗi / chưa kết nối
+                  <span className="block text-xs text-ink/60">
+                    Bật (mặc định): ảnh giữ tạm trong database, mỗi giờ tự đẩy lại lên Drive – xem được ảnh trong app. Tắt: không lưu tạm nữa (nhẹ database) – ảnh
+                    chỉ đẩy thẳng lên Drive; Drive lỗi thì ảnh gốc chỉ còn ở tin nhắn nhóm chấm công Telegram (tin có ghi chú 📷).
+                  </span>
+                </span>
+              </label>
+            </ActionForm>
           </Card>
         )}
 

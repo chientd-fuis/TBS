@@ -1,4 +1,5 @@
 "use client";
+import { DatePickButton } from "@/components/DatePickButton";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronRight, ChevronUp, Loader2, Plus } from "lucide-react";
@@ -436,14 +437,7 @@ export default function RequestSheet({
                   <span>
                     Ngày làm <span className="text-danger">*</span>
                   </span>
-                  <input
-                    type="date"
-                    value={date}
-                    min={minDate}
-                    max={today}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="h-12 rounded-xl bg-card px-3 text-base font-normal text-ink ring-1 ring-line-strong focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
+                  <DatePickButton size="lg" value={date} min={minDate} max={today} onChange={(v) => v && setDate(v)} placeholder="Chọn ngày" weekday />
                 </label>
                 {dayShifts.length > 0 && (
                   <div className="flex flex-col gap-1.5">

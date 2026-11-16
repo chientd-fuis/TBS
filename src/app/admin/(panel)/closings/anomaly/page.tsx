@@ -51,7 +51,31 @@ export default async function AnomalyPage() {
             {!run.items.length ? (
               <Empty>Không có bất thường 🎉</Empty>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Điện thoại: dạng thẻ (bảng 6 cột bị ép cột → dòng cao, tràn ngang) */}
+              <ul className="space-y-2 sm:hidden">
+                {run.items.map((i) => (
+                  <li key={i.key} className={`space-y-1.5 rounded-xl p-3 ring-1 ring-line ${i.resolved ? "opacity-50" : ""}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={i.resolved ? "gray" : TONE[i.sev]}>{i.resolved ? "Đã xử lý" : SEV_LABEL[i.sev]}</Badge>
+                      <b className="text-sm">{i.label}</b>
+                    </div>
+                    <p className="text-sm">
+                      <b className="break-words">{i.staff}</b>
+                      <span className="text-xs text-ink/60"> · {i.storeName} · {i.shiftName} {dm(i.workDate)}</span>
+                    </p>
+                    {i.detail && <p className="text-xs break-words text-ink/80">{i.detail}</p>}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <Link className="text-accent underline" href={`/admin/closings?store=${i.storeId}&date=${i.workDate}`}>Mở lượt chốt ca →</Link>
+                      <ActionForm action={resolveAnomaly} submitLabel={i.resolved ? "Bỏ đánh dấu" : "Đã xử lý"} variant="ghost" successText="">
+                        <input type="hidden" name="key" value={i.key} />
+                        {i.resolved && <input type="hidden" name="undo" value="1" />}
+                      </ActionForm>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="tbs text-sm">
                   <thead><tr><th>Mức</th><th>Loại</th><th>Nhân viên</th><th>Cơ sở · Ca</th><th>Chi tiết</th><th></th></tr></thead>
                   <tbody>
@@ -76,12 +100,14 @@ export default async function AnomalyPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </Card>
           {run.byStaff.length > 0 && (
             <Card title="Theo nhân viên">
+              <div className="overflow-x-auto">
               <table className="tbs text-sm">
-                <thead><tr><th>Nhân viên</th><th>Cơ sở</th><th className="text-right">Số ca chốt</th><th className="text-right">Ca thiếu tiền</th><th className="text-right">Tổng thiếu</th><th className="text-right">Cộng sai</th></tr></thead>
+                <thead><tr><th>Nhân viên</th><th>Cơ sở</th><th className="text-right whitespace-nowrap">Số ca chốt</th><th className="text-right whitespace-nowrap">Ca thiếu tiền</th><th className="text-right whitespace-nowrap">Tổng thiếu</th><th className="text-right whitespace-nowrap">Cộng sai</th></tr></thead>
                 <tbody>
                   {(run.byStaff as { staff: string; storeName: string; closings: number; shortCount: number; shortSum: number; wrongTotal: number }[]).map((s) => (
                     <tr key={`${s.staff}|${s.storeName}`}>
@@ -95,6 +121,7 @@ export default async function AnomalyPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </Card>
           )}
         </>

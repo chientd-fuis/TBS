@@ -21,13 +21,18 @@ Grab, Shopee, có thể có "DTm" (doanh thu máy – do quản lý cấp, KHÔN
 Trích (trả về số nguyên VND):
 - dt: CHỈ khi có ghi "DTm" / "DT máy" / "doanh thu máy" (hoặc phiếu in máy POS ghi tổng doanh thu). Không có → null. KHÔNG lấy số tổng cuối tờ làm dt.
 - tm: Tiền mặt (TM)
-- tk: Tài khoản / chuyển khoản / QR (TK)
-- cp: tổng các khoản chi trong ca (cộng lại); khoản THU thêm thì là số âm
+- tk: Tài khoản / chuyển khoản / QR (TK). Có thể có NHIỀU DÒNG TK theo từng tài khoản nhận tiền
+  (VD "TK: Bơ sầu: 1165", "TK: Hải Yến: 7045", "TK An Khánh: 3685") → liệt kê TỪNG dòng vào tk_items {name, amount}
+  và tk = TỔNG các dòng (1165 + 7045 + 3685 = 11895). Chỉ 1 dòng TK → tk_items 1 phần tử hoặc rỗng.
+- cp: tổng các khoản chi trong ca (cộng lại); khoản THU thêm thì là số âm. Khoản chi có thể ghi lệch ra mép tờ (VD "Chi 40k đá") – vẫn tính.
 - cp_detail: các khoản chi như ghi trên tờ, dạng "30k sữa chua + 20k ship" (null nếu không có)
 - grab, shopee: tiền đơn Grab / Shopee nếu có ghi
 - staff_total: con số TỔNG nhân viên tự cộng (thường ở cuối tờ, có gạch dưới / khoanh tròn)
 - date: ngày ghi trên tờ ĐÚNG NHƯ VIẾT, kiểu Việt Nam ngày/tháng (VD "8/11", "08/11"); tờ thường KHÔNG ghi năm – đừng tự thêm năm. Không thấy ngày → null
-- note: các dòng khác không thuộc mục trên (VD "6850 Tạ Văn Thắng", "cơm ca chiều"), ngắn gọn
+- note: các dòng SỐ / mục khác không thuộc mục trên (VD "6850 Tạ Văn Thắng", "cơm ca chiều"), ngắn gọn
+- staff_note: đoạn NHÂN VIÊN VIẾT GIẢI THÍCH bằng câu chữ (thường dưới số tổng), chép lại đầy đủ ý, sửa chính tả viết tắt cho dễ đọc
+  (VD "khách cho 5k tiền mặt vì không có tiền lẻ ạ. CK lại khách 5k – khách tự lấy ạ"). Không có → null
+Ảnh có thể bị XOAY ngang / ngược – tự xoay để đọc. Bỏ qua chữ in của tài liệu khác lọt vào khung ảnh (nội quy, giấy dán tường…).
 ĐƠN VỊ: tờ ghi tay thường viết theo NGHÌN đồng ("2487" = 2.487.000; "30" = 30.000) → nhân 1000. Phiếu in POS ghi đủ đồng → giữ nguyên. "k" = nghìn, "tr" = triệu.
 KHÔNG đoán: số không đọc rõ → null. Chỉ trả về JSON.`;
 
@@ -37,6 +42,11 @@ const SCHEMA = {
     dt: { type: "INTEGER", nullable: true },
     tm: { type: "INTEGER", nullable: true },
     tk: { type: "INTEGER", nullable: true },
+    tk_items: {
+      type: "ARRAY",
+      nullable: true,
+      items: { type: "OBJECT", properties: { name: { type: "STRING", nullable: true }, amount: { type: "INTEGER", nullable: true } } },
+    },
     cp: { type: "INTEGER", nullable: true },
     cp_detail: { type: "STRING", nullable: true },
     grab: { type: "INTEGER", nullable: true },
@@ -44,6 +54,7 @@ const SCHEMA = {
     staff_total: { type: "INTEGER", nullable: true },
     date: { type: "STRING", nullable: true },
     note: { type: "STRING", nullable: true },
+    staff_note: { type: "STRING", nullable: true },
   },
 };
 

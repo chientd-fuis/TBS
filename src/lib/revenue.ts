@@ -140,10 +140,17 @@ export function normalizeOcr(
   let date: string | undefined;
   let cpDetail: string | undefined;
   let staffTotal: number | undefined;
+  let staffNote: string | undefined;
+  let tkItems: { name: string; amount: number }[] = [];
   if (!obj || typeof obj !== "object") return { values };
   for (const [k, v] of Object.entries(obj)) {
     const nk = norm(k);
     if (["note", "ghichu", "ghi_chu", "notes"].includes(nk) && typeof v === "string" && v.trim()) note = v.trim();
+    if (["staff_note", "staffnote", "nv_ghi_chu"].includes(nk) && typeof v === "string" && v.trim()) staffNote = v.trim();
+    if (["tk_items", "tkitems"].includes(nk) && Array.isArray(v))
+      tkItems = v
+        .map((x) => ({ name: String((x as { name?: unknown })?.name ?? "").trim(), amount: parseMoney((x as { amount?: unknown })?.amount) ?? 0 }))
+        .filter((x) => x.amount > 0);
     if (["date", "ngay", "ngay_chot", "ngaychot"].includes(nk) && v != null) date = parseOcrDate(String(v), refDate) ?? undefined;
     if (["staff_total", "stafftotal", "written_total", "tong", "tong_cong", "tongcong", "total", "tong_nv"].includes(nk)) {
       const n = parseMoney(v);
@@ -157,7 +164,14 @@ export function normalizeOcr(
         if (n !== null) values[key] = n;
       }
   }
-  return scaleThousands({ values, note, date, cpDetail, staffTotal });
+  // nhiều tài khoản nhận tiền (TK Bơ sầu / TK Hải Yến / TK An Khánh…) → TK = tổng các dòng, chi tiết ghi vào ghi chú
+  if (tkItems.length) values.tk = tkItems.reduce((s, x) => s + x.amount, 0);
+  const r = scaleThousands<{ values: Partial<Revenue>; note?: string; date?: string; cpDetail?: string; staffTotal?: number; scaled?: boolean }>({ values, note, date, cpDetail, staffTotal });
+  const k = r.scaled ? 1000 : 1;
+  const tkLine =
+    tkItems.length > 1 ? `TK: ${tkItems.map((x) => `${x.name || "?"} ${(x.amount * k).toLocaleString("vi-VN")}`).join(" + ")}` : "";
+  const full = [tkLine, r.note, staffNote ? `NV ghi chú: ${staffNote}` : ""].filter(Boolean).join(" · ");
+  return { ...r, note: full || undefined };
 }
 
 /**

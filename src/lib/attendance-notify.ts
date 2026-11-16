@@ -22,6 +22,8 @@ export type AttendanceNotice = {
   supportFrom?: string | null; // nhân viên cơ sở khác sang hỗ trợ
   /** check-out sau giờ chốt công ca tối: giờ bấm thật (checkOutAt = giờ chốt) */
   actualCheckOutAt?: Date | null;
+  /** Drive lỗi & tắt lưu ảnh tạm DB → ảnh chỉ còn ở tin Telegram này */
+  photoLost?: boolean;
 };
 
 const hhmm = (d: Date, tz: string) => localTime(d, tz).slice(0, 5);
@@ -34,6 +36,7 @@ export function formatAttendanceCaption(n: AttendanceNotice) {
   if (n.action === "CHECK_OUT" && n.earlyMinutes) warn.push(`⚠️ Về sớm ${minutesVi(n.earlyMinutes)}`);
   if (n.action === "CHECK_OUT" && n.lateMinutes) warn.push(`(Đi muộn ${minutesVi(n.lateMinutes)})`);
   if (n.outOfShift) warn.push("⚠️ Ngoài ca (không có ca được xếp)");
+  if (n.photoLost) warn.push("📷 Ảnh chưa lưu được lên Drive – ảnh gốc chỉ có ở tin này");
   if (n.action === "CHECK_OUT" && n.actualCheckOutAt && n.checkOutAt)
     warn.push(`⏱️ Bấm check-out lúc ${hhmm(n.actualCheckOutAt, n.tz)} – chỉ tính công tới ${hhmm(n.checkOutAt, n.tz)} (giờ chốt ca tối)`);
   return [

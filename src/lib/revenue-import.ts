@@ -43,7 +43,8 @@ export function parseTable(table: string[][]): ParsedReport {
     if (di < 0) {
       // dòng tổng (không có ngày, chỉ có số) ngay dưới tiêu đề
       if (col >= 0 && total == null && !rows.length) {
-        const v = parseMoney(cells[col] ?? "");
+        // ô gộp (.xls KiotViet): số tổng có thể lệch cột so với tiêu đề → lấy số đầu tiên của dòng
+        const v = parseMoney(cells[col] ?? "") ?? nums(0)[0] ?? null;
         if (v != null && v > 0) total = v;
       }
       continue;
@@ -91,7 +92,9 @@ export async function parseRevenueFile(name: string, buf: Buffer, actor: string)
     return parseTable(table);
   }
   if (head[0] === 0xd0 && head[1] === 0xcf) {
-    throw new Error("File .xls dạng Excel cũ chưa đọc được – mở file bằng Excel / Google Sheets rồi lưu lại dạng .xlsx, hoặc xuất PDF từ KiotViet.");
+    // .xls Excel cũ (BIFF8) – KiotViet xuất "BigSaleByTime.xls" dạng này
+    const { readXlsTable } = await import("./xls-biff");
+    return parseTable(readXlsTable(buf));
   }
   if (lower.endsWith(".pdf") || (head[0] === 0x25 && head[1] === 0x50)) {
     const { geminiGenerate, ocrConfigured } = await import("./ocr");
