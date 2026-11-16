@@ -291,15 +291,8 @@ export default function CheckInWidget({
               {step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi nhận…" : "CHECK-OUT"}
             </button>
           ) : (
-            <span className="relative my-10 inline-flex">
-              {/* hào quang + sóng lan toả từ mép viền nhạt (cùng nhịp) – chỉ khi bấm được */}
-              {deviceOk && !locked && step === "idle" && (
-                <>
-                  <span className="tbs-aura" aria-hidden />
-                  <span className="tbs-ring tbs-ring-out" aria-hidden />
-                </>
-              )}
-              {/* viền vàng nhạt cũ – luôn đứng yên quanh nút */}
+            <span className="relative my-3 inline-flex">
+              {/* viền vàng nhạt quanh nút */}
               <span className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_10px_var(--color-primary-light)]" aria-hidden />
             <button
               type="button"
