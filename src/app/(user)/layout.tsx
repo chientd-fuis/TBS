@@ -15,6 +15,8 @@ import { isProbation } from "@/lib/probation";
 import { cn } from "@/lib/format";
 import { THEME_ROOT_ID, themeClass, themeOf } from "@/lib/themes";
 import { themeViewport } from "@/lib/theme-server";
+import ReminderPopup from "@/components/ShiftReminders";
+import { activeRemindersFor } from "@/lib/reminders";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -30,6 +32,8 @@ export default async function UserLayout({ children }: { children: React.ReactNo
   const showAssistant = !!ai && ai.enabled && ai.features.assistant.enabled && roleAllowed(ai, "assistant", userAiRole(user));
   // thử việc → cả app (kể cả thanh menu dưới) đổi sang màu hồng tím; còn lại theo màu nhân viên chọn (Tài khoản → Màu giao diện)
   const trial = isProbation(user);
+  // Bảng tin Bơ Sầu: nhắc việc chưa xem của ca sắp / đang làm → popup ở mọi trang
+  const reminders = (await activeRemindersFor(user._id).catch(() => [])).filter((r) => !r.seen);
   return (
     <div id={THEME_ROOT_ID} className={cn("min-h-screen", themeClass(themeOf(user)))}>
     <div className="mx-auto min-h-screen max-w-lg pb-24">
@@ -69,6 +73,7 @@ export default async function UserLayout({ children }: { children: React.ReactNo
         <UserNotices userId={user._id} />
         <RegRequestAlert userId={user._id} tz={store?.timezone || "Asia/Ho_Chi_Minh"} />
         {children}
+        {reminders.length > 0 && <ReminderPopup items={reminders} />}
       </main>
       <BottomNav />
     </div>

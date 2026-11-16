@@ -2,7 +2,7 @@ import Link from "next/link";
 import { can } from "@/lib/permissions";
 import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, RevenueGap, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
+import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, RevenueGap, ShiftAssignment, ShiftReminder, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
 import { liveBadges, type LiveBadge } from "@/lib/live-badges";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
@@ -28,6 +28,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   // khối nào hiện: theo quyền + admin tự tắt bớt (Cài đặt → Trang Tổng quan hiển thị gì)
   const show = widgetShown(admin, await adminDashHidden(admin.email).catch(() => []));
+  // nút Nhắc nhở: số nhắc nhở hôm nay
+  const remindersToday = can(admin, "reminders") ? await ShiftReminder.countDocuments({ date: localDate(new Date()) }).catch(() => 0) : 0;
   const settings = await getSettings();
   // việc chờ xác nhận: loại theo cơ sở thì ghi rõ cần admin nào (Quản lý admin → Cơ sở quản lý), còn lại là việc chung
   const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames, pGaps] = await Promise.all([
@@ -125,8 +127,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
-        {show("quick") && (
         <div className="mb-4 flex flex-wrap gap-2">
+          {/* Bảng tin Bơ Sầu: nhắc việc theo ca – luôn hiện ở Tổng quan cho tiện */}
+          {can(admin, "reminders") && (
+            <LinkButton href="/admin/reminders?new=1" variant="primary" className="py-2.5">
+              <BellRing size={18} /> Nhắc nhở
+              {remindersToday > 0 && <span className="rounded-full bg-accent px-1.5 text-xs font-bold text-on-accent">{remindersToday} hôm nay</span>}
+            </LinkButton>
+          )}
+        {show("quick") && (
+        <>
           <LinkButton href="/admin/finance/expenses" variant="secondary" className="py-2.5">
             <Receipt size={18} /> Nhập chi phí (sao kê / CK)
           </LinkButton>
@@ -135,8 +145,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               <Package size={18} /> Nhận hàng các cơ sở
             </LinkButton>
           )}
-        </div>
+        </>
         )}
+        </div>
       </div>
       {show("todo") && todoTotal > 0 && (
         <div className="mb-4 overflow-hidden rounded-2xl bg-warn-soft ring-1 ring-warn/40">

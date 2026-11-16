@@ -291,18 +291,29 @@ export default function CheckInWidget({
               {step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi nhận…" : "CHECK-OUT"}
             </button>
           ) : (
+            <span className="relative my-10 inline-flex">
+              {/* hào quang + sóng lan toả từ mép viền nhạt (cùng nhịp) – chỉ khi bấm được */}
+              {deviceOk && !locked && step === "idle" && (
+                <>
+                  <span className="tbs-aura" aria-hidden />
+                  <span className="tbs-ring tbs-ring-out" aria-hidden />
+                </>
+              )}
+              {/* viền vàng nhạt cũ – luôn đứng yên quanh nút */}
+              <span className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_10px_var(--color-primary-light)]" aria-hidden />
             <button
               type="button"
               disabled={!deviceOk || !!locked || step === "locating" || step === "sending"}
               aria-disabled={!!locked || undefined}
               title={locked?.message}
               onClick={start}
-              className="my-2 flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full border border-primary-dark bg-primary text-on-primary shadow-[0_0_0_10px_var(--color-primary-light),0_10px_24px_rgba(0,0,0,.15)] active:scale-[.98] disabled:opacity-50"
+              className="relative flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full border border-primary-dark bg-primary text-on-primary shadow-[0_10px_24px_rgba(0,0,0,.15)] active:scale-[.98] disabled:opacity-50"
             >
               {step === "locating" || step === "sending" ? <Loader2 size={30} className="animate-spin" /> : <LogIn size={30} />}
               <span className="text-xl font-extrabold tracking-wide">{step === "locating" ? "Đang lấy vị trí…" : step === "sending" ? "Đang ghi…" : "CHECK-IN"}</span>
               {step === "idle" && <span className="text-[11px] font-medium opacity-80">{methods.face ? "Chụp mặt & ghi nhận" : "Bấm để ghi nhận"}</span>}
             </button>
+            </span>
           )}
 
           {/* người cùng ca – chỉ hiện trước khi check-in */}

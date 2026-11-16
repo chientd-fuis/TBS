@@ -12,6 +12,8 @@ import { isProbation, probationConfig, probationEnd, TRIAL_SHIFTS } from "@/lib/
 import { AUTO_LOCK_MS, checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 import WhatsNew from "@/components/WhatsNew";
 import { unseenFor } from "@/lib/announcements";
+import { ReminderBoard } from "@/components/ShiftReminders";
+import { activeRemindersFor } from "@/lib/reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +59,9 @@ export default async function HomePage() {
   const stockOn = goodsOn && (await stockEnabled());
   // Có gì mới: popup giới thiệu tính năng chưa xem – KHÔNG hiện khi có ca hôm nay mà chưa check-in (đang vội chấm công)
   const waitingCheckin = shifts.length > 0 && !open && !todayAtts.length;
-  const news = waitingCheckin
+  // Bảng tin Bơ Sầu: nhắc việc của ca đang / sắp làm (popup chưa xem do layout hiện) → không chồng thêm popup Có gì mới
+  const board = await activeRemindersFor(user._id).catch(() => []);
+  const news = waitingCheckin || board.some((r) => !r.seen)
     ? []
     : await unseenFor(`user:${user._id}`, { kind: "USER", storeId: user.storeId, since: user.joinedAt ?? user.registeredAt ?? null }).catch(() => []);
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
@@ -101,6 +105,7 @@ export default async function HomePage() {
   return (
     <>
       {news.length > 0 && <WhatsNew items={news} as="user" helpHref="/whats-new" />}
+      <ReminderBoard items={board} />
       <CheckInWidget
         methods={methods}
         wifiNames={wifiNames}

@@ -1015,6 +1015,30 @@ AnnouncementSeenSchema.index({ announcementId: 1, who: 1 }, { unique: true });
 AnnouncementSeenSchema.index({ who: 1 });
 export const AnnouncementSeen = getModel("AnnouncementSeen", AnnouncementSeenSchema);
 
+/* ---------- Bảng tin Bơ Sầu: nhắc việc theo ngày + ca (lib/reminders.ts) ---------- */
+const ShiftReminderSchema = new Schema(
+  {
+    date: { type: String, required: true, index: true }, // YYYY-MM-DD
+    shift: { type: String, enum: ["Sáng", "Chiều", "Tối"], required: true },
+    storeIds: [{ type: Schema.Types.ObjectId, ref: "Store" }], // trống = mọi cơ sở
+    text: { type: String, required: true },
+    level: { type: String, enum: ["NORMAL", "IMPORTANT"], default: "NORMAL" },
+    createdBy: String, // tên admin
+  },
+  { timestamps: true },
+);
+export const ShiftReminder = getModel("ShiftReminder", ShiftReminderSchema);
+
+const ShiftReminderSeenSchema = new Schema(
+  {
+    reminderId: { type: Schema.Types.ObjectId, ref: "ShiftReminder", required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  },
+  { timestamps: true },
+);
+ShiftReminderSeenSchema.index({ reminderId: 1, userId: 1 }, { unique: true });
+export const ShiftReminderSeen = getModel("ShiftReminderSeen", ShiftReminderSeenSchema);
+
 /* ---------- Sổ quỹ: rút lãi / bổ sung vốn / chuyển giữa tiền mặt và tài khoản (xem lib/cashbook) ---------- */
 const CashTransferSchema = new Schema(
   {
