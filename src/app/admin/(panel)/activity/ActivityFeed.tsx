@@ -16,7 +16,8 @@ const GROUP_DOT: Record<string, string> = {
 };
 
 /** Danh sách hoạt động gom theo ngày (mới nhất trước). */
-export default function ActivityFeed({ rows, today, empty = "Chưa có hoạt động nào" }: { rows: ActivityRow[]; today: string; empty?: string }) {
+/** inBox: danh sách nằm trong khung cuộn riêng (Tổng quan) → tiêu đề ngày dính ở mép trên khung (top-0), không lùi 52px theo header điện thoại */
+export default function ActivityFeed({ rows, today, empty = "Chưa có hoạt động nào", inBox = false }: { rows: ActivityRow[]; today: string; empty?: string; inBox?: boolean }) {
   if (!rows.length) return <p className="py-4 text-center text-sm text-ink/50">{empty}</p>;
   const days = [...new Set(rows.map((r) => r.day))];
   const dayTitle = (d: string) => {
@@ -30,7 +31,7 @@ export default function ActivityFeed({ rows, today, empty = "Chưa có hoạt đ
         const list = rows.filter((r) => r.day === d);
         return (
           <section key={d}>
-            <h3 className="sticky top-[52px] z-10 mb-1 bg-white/95 lg:top-0 py-1 text-xs font-bold uppercase tracking-wide text-ink/50">
+            <h3 className={`sticky z-10 mb-1 bg-card/95 py-1 ${inBox ? "top-0" : "top-[52px] lg:top-0"} text-xs font-bold uppercase tracking-wide text-ink/50`}>
               {dayTitle(d)} <span className="font-normal normal-case">({list.length})</span>
             </h3>
             <ul className="divide-y divide-ink/5">

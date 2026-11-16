@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store } from "@/lib/models";
 import { addDays, localDate, weekDays, weekStartOf, isYmd } from "@/lib/time";
+import { queueRequestNotice, storeShort } from "@/lib/request-notify";
 
 export type RegResult = { ok?: boolean; error?: string; message?: string };
 
@@ -63,6 +64,13 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
     // có đăng ký ca trong tuần → hoàn tất yêu cầu đăng ký của admin (nếu có)
     if (wanted.size > 0)
       await ShiftRegRequest.updateOne({ userId: user._id, weekStart, status: "OPEN" }, { $set: { status: "DONE", respondedAt: new Date() } });
+    // có ca mới chờ duyệt → 1 tin gộp cho lần gửi này
+    if (added > 0)
+      queueRequestNotice(
+        store._id,
+        ["🗓 ĐĂNG KÝ CA – CHỜ DUYỆT", `🏪 Cơ sở: ${storeShort(store.name)}`, `👤 Nhân viên: ${user.name || user.email}`, `📅 Tuần ${days[0].slice(8)}/${days[0].slice(5, 7)} – ${days[6].slice(8)}/${days[6].slice(5, 7)}: đăng ký thêm ${added} ca${removed ? `, bỏ ${removed} ca` : ""}`],
+        { kind: "shiftReg", perm: "schedule", where: "Xếp ca để Duyệt ca đăng ký" },
+      );
     revalidatePath("/", "layout");
     return { ok: true, message: `Đã gửi đăng ký: thêm ${added}, bỏ ${removed} ca. Chờ admin duyệt.` };
   } catch (e) {

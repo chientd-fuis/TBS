@@ -65,6 +65,7 @@ export async function saveStore(_: FormState, fd: FormData): Promise<FormState> 
       active: fd.get("active") === "on",
       // cách xác thực chấm công
       checkFace: fd.get("checkFace") === "on",
+      faceDetect: fd.get("checkFace") === "on" && fd.get("faceDetect") === "on",
       checkGps: fd.get("checkGps") === "on",
       checkWifi: fd.get("checkWifi") === "on",
       wifiName: str(fd.get("wifiName")).slice(0, 60),

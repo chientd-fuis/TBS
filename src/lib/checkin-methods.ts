@@ -1,6 +1,7 @@
 /*
  * Cách xác thực khi chấm công – cài đặt theo từng cơ sở:
- *  - face: chụp ảnh khuôn mặt (mặc định BẬT)
+ *  - face: LV1 chụp ảnh chân dung (mặc định BẬT)
+ *  - faceDetect: LV2 nhận diện khuôn mặt – camera phải thấy mặt người mới chụp / tự chụp (mặc định BẬT). Tắt = chụp ảnh là xong.
  *  - gps:  vị trí trong bán kính quán (mặc định BẬT)
  *  - wifi: phải dùng WiFi của quán (mặc định TẮT)
  * Bật nhiều cách → phải qua TẤT CẢ.
@@ -10,15 +11,17 @@
  *   Máy dùng 4G / WiFi khác / VPN / iCloud Private Relay sẽ có IP khác → bị từ chối.
  *   IPv6: mỗi mạng nhà có 1 dải /64 cố định → so 4 nhóm đầu.
  */
-export type CheckMethods = { face: boolean; gps: boolean; wifi: boolean };
+export type CheckMethods = { face: boolean; faceDetect: boolean; gps: boolean; wifi: boolean };
 
-export function methodsOf(s: { checkFace?: boolean | null; checkGps?: boolean | null; checkWifi?: boolean | null } | null | undefined): CheckMethods {
-  return { face: s?.checkFace !== false, gps: s?.checkGps !== false, wifi: s?.checkWifi === true };
+export function methodsOf(s: { checkFace?: boolean | null; faceDetect?: boolean | null; checkGps?: boolean | null; checkWifi?: boolean | null } | null | undefined): CheckMethods {
+  const face = s?.checkFace !== false;
+  return { face, faceDetect: face && s?.faceDetect !== false, gps: s?.checkGps !== false, wifi: s?.checkWifi === true };
 }
 
 /** Gộp yêu cầu của nhiều cơ sở có thể chấm (cơ sở gốc + cơ sở hỗ trợ) → client chuẩn bị đủ dữ liệu. */
 export const anyMethods = (list: CheckMethods[]): CheckMethods => ({
   face: list.some((m) => m.face),
+  faceDetect: list.some((m) => m.faceDetect),
   gps: list.some((m) => m.gps),
   wifi: list.some((m) => m.wifi),
 });

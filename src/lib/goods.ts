@@ -221,7 +221,12 @@ export const qtyVi = (n: number) => n.toLocaleString("vi-VN", { maximumFractionD
 /** "Mini: 5 hộp" · tồn kho 0 → "Mini: hết" */
 export const lineVi = (l: GoodsLine) => (l.qty === 0 ? `${l.name}: hết` : `${l.name}: ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`);
 
-export type GoodsKind = "RECEIVE" | "STOCK";
+/** RECEIVE = nhận hàng · RETURN = trả hàng (số lượng TRỪ vào hàng nhập) · STOCK = tồn kho */
+export type GoodsKind = "RECEIVE" | "RETURN" | "STOCK";
+/** lý do trả hàng gợi ý (nhân viên / admin chọn hoặc gõ) */
+export const RETURN_REASONS = ["Hỏng / hư", "Hết hạn", "Giao nhầm", "Giao thừa", "Chuyển cơ sở khác"];
+/** lọc Mongo theo loại: nhận hàng gồm cả bản ghi cũ chưa có kind */
+export const kindFilter = (k: GoodsKind) => (k === "RECEIVE" ? { $nin: ["STOCK", "RETURN"] } : k);
 
 /** Tin nhắn gửi nhóm Telegram cơ sở */
 /** "2026-11-10" → "10/11 (Thứ 3)" – không cần năm */
@@ -232,17 +237,20 @@ export function dayVi(date: string) {
 
 /** Dòng đầu tin Telegram: 📦 NHẬN HÀNG · cơ sở · 10/11 (Thứ 3) */
 export const goodsHeader = (r: { store: string; date: string; edited?: boolean; kind?: GoodsKind }) =>
-  `${r.kind === "STOCK" ? "📋" : "📦"} ${r.edited ? "SỬA " : ""}${r.kind === "STOCK" ? "TỒN KHO" : "NHẬN HÀNG"} · ${r.store} · ${dayVi(r.date)}`;
+  `${r.kind === "STOCK" ? "📋" : r.kind === "RETURN" ? "↩️" : "📦"} ${r.edited ? "SỬA " : ""}${r.kind === "STOCK" ? "TỒN KHO" : r.kind === "RETURN" ? "TRẢ HÀNG" : "NHẬN HÀNG"} · ${r.store} · ${dayVi(r.date)}`;
 
 /**
  * Tin Telegram: chỉ cần NỘI DUNG GỐC (chữ nhân viên gõ). Không có nội dung gốc (chọn tay) hoặc admin sửa số → liệt kê món.
  */
-export function goodsMessage(r: { store: string; date: string; by: string; lines: GoodsLine[]; note?: string; raw?: string; sender?: string; edited?: boolean; kind?: GoodsKind }) {
+export function goodsMessage(r: { store: string; date: string; by: string; lines: GoodsLine[]; note?: string; raw?: string; sender?: string; edited?: boolean; kind?: GoodsKind; reason?: string }) {
   const raw = r.raw?.trim();
+  const ret = r.kind === "RETURN";
   return [
     goodsHeader(r),
     `👤 ${r.by}${r.sender && r.sender !== r.by ? ` (báo: ${r.sender})` : ""}`,
-    ...(raw && !r.edited ? [raw] : r.lines.map((l) => `• ${lineVi(l)}`)),
+    // trả hàng: luôn liệt kê món với dấu − + lý do (trừ vào hàng nhập)
+    ...(ret ? r.lines.map((l) => `• −${lineVi(l).replace(/^(.*?): /, "$1: ")}`) : raw && !r.edited ? [raw] : r.lines.map((l) => `• ${lineVi(l)}`)),
+    ...(ret && r.reason ? [`❓ Lý do: ${r.reason}`] : []),
     ...(r.note ? [`📝 ${r.note}`] : []),
   ].join("\n");
 }
@@ -289,8 +297,10 @@ export type UsageRow = {
   open?: { date: string; qty: number };
   close?: { date: string; qty: number };
   received: number;
-  /** hàng nhập TRONG THÁNG (ngày from → to) – số lượng & tiền theo giá ngày nhận; null = chưa có giá */
+  /** hàng nhập TRONG THÁNG (ngày from → to) – ĐÃ TRỪ hàng trả; số lượng & tiền theo giá ngày nhận; null = chưa có giá */
   monthReceived: number;
+  /** hàng trả trong tháng (số dương) – đã trừ trong monthReceived */
+  monthReturned: number;
   receivedValue: number | null;
   usage: number;
   /** thành tiền tiêu thụ; null = chưa có giá */
@@ -332,7 +342,9 @@ export function usageReport(input: { from: string; to: string; items: (GoodsItem
     const counts = input.useStock ? recs.filter((r) => r.kind === "STOCK").map((r) => ({ r, q: qtyOf(r) })).filter((x) => x.q != null) : [];
     const before = counts.filter((x) => x.r.date < from).pop();
     const inside = counts.filter((x) => x.r.date >= from && x.r.date <= to).pop();
-    const recv = recs.filter((r) => r.kind === "RECEIVE");
+    // nhận hàng (+) và trả hàng (−): trả hàng trừ thẳng vào số nhập
+    const recv = recs.filter((r) => r.kind === "RECEIVE" || r.kind === "RETURN");
+    const sign = (r: UsageRec) => (r.kind === "RETURN" ? -1 : 1);
     skipped = 0; // chỉ đếm dòng lệch đơn vị ở hàng nhận trong kỳ
     let mode: UsageRow["mode"] = "receive";
     let lo = from;
@@ -348,8 +360,9 @@ export function usageReport(input: { from: string; to: string; items: (GoodsItem
     let value: number | null = 0;
     for (const r of recv) {
       if (!incl(r.date)) continue;
-      const q = qtyOf(r);
-      if (q == null) continue;
+      const q0 = qtyOf(r);
+      if (q0 == null) continue;
+      const q = q0 * sign(r);
       received += q;
       const p = priceAt(it.prices, r.date);
       value = p == null || value == null ? null : value + q * p;
@@ -357,11 +370,14 @@ export function usageReport(input: { from: string; to: string; items: (GoodsItem
     // tiền hàng nhập trong tháng (không phụ thuộc lần kiểm kho) – dòng lệch đơn vị chỉ đếm ở đây
     skipped = 0;
     let monthReceived = 0;
+    let monthReturned = 0;
     let receivedValue: number | null = 0;
     for (const r of recv) {
       if (r.date < from || r.date > to) continue;
-      const qy = qtyOf(r);
-      if (qy == null) continue;
+      const q0 = qtyOf(r);
+      if (q0 == null) continue;
+      const qy = q0 * sign(r);
+      if (r.kind === "RETURN") monthReturned += q0;
       monthReceived += qy;
       const p = priceAt(it.prices, r.date);
       receivedValue = p == null || receivedValue == null ? null : receivedValue + qy * p;
@@ -383,6 +399,7 @@ export function usageReport(input: { from: string; to: string; items: (GoodsItem
       close: mode === "stock" ? { date: inside!.r.date, qty: inside!.q! } : undefined,
       received: r3(received),
       monthReceived: r3(monthReceived),
+      monthReturned: r3(monthReturned),
       receivedValue: receivedValue == null ? null : Math.round(receivedValue),
       usage: r3(usage),
       value: value == null ? null : Math.round(value),

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { aiPhotoOn } from "@/lib/ai-photo";
 import { z } from "zod";
 import { getAdmin } from "@/lib/admin-session";
 import { connectDB } from "@/lib/db";
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
   try {
     const admin = await getAdmin();
     if (!admin) throw new HttpError(401, "Phiên admin đã hết hạn");
+    // Cài đặt → Đọc ảnh bằng AI: chốt ca đang tắt
+    if (!(await aiPhotoOn("closing"))) return NextResponse.json({ error: "Đọc ảnh tờ chốt ca bằng AI đang tắt – nhập số tay", code: "OCR_OFF" }, { status: 403 });
     if (!ocrConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY – nhập tay", { code: "OCR_OFF" });
     const p = Body.safeParse(await req.json());
     if (!p.success) throw new HttpError(400, "Cần 1–4 ảnh");

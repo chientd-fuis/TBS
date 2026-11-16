@@ -127,43 +127,44 @@ body {
   --color-muted: #fbe4ee;
   --color-shade: #4d1a33;
 }
+/* Tím hồng (id cũ 'jade' – giữ id để không phải đổi dữ liệu người dùng) */
 .theme-jade,
 :root:has(.theme-jade) {
-  --color-primary: #86d5b8;
-  --color-primary-dark: #62c49f;
-  --color-primary-light: #e3f6ee;
-  --color-secondary: #0e8466;
-  --color-secondary-dark: #0b6d54;
-  --color-accent: #0b6d54;
-  --color-ink: #11332b;
-  --color-cream: #f3fbf8;
-  --color-on-primary: #0f3d31;
-  --color-header: #86d5b8;
-  --color-on-header: #0f3d31;
-  --color-nav: #0b6d54;
-  --color-line: #d3ebe1;
-  --color-line-strong: #b8decf;
-  --color-muted: #e2f2eb;
-  --color-shade: #11332b;
+  --color-primary: #e2aad8;
+  --color-primary-dark: #d08cc4;
+  --color-primary-light: #f8eaf5;
+  --color-secondary: #a8459a;
+  --color-secondary-dark: #8c377f;
+  --color-accent: #8c377f;
+  --color-ink: #2f1a2c;
+  --color-cream: #fcf6fa;
+  --color-on-primary: #561f4e;
+  --color-header: #e2aad8;
+  --color-on-header: #561f4e;
+  --color-nav: #8c377f;
+  --color-line: #f0dcea;
+  --color-line-strong: #e3c4da;
+  --color-muted: #f4e6f0;
+  --color-shade: #2f1a2c;
 }
 .theme-blue,
 :root:has(.theme-blue) {
-  --color-primary: #b3d1ff;
-  --color-primary-dark: #8fb9fb;
-  --color-primary-light: #eaf2ff;
-  --color-secondary: #2563eb;
-  --color-secondary-dark: #1d4ed8;
-  --color-accent: #1d4ed8;
-  --color-ink: #14213d;
-  --color-cream: #f6f9ff;
-  --color-on-primary: #12306b;
-  --color-header: #b3d1ff;
-  --color-on-header: #12306b;
-  --color-nav: #1d4ed8;
-  --color-line: #dde7fb;
-  --color-line-strong: #c6d7f7;
-  --color-muted: #e6eefc;
-  --color-shade: #14213d;
+  --color-primary: #c9d9ee;
+  --color-primary-dark: #a9c0de;
+  --color-primary-light: #edf2f9;
+  --color-secondary: #5677a3;
+  --color-secondary-dark: #46658f;
+  --color-accent: #3e5c86;
+  --color-ink: #1e2a3b;
+  --color-cream: #f6f8fb;
+  --color-on-primary: #263f62;
+  --color-header: #c9d9ee;
+  --color-on-header: #263f62;
+  --color-nav: #46658f;
+  --color-line: #e1e8f1;
+  --color-line-strong: #cbd7e6;
+  --color-muted: #e9eef5;
+  --color-shade: #1e2a3b;
 }
 /* Tối (dark mode): nền đen nhẹ, thẻ xám than, chữ sáng – mọi màu trạng thái đổi sang bản tối */
 .theme-dark,

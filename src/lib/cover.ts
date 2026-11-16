@@ -3,6 +3,13 @@ import { connectDB } from "./db";
 import { APPROVED_SHIFT, CoverRequest, ShiftAssignment, Store, User, UserNotice } from "./models";
 import { findShiftClash } from "./support";
 import { localDate } from "./time";
+import { queueRequestNotice, storeShort } from "./request-notify";
+
+/** Báo nhóm yêu cầu: nhờ làm hộ / đổi ca chờ admin duyệt */
+async function noticeCover(storeId: unknown, lines: string[]) {
+  const st = await Store.findById(storeId).select("name").lean();
+  queueRequestNotice(storeId, [lines[0], `🏪 Cơ sở: ${storeShort(st?.name)}`, ...lines.slice(1)], { kind: "cover", perm: "cover", where: "Yêu cầu → Nhờ làm hộ / đổi ca để Duyệt / Từ chối" });
+}
 
 /* Nhờ làm hộ ca */
 
@@ -27,6 +34,8 @@ export async function createCoverRequest(fromUserId: Id, shiftAssignmentId: stri
   if (await shiftBusy(sa._id)) throw new Error("Ca này đang có yêu cầu nhờ làm hộ / đổi ca chờ duyệt");
   const clash = await findShiftClash(to._id, sa.date, sa.startTime!, sa.endTime!);
   if (clash) throw new Error(`${to.name} đã có ${clash} – trùng giờ`);
+  const from = await User.findById(fromUserId).select("name").lean();
+  await noticeCover(sa.storeId, ["🤝 NHỜ LÀM HỘ CA – CHỜ DUYỆT", `👤 ${from?.name ?? "?"} nhờ ${to.name} làm hộ ${shiftText(sa)}`, ...(note ? [`📝 ${note.slice(0, 300)}`] : [])]);
   return CoverRequest.create({
     fromUserId,
     toUserId: to._id,
@@ -86,6 +95,7 @@ export async function createSwapRequest(fromUserId: Id, myShiftId: string, their
     note: note.slice(0, 300) || undefined,
   });
   const from = await User.findById(fromUserId).select("name").lean();
+  await noticeCover(a.storeId, ["🔁 XIN ĐỔI CA – CHỜ DUYỆT", `👤 ${from?.name ?? "?"}: ${shiftText(a)} ⇄ ${to.name}: ${shiftText(b)}`, ...(note ? [`📝 ${note.slice(0, 300)}`] : [])]);
   await notifyUser(b.userId, `${from?.name ?? "Đồng nghiệp"} xin đổi ${shiftText(a)} của họ lấy ${shiftText(b)} của bạn – đang chờ admin duyệt.`, "blue", "/schedule");
   return r;
 }

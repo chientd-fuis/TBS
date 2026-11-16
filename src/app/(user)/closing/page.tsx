@@ -1,3 +1,4 @@
+import { aiPhotoOn } from "@/lib/ai-photo";
 import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -73,7 +74,7 @@ export default async function ClosingPage() {
         storeName={ctx?.store.name}
         dayBefore={dayBefore}
         existing={existing}
-        ocrEnabled={ocrConfigured() && (await aiAllowed("closingOcr", `user:${user._id}`))}
+        ocrEnabled={ocrConfigured() && (await aiPhotoOn("closing")) && (await aiAllowed("closingOcr", `user:${user._id}`))}
       />
       {recent.length > 0 && (
         <Card title="Lần chốt ca gần đây">

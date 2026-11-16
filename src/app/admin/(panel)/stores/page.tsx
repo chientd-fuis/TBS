@@ -72,6 +72,7 @@ export default async function StoresPage() {
                 revenueSheetLayout: sheetLayoutOf(s),
                 active: s.active !== false,
                 checkFace: s.checkFace !== false,
+                faceDetect: s.faceDetect !== false,
                 checkGps: s.checkGps !== false,
                 checkWifi: s.checkWifi === true,
                 wifiName: s.wifiName || "",

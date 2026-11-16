@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { Attendance, Store } from "./models";
 import { computeFields, shiftBlock } from "./attendance";
-import { attendanceChatId } from "./attendance-notify";
+import { requestChatId, requestKindOn } from "./request-notify";
 import { sendTelegramText, telegramConfigured } from "./telegram";
 import { localTime, viDate, weekdayVi } from "./time";
 import { APPROVE_PERM, responsibleAdminNames } from "./admin-stores";
@@ -125,9 +125,9 @@ export async function flagOvertime(attendanceId: Types.ObjectId, tz: string, inf
   );
   const notify = async () => {
     try {
-      if (!telegramConfigured()) return;
+      if (!telegramConfigured() || !(await requestKindOn("overtime"))) return;
       const store = await Store.findById(info.storeId).select("telegramAttendanceChatId").lean();
-      const chatId = attendanceChatId(store ?? {});
+      const chatId = await requestChatId(store); // nhóm yêu cầu (không gửi nhóm chấm công nữa)
       if (!chatId) return;
       // admin quản lý cơ sở này (Quản lý admin → Cơ sở quản lý) có quyền duyệt chấm công
       const admins = await responsibleAdminNames(info.storeId, APPROVE_PERM.overtime);

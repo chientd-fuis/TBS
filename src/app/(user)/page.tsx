@@ -9,6 +9,8 @@ import { anyMethods, methodsOf } from "@/lib/checkin-methods";
 import { goodsEnabled, stockEnabled } from "@/lib/goods-server";
 import { isProbation, probationConfig, probationEnd, TRIAL_SHIFTS } from "@/lib/probation";
 import { AUTO_LOCK_MS, checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
+import WhatsNew from "@/components/WhatsNew";
+import { unseenFor } from "@/lib/announcements";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +45,7 @@ export default async function HomePage() {
   const supportToday = [...new Set(shifts.map((s) => supportOf(s.storeId)).filter(Boolean))] as string[];
   // cách chấm công cần chuẩn bị: cơ sở đang check-in (để check-out) hoặc cơ sở gốc + cơ sở hỗ trợ hôm nay
   const candIds = open ? [String(open.storeId)] : [String(user.storeId), ...shifts.map((s) => String(s.storeId))];
-  const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace checkGps checkWifi wifiName").lean();
+  const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace faceDetect checkGps checkWifi wifiName").lean();
   const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
   // nhân viên thử việc: không Chốt ca / Nhận hàng / Tồn kho
   const trial = isProbation(user);
@@ -52,10 +54,16 @@ export default async function HomePage() {
   const trialHalf = trial ? (await probationConfig()).trialHalf : false;
   const goodsOn = !trial && (await goodsEnabled());
   const stockOn = goodsOn && (await stockEnabled());
+  // Có gì mới: popup giới thiệu tính năng chưa xem – KHÔNG hiện khi có ca hôm nay mà chưa check-in (đang vội chấm công)
+  const waitingCheckin = shifts.length > 0 && !open && !todayAtts.length;
+  const news = waitingCheckin
+    ? []
+    : await unseenFor(`user:${user._id}`, { kind: "USER", storeId: user.storeId, since: user.joinedAt ?? user.registeredAt ?? null }).catch(() => []);
   const wifiNames = [...new Set(cand.filter((c) => methodsOf(c).wifi && c.wifiName).map((c) => c.wifiName!))];
 
   return (
     <>
+      {news.length > 0 && <WhatsNew items={news} as="user" helpHref="/whats-new" />}
       <CheckInWidget
         methods={methods}
         wifiNames={wifiNames}
@@ -101,7 +109,7 @@ export default async function HomePage() {
         className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line hover:bg-primary-light"
       >
         <span>
-          <span className="block font-bold text-accent">📦 Nhận hàng</span>
+          <span className="block font-bold text-accent">📦 Nhận / Trả hàng</span>
           <span className="text-xs text-ink/70">Chụp ảnh tin nhắn đã nhận hàng trong nhóm Facebook hoặc copy nội dung đã nhận – app tự đọc &amp; ghi</span>
         </span>
         <span className="text-xl text-accent">›</span>

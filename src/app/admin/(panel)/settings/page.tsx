@@ -3,10 +3,15 @@ import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
 import { AdminLoginLog, AuditLog, PendingPhoto, ShiftTemplate, Store } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
+import { allowedWidgets } from "@/lib/dashboard-widgets";
+import { adminDashHidden } from "@/lib/theme-server";
+import { saveDashWidgets } from "../../actions/appearance";
+import { REQUEST_KINDS } from "@/lib/request-notify";
+import { AI_PHOTO_KEYS } from "@/lib/ai-photo";
 import { prevMonth, viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/components/ui";
-import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveProbationConfig, saveUserAppAccess } from "../../actions/settings";
+import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveAiPhoto, saveProbationConfig, saveRequestChat, saveUserAppAccess } from "../../actions/settings";
 import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
@@ -44,11 +49,33 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     if (!cur || end > cur) lastShiftEnd.set(k, end);
   }
   for (const [k, v] of lastShiftEnd) lastShiftEnd.set(k, v.replace("~", ""));
+  // trang Tổng quan: khối được phép (theo quyền) + khối admin này đã tắt
+  const widgets = allowedWidgets(admin);
+  const dashOff = new Set(await adminDashHidden(admin.email).catch(() => []));
 
   return (
     <>
       <PageTitle>Cài đặt</PageTitle>
       <div className="grid gap-4 lg:grid-cols-2">
+        <div id="tong-quan" className="scroll-mt-20">
+          <Card title="🧭 Trang Tổng quan hiển thị gì">
+            <p className="mb-2 text-xs text-ink/70">
+              Chọn các khối muốn thấy ở trang Tổng quan – chỉ áp dụng cho <b>tài khoản của bạn</b>. Danh sách chỉ gồm khối bạn có quyền xem (theo quyền Admin Tổng cấp); khối
+              không có quyền luôn ẩn.
+            </p>
+            <ActionForm action={saveDashWidgets} submitLabel="Lưu" successText="Đã lưu – mở Tổng quan để xem" className="space-y-1.5">
+              {widgets.map((w) => (
+                <label key={w.key} className={`flex items-start gap-2 text-sm ${w.label.startsWith("↳") ? "pl-5" : ""}`}>
+                  <input type="checkbox" name="w" value={w.key} defaultChecked={!dashOff.has(w.key)} className="mt-0.5 h-4 w-4 accent-secondary" />
+                  <span>
+                    {w.label.replace(/^↳ /, "")}
+                    {"hint" in w && w.hint && <span className="block text-xs text-ink/60">{w.hint}</span>}
+                  </span>
+                </label>
+              ))}
+            </ActionForm>
+          </Card>
+        </div>
         {isOwner && (
           <Card title="✨ Cài đặt AI">
             <p className="text-sm text-ink/70">
@@ -64,6 +91,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               Nội dung nút “?” trên app nhân viên: hướng dẫn sử dụng app (nhập từ file Word), quy trình làm việc theo vị trí (Bếp / Thu ngân / Ship / Đa năng), thông tin
               quán, các tình huống hay gặp (hỏi – đáp). Có xem trước.{" "}
               <Link className="text-accent underline" href="/admin/settings/help">Mở Cài đặt Help →</Link>
+            </p>
+          </Card>
+        )}
+
+        {isOwner && (
+          <Card title="🎁 Có gì mới – giới thiệu tính năng">
+            <p className="text-sm text-ink/70">
+              Popup giới thiệu tính năng mới giữa màn hình: mỗi người chỉ thấy 1 lần, nhiều bản chưa xem → gộp thành slide. Soạn nội dung, ảnh, nút “Thử ngay”, xem
+              trước và theo dõi ai đã xem.{" "}
+              <Link className="text-accent underline" href="/admin/settings/announcements">Mở Có gì mới →</Link>
             </p>
           </Card>
         )}
@@ -95,6 +132,62 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Card>
         )}
 
+        {isOwner && (
+          <Card title="🤖 Đọc ảnh bằng AI">
+            <p className="mb-2 text-xs text-ink/70">
+              Bật / tắt nút <b>chụp ảnh / phiếu cho AI đọc</b> ở từng chức năng (nhân viên và admin). Tắt thì vẫn gõ tay / nhập số như thường. Giới hạn lượt dùng, tắt
+              hẳn AI: Cài đặt AI.
+            </p>
+            <ActionForm action={saveAiPhoto} submitLabel="Lưu" successText="Đã lưu" className="space-y-1.5">
+              {AI_PHOTO_KEYS.map((k) => (
+                <label key={k.key} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="on" value={k.key} defaultChecked={!(s.aiPhotoOff as string[] | undefined)?.includes(k.key)} className="h-4 w-4 accent-secondary" />
+                  {k.label}
+                </label>
+              ))}
+            </ActionForm>
+          </Card>
+        )}
+        {isOwner && (
+          <Card title="📨 Nhóm Telegram nhận yêu cầu">
+            <p className="mb-2 text-xs text-ink/70">
+              Mọi yêu cầu chờ admin xác nhận gửi về nhóm này (không gửi nhóm chấm công nữa): đăng ký nhân viên mới, đổi thiết bị, sửa giờ / chấm bù, làm ngoài giờ, thử
+              việc, nhờ làm hộ / đổi ca, đăng ký ca, khiếu nại lương. Thêm bot vào nhóm → lấy chat ID (dạng -100…) như nhóm chốt ca.
+              {!s.requestChatId && !process.env.TELEGRAM_REQUEST_CHAT_ID && <b className="text-warn"> Chưa cài – tạm thời vẫn gửi nhóm chấm công của từng cơ sở.</b>}
+            </p>
+            <ActionForm action={saveRequestChat} submitLabel="Lưu & gửi thử" successText="Đã lưu – kiểm tra tin thử trong nhóm" className="space-y-3">
+              <Field label="Chat ID nhóm yêu cầu"><Input name="requestChatId" defaultValue={s.requestChatId ?? ""} placeholder="-100…" className="!w-56" /></Field>
+              <fieldset className="rounded-xl bg-cream p-3">
+                <legend className="px-1 text-sm font-semibold text-accent">Báo vào nhóm các loại yêu cầu</legend>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {REQUEST_KINDS.map((k) => (
+                    <label key={k.key} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name="kind" value={k.key} defaultChecked={!(s.requestNotifyOff as string[] | undefined)?.includes(k.key)} className="h-4 w-4 accent-secondary" />
+                      {k.label}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-2 space-y-1.5 rounded-lg bg-card p-2.5 ring-1 ring-line">
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" name="revenueGapOn" defaultChecked={s.revenueGapOn !== false} className="mt-0.5 h-4 w-4 accent-secondary" />
+                    <span>
+                      <b>💸 Tự động tạo yêu cầu phạt bù doanh thu</b>
+                      <span className="block text-xs text-ink/60">
+                        Ngày thiếu tiền (thực thu &lt; DT máy) lúc chốt ca / sửa DT máy / import KiotViet → yêu cầu chia theo ca chờ admin duyệt. Tắt = không tạo yêu cầu mới (yêu
+                        cầu đang chờ vẫn giữ để xử lý).
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex flex-wrap items-center gap-2 pl-6 text-sm">
+                    Khi ngày thiếu từ
+                    <Input name="revenueGapMin" inputMode="numeric" defaultValue={String(s.revenueGapMin ?? 10000)} className="!w-28" /> đ
+                  </label>
+                </div>
+                <p className="mt-1.5 text-xs text-ink/60">Bỏ tích = không báo Telegram loại đó (yêu cầu vẫn hiện trong mục Yêu cầu / Duyệt đăng ký để admin xử lý).</p>
+              </fieldset>
+            </ActionForm>
+          </Card>
+        )}
         {isOwner && (
           <Card title="Tài khoản admin">
             <p className="text-sm text-ink/70">

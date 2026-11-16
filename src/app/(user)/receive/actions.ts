@@ -9,12 +9,15 @@ import { cleanInputs, cleanPhotos, getGoodsCatalog, GOODS_OFF, goodsEnabled, not
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Nhân viên ghi đồ đã nhận ở cơ sở đang làm (ca hỗ trợ → cơ sở hỗ trợ) → báo nhóm Telegram cơ sở. */
-export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "STOCK"; photos?: string[] }): Promise<GoodsSaveResult> {
+export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[] }): Promise<GoodsSaveResult> {
   try {
     const user = await requireActiveUser();
     if (isProbation(user)) return { error: PROBATION_OFF };
     if (!(await goodsEnabled())) return { error: GOODS_OFF };
-    const kind = input?.kind === "STOCK" ? "STOCK" : "RECEIVE";
+    const kind = input?.kind === "STOCK" ? "STOCK" : input?.kind === "RETURN" ? "RETURN" : "RECEIVE";
+    // trả hàng: bắt buộc lý do
+    const reason = kind === "RETURN" ? String(input?.reason ?? "").trim().slice(0, 120) : "";
+    if (kind === "RETURN" && !reason) return { error: "Chọn lý do trả hàng" };
     if (kind === "STOCK" && !(await stockEnabled())) return { error: STOCK_OFF };
     const ctx = await resolveClosingContext(user);
     if (!ctx) return { error: "Bạn chưa thuộc cơ sở nào" };
@@ -23,12 +26,12 @@ export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boo
     const rows = cleanInputs(drafts, await getGoodsCatalog(), { min: ctx.today, max: ctx.today }, kind);
     const saved: { id: string; source: string }[] = [];
     for (const d of rows) {
-      const doc = await GoodsReceipt.create({ ...d, kind, storeId: ctx.store._id, month: d.date.slice(0, 7), byUserId: user._id, byName: user.name || user.email, telegram: { status: "PENDING" } });
+      const doc = await GoodsReceipt.create({ ...d, kind, ...(reason ? { reason } : {}), storeId: ctx.store._id, month: d.date.slice(0, 7), byUserId: user._id, byName: user.name || user.email, telegram: { status: "PENDING" } });
       saved.push({ id: String(doc._id), source: d.source });
     }
     await notifyGoodsSaved(saved, cleanPhotos(input?.photos));
     revalidatePath(kind === "STOCK" ? "/stock" : "/receive");
-    const what = kind === "STOCK" ? "tồn kho" : "nhận hàng";
+    const what = kind === "STOCK" ? "tồn kho" : kind === "RETURN" ? "trả hàng" : "nhận hàng";
     return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what} và báo nhóm ✔` };
   } catch (e) {
     const err = e as { digest?: string; message?: string };

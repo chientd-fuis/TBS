@@ -38,7 +38,7 @@ export default function CheckInWidget({
   openSince,
   storeName,
   supportNote,
-  methods = { face: true, gps: true, wifi: false },
+  methods = { face: true, faceDetect: true, gps: true, wifi: false },
   wifiNames = [],
   lock = null,
   capNote,
@@ -193,6 +193,7 @@ export default function CheckInWidget({
           )}
           <FaceCamera
             onCapture={submit}
+            detect={methods.faceDetect}
             autoCapture={false}
             disabled={step === "sending"}
             buttonLabel={step === "sending" ? "Đang ghi nhận…" : isCheckOut ? "Chụp & Check-out" : "Chụp & Check-in"}

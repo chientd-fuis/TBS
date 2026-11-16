@@ -182,7 +182,7 @@ export async function geminiGenerate(opts: {
   };
   const parts: unknown[] = [{ text: opts.prompt }];
   for (const p of opts.photos ?? []) {
-    const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(p);
+    const m = /^data:(image\/[a-z+]+|application\/pdf);base64,(.+)$/i.exec(p); // ảnh, hoặc PDF (báo cáo KiotViet)
     if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
   }
   // câu hỏi chữ (không ảnh) → giảm suy nghĩ cho nhanh; đọc ảnh giữ mặc định (cần chính xác)

@@ -6,6 +6,7 @@ import { GoodsReceipt } from "@/lib/models";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { getGoodsCatalog, GOODS_OFF, goodsEnabled, STOCK_OFF, stockEnabled } from "@/lib/goods-server";
 import { dayVi, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { aiPhotoOn } from "@/lib/ai-photo";
 import { GoodsEntry } from "@/components/GoodsEntry";
 import { geminiConfigured } from "@/lib/ocr";
 import { aiAllowed } from "@/lib/ai";
@@ -30,16 +31,18 @@ export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
   const catalog = await getGoodsCatalog();
   const recent = await GoodsReceipt.find({ storeId: store._id, kind: stock ? "STOCK" : { $ne: "STOCK" }, date: { $gte: addDays(today, -2) } }).sort({ date: -1, createdAt: -1 }).limit(20).lean();
   const ocr = geminiConfigured() && (await aiAllowed("goodsOcr", `user:${user._id}`));
+  // Cài đặt → Đọc ảnh bằng AI: bật / tắt riêng nhận / trả / tồn kho
+  const ocrByKind = { RECEIVE: await aiPhotoOn("receive"), RETURN: await aiPhotoOn("return"), STOCK: await aiPhotoOn("stock") };
   return (
     <>
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-accent">{stock ? "📋 Tồn kho" : "📦 Nhận hàng"}</h1>
+        <h1 className="text-lg font-bold text-accent">{stock ? "📋 Tồn kho" : "📦 Nhận / Trả hàng"}</h1>
         <Link href="/" className="text-sm text-accent underline">← Chấm công</Link>
       </div>
       <Card>
-        <GoodsForm mode="user" kind={kind} catalog={catalog} today={today} ocrEnabled={ocr} storeName={store.name} save={saveGoodsUser} />
+        <GoodsForm mode="user" kind={kind} allowReturn={!stock} catalog={catalog} today={today} ocrEnabled={ocr} ocrByKind={ocrByKind} storeName={store.name} save={saveGoodsUser} />
       </Card>
-      <Card title={stock ? "Cơ sở đã báo tồn (3 ngày gần đây)" : "Cơ sở đã nhận (3 ngày gần đây)"}>
+      <Card title={stock ? "Cơ sở đã báo tồn (3 ngày gần đây)" : "Cơ sở đã nhận / trả (3 ngày gần đây)"}>
         {!recent.length ? (
           <p className="text-sm text-ink/60">Chưa có</p>
         ) : (
@@ -53,10 +56,11 @@ export default async function GoodsUserPage({ kind }: { kind: GoodsKind }) {
                     <span className="font-semibold text-ink/80">{dayVi(r.date)}</span>
                     <span>{r.createdAt ? localTime(new Date(r.createdAt), tz).slice(0, 5) : ""}</span>
                     <span>· {r.byName}</span>
+                    {r.kind === "RETURN" ? <Badge tone="orange">↩ Trả{r.reason ? ` · ${r.reason}` : ""}</Badge> : !stock && <Badge tone="green">Nhận</Badge>}
                     <Badge tone={tg[1]}>{tg[0]}</Badge>
                     {mine && (
                       <span className="ml-auto">
-                        <ActionForm action={deleteGoodsUser} submitLabel="Xoá" variant="ghost" successText="" className="flex" confirm={stock ? "Xoá lần báo tồn kho này?" : "Xoá lần ghi nhận hàng này?"}>
+                        <ActionForm action={deleteGoodsUser} submitLabel="Xoá" variant="ghost" successText="" className="flex" confirm={stock ? "Xoá lần báo tồn kho này?" : r.kind === "RETURN" ? "Xoá lần ghi trả hàng này?" : "Xoá lần ghi nhận hàng này?"}>
                           <input type="hidden" name="id" value={String(r._id)} />
                         </ActionForm>
                       </span>

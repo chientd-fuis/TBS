@@ -4,7 +4,7 @@ import { connectDB } from "./db";
 import { GoodsItemModel, GoodsReceipt, Settings, Store } from "./models";
 import { geminiGenerate } from "./ocr";
 import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "./telegram";
-import { cleanLines, DEFAULT_GOODS, foldGoods, goodsHeader, goodsMessage, lineVi, parseCatalog, sameLines, type GoodsItem, type GoodsKind, type GoodsLine, type PriceEntry } from "./goods";
+import { cleanLines, DEFAULT_GOODS, kindFilter, foldGoods, goodsHeader, goodsMessage, lineVi, parseCatalog, sameLines, type GoodsItem, type GoodsKind, type GoodsLine, type PriceEntry } from "./goods";
 import { isYmd } from "./time";
 
 /** Lần đầu: tạo danh mục từ bản chữ cũ (Settings.goodsCatalog) hoặc danh mục mặc định. */
@@ -87,6 +87,9 @@ const WHAT: Record<GoodsKind, string> = {
   RECEIVE: `Nhân viên báo ĐỒ ĐÃ NHẬN (nguyên liệu, vật tư được giao tới quán). Tin báo nhận thường có chữ "nhận" (hay gõ sai: "nhạn", "nhan", "nhân", "đã nhận", "nhận hàng").
 Chỉ lấy tin BÁO ĐÃ NHẬN. Bỏ qua tin khác: hỏi han, báo hết / sắp hết, xin đặt hàng, báo tồn kho, chốt ca, doanh thu…
 Mỗi tin báo nhận → 1 phần tử trong "entries":`,
+  RETURN: `Nhân viên báo ĐỒ TRẢ LẠI (nguyên liệu, vật tư trả cho bên giao / chuyển đi: hỏng, hết hạn, giao nhầm, giao thừa…). Tin thường có chữ "trả", "trả lại", "hoàn", "đổi".
+Chỉ lấy món TRẢ LẠI, qty = số lượng trả (số dương). Bỏ qua tin khác.
+Mỗi tin báo trả → 1 phần tử trong "entries":`,
   STOCK: `Nhân viên báo TỒN KHO (số nguyên liệu, vật tư CÒN LẠI ở quán, thường cuối ca / cuối ngày). Tin thường có chữ "tồn", "còn", "kiểm kho", "tồn kho".
 Chỉ lấy tin BÁO TỒN / CÒN. Bỏ qua tin khác: báo nhận hàng, xin đặt hàng, chốt ca, doanh thu… "hết X" = X còn 0.
 Mỗi tin báo tồn → 1 phần tử trong "entries" (qty = số CÒN):`,
@@ -95,6 +98,7 @@ Mỗi tin báo tồn → 1 phần tử trong "entries" (qty = số CÒN):`,
 /** Phiếu kiểm kê: báo tồn đọc cột Tồn, nhận hàng đọc cột Nhập */
 const SHEET: Record<GoodsKind, string> = {
   STOCK: `Đang ghi TỒN KHO → chỉ lấy số ở cột "Tồn" (số còn lại). Bỏ qua các cột Nhập / Xuất / Huỷ.`,
+  RETURN: `Đang ghi TRẢ HÀNG → lấy số ở cột "Trả" / "Xuất trả" / "Hoàn" nếu có; phiếu giao hàng thì lấy số lượng các món được trả.`,
   RECEIVE: `Đang ghi NHẬN HÀNG → chỉ lấy số ở cột "Nhập" (hàng nhận vào). Bỏ qua các cột Xuất / Huỷ / Tồn. Phiếu không có số nào ở cột Nhập → entries rỗng.`,
 };
 
@@ -103,7 +107,7 @@ export async function readGoods(input: { photos?: string[]; text?: string }, cat
   const prompt =
     PROMPT.replace("{WHAT}", WHAT[kind])
       .replace("{SHEET}", SHEET[kind])
-      .replace("{COL}", kind === "STOCK" ? "Tồn" : "Nhập")
+      .replace("{COL}", kind === "STOCK" ? "Tồn" : kind === "RETURN" ? "Trả" : "Nhập")
       .replaceAll("{YEAR}", today.slice(0, 4))
       .replace("{TODAY}", today)
       .replace("{CATALOG}", catalog.map((c) => `${c.name}${c.aliases.length ? ` | ${c.aliases.join(", ")}` : ""}${c.unit ? ` (đơn vị ${c.unit})` : ""}`).join("\n")) +
@@ -162,7 +166,7 @@ export async function readGoods(input: { photos?: string[]; text?: string }, cat
 export async function markDupes(storeId: string, drafts: GoodsDraft[], kind: GoodsKind = "RECEIVE") {
   if (!Types.ObjectId.isValid(storeId) || !drafts.length) return drafts;
   const dates = [...new Set(drafts.map((d) => d.date))];
-  const old = await GoodsReceipt.find({ storeId, date: { $in: dates }, kind: kind === "STOCK" ? "STOCK" : { $ne: "STOCK" } }).select("date items byName createdAt").lean();
+  const old = await GoodsReceipt.find({ storeId, date: { $in: dates }, kind: kindFilter(kind) }).select("date items byName createdAt").lean();
   return drafts.map((d) => {
     const hit = old.find((o) => o.date === d.date && sameLines((o.items ?? []) as GoodsLine[], d.lines));
     return hit ? { ...d, dup: `Có vẻ đã nhập rồi (${hit.byName ?? "?"})` } : d;
@@ -199,7 +203,8 @@ export async function notifyGoods(id: string, opts: { edited?: boolean } = {}) {
         raw: r.raw ?? undefined,
         sender: r.sender ?? undefined,
         edited: opts.edited,
-        kind: r.kind === "STOCK" ? "STOCK" : "RECEIVE",
+        kind: (r.kind ?? "RECEIVE") as GoodsKind,
+        reason: r.reason ?? undefined,
       }),
     );
     await GoodsReceipt.updateOne({ _id: id }, { telegram: { status: "SENT", messageId } });
@@ -225,7 +230,8 @@ export async function notifyGoodsPhotos(ids: string[], photos: string[]) {
     .map((p) => Buffer.from(p.replace(/^data:image\/\w+;base64,/, ""), "base64"))
     .filter((b) => b.length > 0);
   const caption = [
-    goodsHeader({ store: name, date: rs[rs.length - 1].date, kind: rs[0].kind === "STOCK" ? "STOCK" : "RECEIVE" }),
+    goodsHeader({ store: name, date: rs[rs.length - 1].date, kind: (rs[0].kind ?? "RECEIVE") as GoodsKind }),
+    ...(rs[0].kind === "RETURN" && rs[0].reason ? [`❓ Lý do: ${rs[0].reason}`] : []),
     `👤 ${rs[0].byName ?? "?"}`,
     ...rs.map((r) => `${r.sender ? `${r.sender}: ` : ""}${r.raw?.trim() || ((r.items ?? []) as GoodsLine[]).map(lineVi).join(", ")}`),
   ].join("\n");
@@ -262,7 +268,7 @@ export function cleanInputs(inputs: GoodsInput[], catalog: GoodsItem[], range: {
     source: d?.source === "PHOTO" ? "PHOTO" : d?.source === "MANUAL" ? "MANUAL" : "TEXT",
   }));
   const used = out.filter((d) => d.items.length);
-  if (!used.length) throw new Error("Chưa có món nào – gõ tin nhận hàng hoặc thêm món");
+  if (!used.length) throw new Error(kind === "RETURN" ? "Chưa có món nào – gõ món trả lại hoặc thêm món" : "Chưa có món nào – gõ tin nhận hàng hoặc thêm món");
   for (const d of used) {
     if (!isYmd(d.date) || d.date > range.max) throw new Error("Ngày nhận không hợp lệ");
     if (range.min && d.date < range.min) throw new Error("Chỉ ghi được nhận hàng trong 7 ngày gần đây – nhờ admin nhập ngày cũ hơn");

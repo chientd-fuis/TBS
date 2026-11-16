@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { queueRequestNotice, storeShort } from "@/lib/request-notify";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
 import { Store, User } from "@/lib/models";
@@ -47,6 +48,11 @@ export async function POST(req: Request) {
       storeId: String(store._id),
       name: b.name,
     });
+    queueRequestNotice(
+      store._id,
+      ["🙋 ĐĂNG KÝ NHÂN VIÊN MỚI – CHỜ DUYỆT", `🏪 Cơ sở: ${storeShort(store.name)}`, `👤 ${b.name} · 📞 ${b.phone}`, `📧 ${user.email}`],
+      { kind: "register", where: "Duyệt đăng ký để Duyệt (đặt lương, thử việc) / Từ chối" },
+    );
     return NextResponse.json({ ok: true });
   } catch (e) {
     return jsonError(e);

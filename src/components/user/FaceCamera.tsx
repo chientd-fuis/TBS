@@ -26,19 +26,23 @@ const AUTO_DELAY_MS = 800;
 
 /**
  * Camera chụp ảnh chấm công. KHÔNG có chức năng upload ảnh.
- * Chỉ cần phát hiện có khuôn mặt trong khung (vòng xanh) là chụp được – không so khớp với ảnh mẫu.
+ * detect (LV2 – Nhận diện khuôn mặt, mặc định): phải phát hiện có khuôn mặt trong khung (vòng xanh) mới chụp được – không so khớp ảnh mẫu.
+ * detect = false (LV1 – Chụp chân dung): mở camera, bấm chụp là xong, không tải mô hình nhận diện.
  */
 export default function FaceCamera({
   onCapture,
   buttonLabel = "Chụp & xác nhận",
   disabled,
   autoCapture = false,
+  detect = true,
 }: {
   onCapture: (c: FaceCapture) => void | Promise<void>;
   buttonLabel?: string;
   disabled?: boolean;
   /** Tự chụp khi khuôn mặt ở trong khung ~0,8 giây (vẫn có nút bấm tay). */
   autoCapture?: boolean;
+  /** LV2: bắt buộc thấy khuôn mặt mới chụp (false = LV1 chụp chân dung, không kiểm tra) */
+  detect?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -54,7 +58,7 @@ export default function FaceCamera({
     (async () => {
       try {
         const [faceapi, stream] = await Promise.all([
-          loadFaceApi(),
+          detect ? loadFaceApi() : Promise.resolve(null),
           navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }, audio: false }),
         ]);
         if (stop) {
@@ -66,6 +70,10 @@ export default function FaceCamera({
         v.srcObject = stream;
         await v.play();
         setStatus("ready");
+        if (!faceapi) {
+          setFaceOk(true); // LV1: không nhận diện – luôn cho chụp
+          return;
+        }
         const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
         const loop = async () => {
           if (stop) return;
@@ -93,6 +101,7 @@ export default function FaceCamera({
       clearTimeout(timer);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const capture = useCallback(async () => {
@@ -100,43 +109,45 @@ export default function FaceCamera({
     if (!v) return;
     setBusy(true);
     try {
-      const faceapi = await loadFaceApi();
       const s = Math.min(v.videoWidth, v.videoHeight);
       const size = Math.min(640, s) || 480;
       const c = document.createElement("canvas");
       c.width = size;
       c.height = size;
       c.getContext("2d")!.drawImage(v, (v.videoWidth - s) / 2, (v.videoHeight - s) / 2, s, s, 0, 0, size, size);
-      const r = await faceapi.detectSingleFace(c, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 }));
-      if (!r) {
-        setError("Không thấy khuôn mặt trong ảnh – hãy nhìn vào camera, đủ ánh sáng.");
-        return;
+      if (detect) {
+        const faceapi = await loadFaceApi();
+        const r = await faceapi.detectSingleFace(c, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 }));
+        if (!r) {
+          setError("Không thấy khuôn mặt trong ảnh – hãy nhìn vào camera, đủ ánh sáng.");
+          return;
+        }
       }
       setError("");
       await onCapture({ photo: c.toDataURL("image/jpeg", 0.8) });
     } finally {
       setBusy(false);
     }
-  }, [onCapture]);
+  }, [onCapture, detect]);
 
   // Tự chụp khi khuôn mặt ở trong khung liên tục AUTO_DELAY_MS; mất mặt thì huỷ, có mặt lại thì đếm lại
   const autoFired = useRef(false);
   useEffect(() => {
     if (!faceOk) autoFired.current = false;
-    if (!autoCapture || autoFired.current || status !== "ready" || !faceOk || busy || disabled) return;
+    if (!detect || !autoCapture || autoFired.current || status !== "ready" || !faceOk || busy || disabled) return;
     const t = setTimeout(() => {
       autoFired.current = true;
       capture();
     }, AUTO_DELAY_MS);
     return () => clearTimeout(t);
-  }, [autoCapture, status, faceOk, busy, disabled, capture]);
+  }, [detect, autoCapture, status, faceOk, busy, disabled, capture]);
 
   return (
     <div className="space-y-3">
       <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-shade/90 ring-4 ring-primary">
         <video ref={videoRef} playsInline muted className="h-full w-full -scale-x-100 object-cover" />
         <div
-          className={`pointer-events-none absolute inset-8 rounded-[45%] border-4 border-dashed ${faceOk ? "border-secondary" : "border-white/60"}`}
+          className={`pointer-events-none absolute inset-8 rounded-[45%] border-4 border-dashed ${detect && faceOk ? "border-secondary" : "border-white/60"}`}
         />
         {status === "loading" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
@@ -148,7 +159,11 @@ export default function FaceCamera({
       {status === "ready" && (
         <>
           <p className="text-center text-sm">
-            {!faceOk
+            {!detect
+              ? busy || disabled
+                ? "📸 Đang chụp…"
+                : "Nhìn vào camera rồi bấm chụp"
+              : !faceOk
               ? "Đưa khuôn mặt vào khung"
               : busy || disabled
                 ? "📸 Đang chụp…"

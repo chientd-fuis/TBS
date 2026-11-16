@@ -8,8 +8,8 @@ export const THEMES = [
   { id: "default", name: "Vàng bơ", header: "#fccc18", primary: "#fccc18", secondary: "#3c9c54", cream: "#fcf8ec", nav: "#18783c" },
   { id: "red", name: "Đỏ son", header: "#d62f36", primary: "#d62f36", secondary: "#7f1d22", cream: "#fff7f6", nav: "#64151a" },
   { id: "pink", name: "Hồng phấn", header: "#f7a9c9", primary: "#f7a9c9", secondary: "#c93a78", cream: "#fff6fa", nav: "#a52d62" },
-  { id: "jade", name: "Ngọc bích", header: "#86d5b8", primary: "#86d5b8", secondary: "#0e8466", cream: "#f3fbf8", nav: "#0b6d54" },
-  { id: "blue", name: "Xanh lam", header: "#b3d1ff", primary: "#b3d1ff", secondary: "#2563eb", cream: "#f6f9ff", nav: "#1d4ed8" },
+  { id: "jade", name: "Tím hồng", header: "#e2aad8", primary: "#e2aad8", secondary: "#a8459a", cream: "#fcf6fa", nav: "#8c377f" },
+  { id: "blue", name: "Xanh lam", header: "#c9d9ee", primary: "#c9d9ee", secondary: "#5677a3", cream: "#f6f8fb", nav: "#46658f" },
   { id: "dark", name: "Tối", header: "#202024", primary: "#e4e4e7", secondary: "#5b5b63", cream: "#18181b", nav: "#202024" },
 ] as const;
 

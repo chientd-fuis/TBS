@@ -25,3 +25,11 @@ export async function adminThemeViewport(): Promise<Viewport> {
   const id = await adminThemeOf(a?.email).catch(() => "default" as ThemeId);
   return { themeColor: THEMES.find((t) => t.id === id)!.nav };
 }
+
+/** Các khối trang Tổng quan admin này đã tắt (Cài đặt → Trang Tổng quan hiển thị gì) */
+export async function adminDashHidden(email?: string | null): Promise<string[]> {
+  if (!email) return [];
+  await connectDB();
+  const p = await AdminPref.findOne({ email: email.toLowerCase() }).select("dashHidden").lean().catch(() => null);
+  return (p?.dashHidden as string[] | undefined) ?? [];
+}

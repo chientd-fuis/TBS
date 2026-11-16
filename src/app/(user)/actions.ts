@@ -116,6 +116,14 @@ export async function submitPayrollFeedback(_: FormState, fd: FormData): Promise
   const item = await PayrollItem.findOne({ _id: itemId, userId: user._id }).lean();
   if (!item) return { error: "Không tìm thấy bảng lương" };
   await PayrollFeedback.create({ payrollItemId: item._id, userId: user._id, storeId: item.storeId, month: item.month, content });
+  const { queueRequestNotice, storeShort } = await import("@/lib/request-notify");
+  const { Store } = await import("@/lib/models");
+  const st = await Store.findById(item.storeId).select("name").lean();
+  queueRequestNotice(
+    item.storeId,
+    ["💬 KHIẾU NẠI / HỎI VỀ BẢNG LƯƠNG", `🏪 Cơ sở: ${storeShort(st?.name)}`, `👤 Nhân viên: ${user.name || user.email}`, `📅 Tháng: ${item.month.slice(5)}/${item.month.slice(0, 4)}`, `📝 ${content.slice(0, 500)}`],
+    { kind: "payrollFeedback", perm: "payroll", where: "Yêu cầu → Phản hồi bảng lương để trả lời" },
+  );
   revalidatePath("/payroll");
   return { ok: true };
 }

@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { Attendance, Store } from "./models";
 import { addDays, DEFAULT_TZ, localTime, viDate, weekdayVi, zonedToDate } from "./time";
 import { minutesVi } from "./format";
-import { attendanceChatId } from "./attendance-notify";
+import { requestChatId, requestKindOn } from "./request-notify";
 import { sendTelegramText, telegramConfigured } from "./telegram";
 import { APPROVE_PERM, responsibleAdminNames } from "./admin-stores";
 
@@ -125,10 +125,10 @@ export async function notifyAdjustment(r: {
   attendanceId?: unknown;
 }) {
   try {
-    if (!telegramConfigured()) return;
+    if (!telegramConfigured() || !(await requestKindOn("adjustment"))) return;
     const store = await Store.findById(r.storeId).select("name timezone telegramAttendanceChatId").lean();
     if (!store) return;
-    const chatId = attendanceChatId(store);
+    const chatId = await requestChatId(store); // nhóm yêu cầu (không gửi nhóm chấm công nữa)
     if (!chatId) return;
     const tz = store.timezone || DEFAULT_TZ;
     const list = await dayAttendances(r.userId, r.workDate);

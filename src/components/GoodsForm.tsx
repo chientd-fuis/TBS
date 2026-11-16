@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import { Camera, Loader2, Minus, Plus, Sparkles, X } from "lucide-react";
 import { Alert, Button } from "@/components/ui";
 import { DatePickButton } from "@/components/DatePickButton";
-import { mergeLines, parseGoodsText, qtyVi, type GoodsItem, type GoodsLine } from "@/lib/goods";
+import { mergeLines, parseGoodsText, qtyVi, RETURN_REASONS, type GoodsItem, type GoodsKind, type GoodsLine } from "@/lib/goods";
 import type { GoodsInput } from "@/lib/goods-server";
 
 type Draft = { key: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; time?: string; source: "TEXT" | "PHOTO" | "MANUAL"; dup?: string; unknown?: string[] };
-type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: "RECEIVE" | "STOCK"; photos?: string[] };
+type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: GoodsKind; reason?: string; photos?: string[] };
+/** chữ gõ khi trả hàng: bỏ chữ "trả / trả lại / hoàn" để bộ đọc món hiểu như nhận hàng */
+const stripReturnWords = (s: string) => s.replace(/(^|\s)(đã\s+|da\s+)?(trả\s+lại|tra\s+lai|trả|tra|hoàn|hoan)(?=\s|$)/gi, " ");
 type Result = { ok?: boolean; error?: string; message?: string };
 
 let seq = 0;
@@ -80,10 +82,16 @@ export default function GoodsForm({
   initial,
   save,
   doneHref,
+  allowReturn = false,
+  ocrByKind,
 }: {
+  /** đọc ảnh AI bật / tắt riêng từng chế độ (Cài đặt → Đọc ảnh bằng AI); thiếu → theo ocrEnabled */
+  ocrByKind?: Partial<Record<GoodsKind, boolean>>;
   mode: "user" | "admin";
-  /** RECEIVE = nhận hàng · STOCK = kiểm kho (số còn) */
-  kind?: "RECEIVE" | "STOCK";
+  /** RECEIVE = nhận hàng · RETURN = trả hàng · STOCK = kiểm kho (số còn) */
+  kind?: GoodsKind;
+  /** hiện nút chuyển Nhận hàng / Trả hàng (mặc định Nhận hàng) */
+  allowReturn?: boolean;
   catalog: GoodsItem[];
   today: string;
   minDate?: string;
@@ -93,7 +101,7 @@ export default function GoodsForm({
   storeId?: string;
   storeName?: string;
   /** admin sửa 1 lần nhận */
-  initial?: { id: string; storeId: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; source?: string };
+  initial?: { id: string; storeId: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; source?: string; kind?: GoodsKind; reason?: string };
   /** sửa xong → chuyển về trang này (đóng popup sửa) */
   doneHref?: string;
   save: (input: SaveInput) => Promise<Result>;
@@ -119,9 +127,14 @@ export default function GoodsForm({
   const [busy, setBusy] = useState<"" | "ai" | "save">("");
   const [msg, setMsg] = useState<{ tone: "red" | "green" | "yellow"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const stock = kind === "STOCK";
+  // chế độ Nhận / Trả (chỉ khi allowReturn); sửa 1 lần đã ghi → giữ đúng loại của lần đó
+  const [k, setK] = useState<GoodsKind>(initial?.kind ?? kind);
+  const [reason, setReason] = useState(initial?.reason ?? "");
+  const stock = k === "STOCK";
+  const ret = k === "RETURN";
   const isUser = mode === "user";
-  const preview = useMemo(() => parseGoodsText(text, catalog), [text, catalog]);
+  const ocrOn = ocrEnabled && (ocrByKind?.[k] ?? true);
+  const preview = useMemo(() => parseGoodsText(ret ? stripReturnWords(text) : text, catalog), [text, catalog, ret]);
   const unitOf = useMemo(() => new Map(catalog.map((c) => [c.name, c.unit])), [catalog]);
 
   const patch = (key: string, p: Partial<Draft>) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, ...p } : d)));
@@ -144,7 +157,7 @@ export default function GoodsForm({
     setBusy("ai");
     setMsg(null);
     try {
-      const r = await fetch("/api/goods/read", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, as: mode, storeId, kind }) });
+      const r = await fetch("/api/goods/read", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, as: mode, storeId, kind: k }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) return setMsg({ tone: "red", text: j.error || "AI chưa đọc được – gõ tay giúp nhé" });
       const got = (j.drafts ?? []) as Omit<Draft, "key" | "note" | "source">[];
@@ -160,7 +173,7 @@ export default function GoodsForm({
       const fresh = got.map((g) => ({ ...blank(today), ...g, date: isUser ? today : g.date, note: "", source: "PHOTO" as const }));
       setDrafts((ds) => [...ds.filter((d) => d.lines.length), ...fresh]);
       if (!isUser) setTelegram(false);
-      setMsg({ tone: "green", text: `AI đọc được ${fresh.length} tin báo ${stock ? "tồn" : "nhận"} – kiểm tra lại số rồi bấm Lưu` });
+      setMsg({ tone: "green", text: `AI đọc được ${fresh.length} tin báo ${stock ? "tồn" : ret ? "trả" : "nhận"} – kiểm tra lại số rồi bấm Lưu` });
     } catch {
       setMsg({ tone: "red", text: "Mất kết nối – thử lại" });
     } finally {
@@ -191,12 +204,14 @@ export default function GoodsForm({
       setText("");
     }
     const used = ds.filter((d) => d.lines.length);
-    if (!used.length) return setMsg({ tone: "red", text: `Chưa có món nào – gõ “${stock ? "tồn" : "nhận"} 5mn, 2nl…” hoặc thêm món` });
+    if (!used.length) return setMsg({ tone: "red", text: `Chưa có món nào – gõ “${stock ? "tồn" : ret ? "trả" : "nhận"} 5mn, 2nl…” hoặc thêm món` });
+    if (ret && !reason.trim()) return setMsg({ tone: "red", text: "Chọn lý do trả hàng" });
     if (mode === "admin" && !storeId) return setMsg({ tone: "red", text: "Chọn cơ sở" });
     setBusy("save");
     setMsg(null);
     const r = await save({
-      kind,
+      kind: k,
+      reason: ret ? reason.trim() : undefined,
       storeId,
       telegram: isUser || telegram,
       id: initial?.id,
@@ -208,6 +223,7 @@ export default function GoodsForm({
     if (r.error) return setMsg({ tone: "red", text: r.error });
     setMsg({ tone: "green", text: r.message || "Đã lưu ✔" });
     if (!initial) {
+      setReason("");
       setDrafts([blank(today)]);
       setTelegram(true);
       setPhotos([]);
@@ -219,6 +235,33 @@ export default function GoodsForm({
   const total = drafts.reduce((s, d) => s + d.lines.length, 0);
   return (
     <div className="space-y-3">
+      {/* Nhận hàng (mặc định) / Trả hàng – chỉ nút đang chọn đổi màu (màu accent của theme), nút lưu / thêm giữ như cũ */}
+      {allowReturn && !initial && (
+        <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1">
+          {(["RECEIVE", "RETURN"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={k === m}
+              disabled={!!busy}
+              onClick={() => {
+                setK(m);
+                setMsg(null);
+              }}
+              className={`rounded-xl px-2 py-2 text-center ${k === m ? "bg-accent font-bold text-on-accent shadow-sm" : "font-semibold text-ink/70"}`}
+            >
+              <span className="block text-[15px]">{m === "RECEIVE" ? "Nhận hàng" : "Trả hàng"}</span>
+              <span className="block text-[11px] font-medium opacity-85">{m === "RECEIVE" ? "Hàng về quán (+)" : "Hàng trả lại (−)"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {ret && (
+        <p className="rounded-xl bg-late-bg px-3 py-2 text-[13px] text-late-fg">
+          Đang ở chế độ <b>TRẢ HÀNG</b> – số lượng sẽ được <b>trừ</b> vào tổng hàng nhập của cơ sở.
+        </p>
+      )}
       {mode === "admin" && stores ? (
         <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full rounded-xl border border-line-strong bg-card px-3 py-2 text-sm">
           <option value="">— Chọn cơ sở —</option>
@@ -234,7 +277,7 @@ export default function GoodsForm({
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
-          placeholder={stock ? "Gõ số còn: tồn 3mn, 1nl, 2 bột na, hết sầu múi" : "Gõ như nhắn nhóm: nhận 5mn, 2nl, 3 bột na"}
+          placeholder={stock ? "Copy tin nhắn báo ở messenger. Up ảnh phiếu tồn kho trong trường hợp không copy được." : ret ? "Copy tin nhắn báo ở messenger. Up ảnh phiếu trong trường hợp không copy được." : "Copy tin nhắn báo ở messenger. Up ảnh phiếu trong trường hợp không copy được."}
           className="w-full resize-none rounded-xl border border-line-strong bg-card px-3 py-2 text-base"
         />
         {text.trim() && (
@@ -247,7 +290,7 @@ export default function GoodsForm({
             {preview.unknown.length > 0 && (
               <p className="text-warn">
                 Chưa hiểu: “{preview.unknown.join("”, “")}”
-                {ocrEnabled && (
+                {ocrOn && (
                   <button type="button" disabled={!!busy} onClick={() => askAi({ text })} className="ml-1 inline-flex items-center gap-1 font-semibold text-accent underline">
                     <Sparkles size={13} /> Nhờ AI đọc
                   </button>
@@ -260,7 +303,7 @@ export default function GoodsForm({
           <Button type="button" variant="secondary" disabled={!preview.lines.length || !!busy} onClick={addText} className="flex-1 basis-40 whitespace-nowrap">
             <Plus size={16} /> Thêm vào danh sách
           </Button>
-          {ocrEnabled && (
+          {ocrOn && (
             <>
               <Button type="button" variant="outline" disabled={!!busy} onClick={() => fileRef.current?.click()} className="flex-1 basis-40 whitespace-nowrap">
                 {busy === "ai" ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {busy === "ai" ? "AI đang đọc…" : "Chụp ảnh / phiếu"}
@@ -274,7 +317,7 @@ export default function GoodsForm({
       {drafts.map((d, di) => (
         <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-warn-soft ring-warn/40" : "bg-card ring-line"}`}>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-bold text-accent">{drafts.length > 1 ? `Lần ${di + 1}` : stock ? "Đồ còn tồn" : "Đồ đã nhận"}</span>
+            <span className="font-bold text-accent">{drafts.length > 1 ? `Lần ${di + 1}` : stock ? "Đồ còn tồn" : ret ? "Đồ trả lại (−)" : "Đồ đã nhận"}</span>
             {isUser ? (
               <span className="text-xs text-ink/60">hôm nay {dm(today)}</span>
             ) : (
@@ -304,7 +347,10 @@ export default function GoodsForm({
             <ul className="divide-y divide-line">
               {d.lines.map((l, li) => (
                 <li key={`${l.name}|${l.unit}`} className="flex items-center gap-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate font-semibold">{l.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold">
+                    {ret && <span className="mr-1 text-late-fg">−</span>}
+                    {l.name}
+                  </span>
                   <button type="button" aria-label="Bớt" onClick={() => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: Math.max(stock ? 0 : 1, x.qty - 1) } : x)))} className="grid h-8 w-8 place-items-center rounded-full bg-cream">
                     <Minus size={15} />
                   </button>
@@ -345,6 +391,26 @@ export default function GoodsForm({
         </div>
       ))}
 
+      {ret && (
+        <div className="space-y-1.5">
+          <p className="text-sm font-semibold">
+            Lý do trả <span className="text-danger">*</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {RETURN_REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setReason(r)}
+                className={`rounded-full px-3 py-1.5 text-sm ${reason === r ? "bg-accent text-on-accent" : "bg-card text-ink ring-1 ring-line-strong"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 120))} placeholder="Hoặc gõ lý do khác" className="w-full rounded-xl border border-line-strong bg-card px-3 py-2 text-sm" />
+        </div>
+      )}
       {/* nhân viên: luôn báo nhóm Telegram (không cho tắt) */}
       {!isUser && (
         <label className="flex items-center gap-2 text-sm">
@@ -354,7 +420,7 @@ export default function GoodsForm({
       )}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <Button type="button" onClick={onSave} disabled={!!busy || (!total && !preview.lines.length)} className="w-full py-3 text-base">
-        {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : stock ? "📋" : "📦"} {initial ? "Lưu sửa" : stock ? "Lưu tồn kho" : "Lưu nhận hàng"}
+        {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : stock ? "📋" : ret ? "↩" : "📦"} {initial ? "Lưu sửa" : stock ? "Lưu tồn kho" : ret ? "Lưu trả hàng" : "Lưu nhận hàng"}
       </Button>
     </div>
   );

@@ -1,3 +1,4 @@
+import { aiPhotoOn } from "@/lib/ai-photo";
 import { NextResponse } from "next/server";
 import { isProbation, PROBATION_OFF } from "@/lib/probation";
 import { z } from "zod";
@@ -16,6 +17,8 @@ const Body = z.object({ photos: z.array(z.string()).min(1).max(4) });
 /** Gửi ảnh chốt ca cho bot đọc số liệu → trả về số để điền sẵn vào form (nhân viên sửa tay nếu sai). */
 export async function POST(req: Request) {
   try {
+    // Cài đặt → Đọc ảnh bằng AI: chốt ca đang tắt
+    if (!(await aiPhotoOn("closing"))) return NextResponse.json({ error: "Đọc ảnh tờ chốt ca bằng AI đang tắt – nhập số tay", code: "OCR_OFF" }, { status: 403 });
     const user = await getCurrentUser();
     if (!user) throw new HttpError(401, "Chưa đăng nhập");
     if (user.status !== "ACTIVE") throw new HttpError(403, "Tài khoản chưa được duyệt");

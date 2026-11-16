@@ -30,6 +30,15 @@ const SettingsSchema = new Schema(
     adminSessionDays: { type: Number, default: 7 },
     // Tài chính: nhóm Telegram "Quản lý doanh thu" (ảnh bill chi phí + báo cáo) – trống → TELEGRAM_FINANCE_CHAT_ID
     financeChatId: { type: String, default: "" },
+    // nhóm Telegram nhận YÊU CẦU chờ admin xác nhận (lib/request-notify.ts) – trống → TELEGRAM_REQUEST_CHAT_ID → nhóm chấm công cơ sở
+    requestChatId: { type: String, default: "" },
+    // loại yêu cầu TẮT báo Telegram (REQUEST_KINDS trong lib/request-notify.ts) – mặc định rỗng = báo tất cả
+    requestNotifyOff: { type: [String], default: [] },
+    // bù doanh thu (lib/revenue-gap.ts): tạo yêu cầu phạt khi ngày THIẾU tiền từ mức này (đ)
+    revenueGapMin: { type: Number, default: 10000 },
+    revenueGapOn: { type: Boolean, default: true },
+    // đọc ảnh bằng AI TẮT ở các màn này (lib/ai-photo.ts): closing | receive | return | stock – mặc định bật hết
+    aiPhotoOff: { type: [String], default: [] }, // bật / tắt tự tạo yêu cầu bù doanh thu (phạt thiếu tiền)
     financeReportDaily: { type: Boolean, default: true },
     financeReportWeekly: { type: Boolean, default: true },
     financeReportMonthly: { type: Boolean, default: true },
@@ -77,7 +86,8 @@ const StoreSchema = new Schema(
     lng: Number,
     radiusM: { type: Number, default: 100 },
     // cách xác thực khi chấm công (bật nhiều → phải qua tất cả) – xem lib/checkin-methods.ts
-    checkFace: { type: Boolean, default: true }, // chụp ảnh khuôn mặt
+    checkFace: { type: Boolean, default: true }, // LV1 chụp ảnh chân dung khi chấm công
+    faceDetect: { type: Boolean, default: true }, // LV2 nhận diện khuôn mặt: phải thấy mặt người trong khung mới chụp được (cần bật LV1)
     checkGps: { type: Boolean, default: true }, // vị trí trong bán kính
     checkWifi: { type: Boolean, default: false }, // phải dùng WiFi quán (so IP Internet của quán)
     wifiName: { type: String, default: "" }, // tên WiFi hiển thị cho nhân viên
@@ -439,6 +449,40 @@ const ProbationRequestSchema = new Schema(
 );
 export const ProbationRequest = getModel("ProbationRequest", ProbationRequestSchema);
 
+/**
+ * BÙ DOANH THU (lib/revenue-gap.ts): 1 bản ghi / cơ sở / ngày khi THIẾU tiền (thực thu < DT máy).
+ * Tự tạo / cập nhật mỗi khi chốt ca, admin sửa DT máy, hoặc import DT máy từ KiotViet. Admin duyệt → ghi phạt từng ca.
+ */
+const RevenueGapSchema = new Schema(
+  {
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true },
+    month: { type: String, required: true },
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    dt: Number, // DT máy của ca cuối đã chốt
+    real: Number, // thực thu (TM + TK + thu chi + Grab + Shopee)
+    total: Number, // lệch cả ngày = thực thu − DT máy (âm = thiếu)
+    lastShift: String,
+    // chia lệch theo ca: calc = tự tính từ số luỹ kế, note = theo ghi chú nhân viên, rest = phần còn lại dồn vào ca cuối
+    parts: [{ closingId: Schema.Types.ObjectId, shiftName: String, userId: Schema.Types.ObjectId, name: String, amount: Number, source: String, quote: String }],
+    // ghi chú cần biết: unpaid = đơn chưa thanh toán, note = ghi chú ca, cp = thu chi
+    notes: [{ shiftName: String, kind: String, text: String }],
+    notifiedAt: Date,
+    notifiedTotal: Number,
+    decidedBy: String,
+    decidedAt: Date,
+    reply: String,
+    penalties: [{ userId: Schema.Types.ObjectId, name: String, amount: Number, shiftName: String }],
+    // số đổi sau khi đã duyệt (VD import lại DT máy) – để admin biết, không tự mở lại
+    totalAfterDecision: Number,
+    lockedAt: Date,
+  },
+  { timestamps: true },
+);
+RevenueGapSchema.index({ storeId: 1, date: 1 }, { unique: true });
+RevenueGapSchema.index({ status: 1 });
+export const RevenueGap = getModel("RevenueGap", RevenueGapSchema);
+
 /* ---------- Chốt ca: ảnh chụp cuối ca → gửi nhóm Telegram ---------- */
 const ShiftClosingSchema = new Schema(
   {
@@ -486,6 +530,8 @@ const ShiftClosingSchema = new Schema(
       error: String,
     },
     isDayEnd: { type: Boolean, default: false }, // ca cuối ngày → ghi Google Sheet
+    // DT máy lấy từ file KiotViet (Chốt ca → Import doanh thu máy): lúc import, ai import, số cũ nhân viên nhập
+    dtImport: { at: Date, by: String, prev: Number, file: String },
     revenueEditedBy: String, // admin sửa số liệu
     revenueEditedByOwner: Boolean, // Admin Tổng sửa → admin khác không thấy nhãn "Admin sửa"
     // Đếm tiền: tiền mặt đếm thực tế khác chốt ca → sửa tiền mặt ca cuối ngày + cảnh báo (mọi admin thấy)
@@ -601,8 +647,9 @@ export const UserNotice = getModel("UserNotice", UserNoticeSchema);
 /* ---------- Nhận hàng: đồ / nguyên liệu các cơ sở nhận mỗi ngày ---------- */
 const GoodsReceiptSchema = new Schema(
   {
-    // RECEIVE = nhận hàng · STOCK = kiểm kho (số còn tồn cuối ngày)
-    kind: { type: String, enum: ["RECEIVE", "STOCK"], default: "RECEIVE" },
+    // RECEIVE = nhận hàng · RETURN = trả hàng (trừ vào hàng nhập) · STOCK = kiểm kho (số còn tồn cuối ngày)
+    kind: { type: String, enum: ["RECEIVE", "RETURN", "STOCK"], default: "RECEIVE" },
+    reason: String, // trả hàng: lý do (Hỏng / hư, Hết hạn, Giao nhầm…)
     storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
     date: { type: String, required: true }, // ngày nhận YYYY-MM-DD
     month: { type: String, required: true },
@@ -923,10 +970,48 @@ const AdminPrefSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     // màu giao diện trang quản lý (lib/themes.ts) – Admin → Giao diện
     theme: { type: String, enum: ["default", "red", "pink", "jade", "blue", "dark"], default: "default" },
+    // các khối trang Tổng quan admin đã TẮT (lib/dashboard-widgets.ts) – Cài đặt → Trang Tổng quan hiển thị gì
+    dashHidden: { type: [String], default: [] },
   },
   { timestamps: true },
 );
 export const AdminPref = getModel("AdminPref", AdminPrefSchema);
+
+/* ---------- CÓ GÌ MỚI: popup giới thiệu tính năng (Cài đặt → Có gì mới; lib/announcements.ts) ---------- */
+const AnnouncementSchema = new Schema(
+  {
+    title: { type: String, required: true },
+    date: { type: String, required: true }, // ngày cập nhật YYYY-MM-DD (hiện "Cập nhật dd/mm")
+    desc: { type: String, default: "" },
+    points: { type: [String], default: [] }, // các bước / ý chính (tối đa 4)
+    color: { type: String, default: "#fccc18" }, // màu nền phần ảnh
+    image: String, // ảnh minh hoạ tải lên (data URL JPEG nhỏ) – trống = hình có sẵn
+    ctaHref: String, // nút "Thử ngay" mở trang này – trống = không có nút
+    audience: { type: String, enum: ["USER", "ADMIN", "ALL"], default: "USER" },
+    storeIds: { type: [Schema.Types.ObjectId], default: [] }, // rỗng = mọi cơ sở (chỉ áp dụng nhân viên)
+    status: { type: String, enum: ["DRAFT", "PUBLISHED", "OFF"], default: "DRAFT" },
+    publishedAt: Date,
+    version: { type: Number, default: 1 }, // "Hiện lại cho tất cả" → tăng số → người đã xem bản cũ thấy lại
+    createdBy: String,
+  },
+  { timestamps: true },
+);
+AnnouncementSchema.index({ status: 1, publishedAt: -1 });
+export const Announcement = getModel("Announcement", AnnouncementSchema);
+
+/** Ai đã xem bản giới thiệu nào (theo tài khoản: user:<id> / admin:<gmail>) */
+const AnnouncementSeenSchema = new Schema(
+  {
+    announcementId: { type: Schema.Types.ObjectId, ref: "Announcement", required: true },
+    who: { type: String, required: true },
+    version: { type: Number, default: 1 },
+    action: String, // ok | try | skip | close
+  },
+  { timestamps: true },
+);
+AnnouncementSeenSchema.index({ announcementId: 1, who: 1 }, { unique: true });
+AnnouncementSeenSchema.index({ who: 1 });
+export const AnnouncementSeen = getModel("AnnouncementSeen", AnnouncementSeenSchema);
 
 /* ---------- Sổ quỹ: rút lãi / bổ sung vốn / chuyển giữa tiền mặt và tài khoản (xem lib/cashbook) ---------- */
 const CashTransferSchema = new Schema(

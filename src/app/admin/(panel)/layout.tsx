@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, ShiftAssignment, User } from "@/lib/models";
+import { AdjustmentRequest, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, RevenueGap, ShiftAssignment, User } from "@/lib/models";
 import { localDate } from "@/lib/time";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui";
@@ -23,6 +23,8 @@ import { Palette } from "lucide-react";
 import { cn } from "@/lib/format";
 import { THEME_ROOT_ID, themeClass } from "@/lib/themes";
 import { adminThemeOf, adminThemeViewport } from "@/lib/theme-server";
+import WhatsNew from "@/components/WhatsNew";
+import { unseenFor } from "@/lib/announcements";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -34,7 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const admin = await requireAdmin();
   // chạy ngầm sau khi trả trang: tự check-out ca tối các cơ sở đã bật (tối đa 1 lần / 3 phút)
   after(() => maybeRunAutoCheckout());
-  const [approvals, devices, adj, fb, shiftRequests, covers, overtime, probations] = await Promise.all([
+  const [approvals, devices, adj, fb, shiftRequests, covers, overtime, probations, gaps] = await Promise.all([
     User.countDocuments({ status: "PENDING" }),
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
     AdjustmentRequest.countDocuments({ status: "PENDING" }),
@@ -43,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     CoverRequest.countDocuments({ status: "PENDING" }),
     Attendance.countDocuments({ "overtime.status": "PENDING" }), // làm thêm giờ chờ xác nhận
     ProbationRequest.countDocuments({ status: "PENDING" }), // thử việc chờ xác nhận
+    RevenueGap.countDocuments({ status: "PENDING" }), // bù doanh thu (thiếu tiền) chờ duyệt
   ]);
   const ask = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`).catch(() => ({ enabled: false, left: 0, limit: 0 }));
   // nút 📷 trong Hỏi AI: kiểm tra / nhập bill – cần quyền Bill + được dùng "Đọc bill"
@@ -51,7 +54,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     owner: admin.kind === "OWNER",
     perms: [...(admin.perms ?? [])],
     hide: (await goodsEnabled()) ? [] : ["/admin/goods"],
-    counts: { approvals, devices, requests: adj + fb + covers + overtime + probations, shiftRequests },
+    counts: { approvals, devices, requests: adj + fb + covers + overtime + probations + gaps, shiftRequests },
   };
   // Admin Tổng cho phép (Cài đặt) + có hồ sơ nhân viên đang làm → nút sang app nhân viên
   const userApp =
@@ -63,6 +66,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   );
   // màu giao diện riêng của admin này (Admin → Giao diện)
   const theme = await adminThemeOf(admin.email).catch(() => "default" as const);
+  // Có gì mới: bản giới thiệu dành cho admin mà người này chưa xem
+  const news = admin.email ? await unseenFor(`admin:${admin.email.toLowerCase()}`, { kind: "ADMIN" }).catch(() => []) : [];
   const themeLink = (
     <Link href="/admin/appearance" className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-current/30 hover:bg-black/5">
       <Palette size={15} aria-hidden /> Giao diện
@@ -125,6 +130,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           {userAppLink && <span className="hidden shrink-0 text-accent lg:inline">{userAppLink}</span>}
           <span className="hidden shrink-0 lg:inline">{logout}</span>
         </header>
+        {news.length > 0 && <WhatsNew items={news} as="admin" />}
         <main className="space-y-4 p-4 lg:p-6">
           <SectionTabs {...nav} />
           {children}

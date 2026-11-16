@@ -4,7 +4,7 @@ import { Attendance, ProbationRequest, Settings, Store, User, WageHistory } from
 import { audit, type Actor } from "./audit";
 import { DEFAULT_TZ, localDate, localTime, viDate, weekdayVi } from "./time";
 import { computeFields, isMonthLocked, payStoreOf, storeTz } from "./attendance";
-import { attendanceChatId } from "./attendance-notify";
+import { requestChatId, requestKindOn } from "./request-notify";
 import { sendTelegramText, telegramConfigured } from "./telegram";
 import { APPROVE_PERM, responsibleAdminNames } from "./admin-stores";
 
@@ -142,15 +142,15 @@ export async function trialShiftLines(ids: unknown[], tz?: string) {
   return out;
 }
 
-/** Báo nhóm chấm công của cơ sở: yêu cầu thử việc cần admin xác nhận. Không ném lỗi. */
+/** Báo nhóm yêu cầu: yêu cầu thử việc cần admin xác nhận. Không ném lỗi. */
 export async function notifyProbation(requestId: string) {
   try {
-    if (!telegramConfigured()) return;
+    if (!telegramConfigured() || !(await requestKindOn("probation"))) return;
     const r = await ProbationRequest.findById(requestId).lean();
     if (!r) return;
     const [u, store] = await Promise.all([User.findById(r.userId).select("name email").lean(), Store.findById(r.storeId).select("name telegramAttendanceChatId").lean()]);
     if (!store) return;
-    const chatId = attendanceChatId(store);
+    const chatId = await requestChatId(store); // nhóm yêu cầu (không gửi nhóm chấm công nữa)
     if (!chatId) return;
     const admins = await responsibleAdminNames(r.storeId, APPROVE_PERM.probation);
     const head = [`🏪 Cơ sở: ${store.name.replace(/^TBS\s+/i, "")}`, `👤 Nhân viên: ${u?.name || u?.email || "?"}`];

@@ -6,7 +6,7 @@ import { Crosshair, MapPinned, Wifi } from "lucide-react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { currentPublicIp, saveStore } from "../../actions/ops";
 
-type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramGoodsChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
+type S = { id: string; code: string; name: string; address: string; lat: number | null; lng: number | null; radiusM: number; timezone: string; telegramChatId: string; telegramGoodsChatId: string; telegramAttendanceChatId: string; revenueSheetId: string; revenueTabPattern: string; revenueFirstRow: number; revenueSheetLayout: string; active: boolean; checkFace: boolean; faceDetect: boolean; checkGps: boolean; checkWifi: boolean; wifiName: string; wifiIps: string[] };
 
 export default function StoreForm({ store }: { store: S | null }) {
   // lỗi → giữ nguyên dữ liệu đã nhập; lưu xong không xoá form (đang sửa cơ sở)
@@ -15,6 +15,7 @@ export default function StoreForm({ store }: { store: S | null }) {
   const [lng, setLng] = useState(store?.lng?.toString() ?? "");
   const [locErr, setLocErr] = useState("");
   const [gps, setGps] = useState(store?.checkGps ?? true);
+  const [face, setFace] = useState(store?.checkFace ?? true);
   const [wifi, setWifi] = useState(store?.checkWifi ?? false);
   const [ips, setIps] = useState((store?.wifiIps ?? []).join("\n"));
   const [ipMsg, setIpMsg] = useState("");
@@ -73,8 +74,11 @@ export default function StoreForm({ store }: { store: S | null }) {
       <fieldset className="space-y-2 rounded-xl bg-cream p-3">
         <legend className="px-1 text-sm font-semibold text-accent">Cách chấm công (bật nhiều cách → nhân viên phải qua tất cả)</legend>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" name="checkFace" defaultChecked={store?.checkFace ?? true} className="accent-secondary" /> Chụp ảnh khuôn mặt
+          <label className="flex items-center gap-1.5" title="Mở camera trước, chụp 1 ảnh chân dung gửi kèm lượt chấm công">
+            <input type="checkbox" name="checkFace" checked={face} onChange={(e) => setFace(e.target.checked)} className="accent-secondary" /> Chụp chân dung <span className="text-xs text-ink/60">(LV1)</span>
+          </label>
+          <label className={face ? "flex items-center gap-1.5" : "flex items-center gap-1.5 opacity-50"} title="Camera phải thấy khuôn mặt người trong khung mới chụp được (tự chụp khi giữ yên)">
+            <input type="checkbox" name="faceDetect" defaultChecked={store?.faceDetect ?? true} disabled={!face} className="accent-secondary" /> Nhận diện khuôn mặt <span className="text-xs text-ink/60">(LV2)</span>
           </label>
           <label className="flex items-center gap-1.5">
             <input type="checkbox" name="checkGps" checked={gps} onChange={(e) => setGps(e.target.checked)} className="accent-secondary" /> Vị trí (GPS trong bán kính)
@@ -83,6 +87,10 @@ export default function StoreForm({ store }: { store: S | null }) {
             <input type="checkbox" name="checkWifi" checked={wifi} onChange={(e) => setWifi(e.target.checked)} className="accent-secondary" /> WiFi của quán
           </label>
         </div>
+        <p className="text-xs text-ink/70">
+          <b>LV1 Chụp chân dung</b>: mở camera, bấm chụp là xong – không kiểm tra có người trong ảnh. <b>LV2 Nhận diện khuôn mặt</b> (cần bật LV1): phải thấy mặt người
+          trong khung mới chụp được, giữ yên là app tự chụp. Máy yếu / camera mờ hay báo &quot;không thấy khuôn mặt&quot; thì tắt LV2.
+        </p>
         {!gps && !wifi && <p className="text-xs text-warn">Đang tắt cả vị trí và WiFi – nhân viên chấm công được ở bất kỳ đâu.</p>}
         {wifi && (
           <div className="space-y-2 border-t border-line pt-2">

@@ -14,12 +14,15 @@ import { errMsg, str, type FormState } from "./types";
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Admin nhập / sửa nhận hàng cho 1 cơ sở → (tuỳ chọn) báo nhóm Telegram cơ sở. id có → sửa bản ghi đó. */
-export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "STOCK"; photos?: string[] }): Promise<GoodsSaveResult> {
+export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[] }): Promise<GoodsSaveResult> {
   try {
     const admin = await assertPerm("goods");
     await connectDB();
     if (!(await goodsEnabled())) return { error: `${GOODS_OFF} – Admin Tổng bật lại ở Cài đặt` };
-    const kind = input?.kind === "STOCK" ? "STOCK" : "RECEIVE";
+    const kind = input?.kind === "STOCK" ? "STOCK" : input?.kind === "RETURN" ? "RETURN" : "RECEIVE";
+    // trả hàng: bắt buộc lý do
+    const reason = kind === "RETURN" ? String(input?.reason ?? "").trim().slice(0, 120) : "";
+    if (kind === "RETURN" && !reason) return { error: "Chọn lý do trả hàng" };
     if (kind === "STOCK" && !(await stockEnabled())) return { error: `${STOCK_OFF} – Admin Tổng bật ở Cài đặt` };
     if (!isValidObjectId(input?.storeId) || !(await Store.exists({ _id: input.storeId }))) return { error: "Chọn cơ sở" };
     const rows = cleanInputs(input.drafts, await getGoodsCatalog(), { max: localDate(new Date()) }, kind);
@@ -29,7 +32,7 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
       const old = await GoodsReceipt.findById(input.id).lean().catch(() => null);
       if (!old) return { error: "Không tìm thấy lần nhận cần sửa" };
       const d = rows[0];
-      await GoodsReceipt.updateOne({ _id: old._id }, { ...d, storeId: input.storeId, month: d.date.slice(0, 7), telegram: tg });
+      await GoodsReceipt.updateOne({ _id: old._id }, { ...d, ...(reason ? { reason } : {}), storeId: input.storeId, month: d.date.slice(0, 7), telegram: tg });
       await audit(adminActor(admin), "goods.update", { type: "GoodsReceipt", id: String(old._id) }, old, d);
       if (input.telegram) await notifyGoods(String(old._id), { edited: true });
       revalidateGoods();
@@ -37,13 +40,13 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
     }
     const saved: { id: string; source: string }[] = [];
     for (const d of rows) {
-      const doc = await GoodsReceipt.create({ ...d, kind, storeId: input.storeId, month: d.date.slice(0, 7), byName, byAdmin: true, telegram: tg });
+      const doc = await GoodsReceipt.create({ ...d, kind, ...(reason ? { reason } : {}), storeId: input.storeId, month: d.date.slice(0, 7), byName, byAdmin: true, telegram: tg });
       saved.push({ id: String(doc._id), source: d.source });
     }
     await audit(adminActor(admin), "goods.create", { type: "GoodsReceipt", id: saved.map((x) => x.id).join(",") }, null, rows);
     if (input.telegram) await notifyGoodsSaved(saved, cleanPhotos(input.photos));
     revalidateGoods();
-    const what = kind === "STOCK" ? "tồn kho" : "nhận hàng";
+    const what = kind === "STOCK" ? "tồn kho" : kind === "RETURN" ? "trả hàng" : "nhận hàng";
     return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what}${input.telegram ? " và báo nhóm cơ sở" : ""} ✔` };
   } catch (e) {
     const r = errMsg(e);

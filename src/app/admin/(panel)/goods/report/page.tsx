@@ -47,7 +47,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
   const recsOf = (sid: string): UsageRec[] =>
     docs
       .filter((d) => String(d.storeId) === sid)
-      .map((d) => ({ kind: d.kind === "STOCK" ? "STOCK" : "RECEIVE", date: d.date, at: new Date(d.createdAt ?? 0).getTime(), lines: (d.items ?? []) as GoodsLine[] }));
+      .map((d) => ({ kind: d.kind === "STOCK" ? "STOCK" : d.kind === "RETURN" ? "RETURN" : "RECEIVE", date: d.date, at: new Date(d.createdAt ?? 0).getTime(), lines: (d.items ?? []) as GoodsLine[] }));
   const calc = (sid: string, p: { from: string; to: string }) => usageReport({ ...p, items, recs: recsOf(sid), useStock });
   const total = (rows: UsageRow[]) => rows.reduce((s, r) => s + (r.value ?? 0), 0);
   const totalIn = (rows: UsageRow[]) => rows.reduce((s, r) => s + (r.receivedValue ?? 0), 0);
@@ -156,7 +156,7 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
                 <tr className="border-b border-line text-left text-xs text-ink/60">
                   <th className="py-1.5 pr-3">Món</th>
                   {useStock && <th className="px-2 text-right">Tồn đầu</th>}
-                  <th className="px-2 text-right">Nhập trong tháng</th>
+                  <th className="px-2 text-right">Thực nhập (nhận − trả)</th>
                   <th className="px-2 text-right">Tiền nhập</th>
                   {useStock && <th className="px-2 text-right">Tồn cuối</th>}
                   <th className="px-2 text-right">Tiêu thụ</th>
@@ -172,7 +172,10 @@ export default async function GoodsReportPage({ searchParams }: { searchParams: 
                       {r.skipped > 0 && <span className="ml-1 text-xs font-normal text-warn">({r.skipped} dòng khác ĐV)</span>}
                     </td>
                     {useStock && <td className="px-2 text-right tabular-nums whitespace-nowrap" title={r.open ? `kiểm ${viDate(r.open.date)}` : undefined}>{r.open ? q(r.open.qty, r.unit) : "—"}</td>}
-                    <td className="px-2 text-right tabular-nums whitespace-nowrap">{q(r.monthReceived, r.unit)}</td>
+                    <td className="px-2 text-right tabular-nums whitespace-nowrap">
+                      {q(r.monthReceived, r.unit)}
+                      {r.monthReturned > 0 && <span className="block text-[11px] text-late-fg">đã trừ trả {q(r.monthReturned, r.unit)}</span>}
+                    </td>
                     <td className="px-2 text-right tabular-nums whitespace-nowrap">{r.receivedValue != null ? vnd(r.receivedValue) : <span className="text-warn">chưa có giá</span>}</td>
                     {useStock && <td className="px-2 text-right tabular-nums whitespace-nowrap" title={r.close ? `kiểm ${viDate(r.close.date)}` : undefined}>{r.close ? q(r.close.qty, r.unit) : "—"}</td>}
                     <td className={`px-2 text-right font-semibold tabular-nums whitespace-nowrap ${r.usage < 0 ? "text-danger" : ""}`}>{q(r.usage, r.unit)}</td>

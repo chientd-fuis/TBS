@@ -1,3 +1,4 @@
+import { aiPhotoOn } from "@/lib/ai-photo";
 import { NextResponse } from "next/server";
 import { isProbation, PROBATION_OFF } from "@/lib/probation";
 import { z } from "zod";
@@ -20,7 +21,7 @@ const Body = z.object({
   storeId: z.string().optional(),
   /** form admin gửi kèm → đọc theo quyền admin (nhân viên đăng nhập cùng trình duyệt không bị lẫn) */
   as: z.enum(["admin", "user"]).optional(),
-  kind: z.enum(["RECEIVE", "STOCK"]).optional(),
+  kind: z.enum(["RECEIVE", "RETURN", "STOCK"]).optional(),
 });
 
 /** AI đọc ảnh chụp nhóm chat / đoạn tin nhắn nhận hàng → các lần nhận (chưa lưu – người nhập kiểm tra rồi bấm Lưu). */
@@ -31,6 +32,8 @@ export async function POST(req: Request) {
     if (!(await goodsEnabled())) throw new HttpError(403, GOODS_OFF);
     const kind = p.data.kind ?? "RECEIVE";
     if (kind === "STOCK" && !(await stockEnabled())) throw new HttpError(403, STOCK_OFF);
+    // Cài đặt → Đọc ảnh bằng AI: chức năng này đang tắt
+    if (!(await aiPhotoOn(kind === "STOCK" ? "stock" : kind === "RETURN" ? "return" : "receive"))) throw new HttpError(403, "Đọc ảnh bằng AI đang tắt cho chức năng này – gõ tay danh sách món", { code: "OCR_OFF" });
     if (!geminiConfigured()) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY – gõ tay danh sách món", { code: "OCR_OFF" });
     let actor: string;
     let storeId = "";

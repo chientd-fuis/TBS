@@ -253,3 +253,51 @@ export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, app
     return { error: (e as Error).message || "Lỗi hệ thống" };
   }
 }
+
+/** Admin Tổng: nhóm Telegram nhận YÊU CẦU chờ admin xác nhận (lib/request-notify.ts). Bấm "Lưu & gửi thử" → bot gửi 1 tin vào nhóm. */
+export async function saveRequestChat(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
+    const chat = String(fd.get("requestChatId") || "").trim();
+    if (chat && !/^-?\d{5,20}$/.test(chat)) return { error: "Chat ID không hợp lệ (dạng -100…)" };
+    await connectDB();
+    // loại yêu cầu bật báo: ô tích "kind"; lưu danh sách loại TẮT (loại mới thêm sau mặc định bật)
+    const { REQUEST_KINDS } = await import("@/lib/request-notify");
+    const on = new Set(fd.getAll("kind").map(String));
+    const off = REQUEST_KINDS.filter((k) => !on.has(k.key)).map((k) => k.key);
+    // bù doanh thu: ngưỡng thiếu tiền để tạo yêu cầu phạt
+    const gapMin = Math.max(0, Math.round(Number(String(fd.get("revenueGapMin") ?? "10000").replace(/[^\d]/g, "")) || 0));
+    await Settings.updateOne({ key: "main" }, { $set: { requestChatId: chat, requestNotifyOff: off, revenueGapMin: gapMin, revenueGapOn: fd.get("revenueGapOn") === "on" } }, { upsert: true });
+    await audit(adminActor(admin), "settings.requestChat", { type: "Settings" }, null, { requestChatId: chat, off });
+    if (chat) {
+      const { sendTelegramText, telegramConfigured } = await import("@/lib/telegram");
+      if (!telegramConfigured()) return { error: "Đã lưu, nhưng chưa cài bot Telegram (TELEGRAM_BOT_TOKEN) nên chưa gửi thử được" };
+      await sendTelegramText(chat, "✅ Tiệm Bơ Sầu – kết nối nhóm YÊU CẦU thành công. Mọi yêu cầu chờ admin xác nhận sẽ gửi vào nhóm này.").catch((e: Error) => {
+        throw new Error(`Đã lưu, nhưng gửi thử lỗi: ${e.message} – kiểm tra bot đã được thêm vào nhóm chưa`);
+      });
+    }
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}
+
+/** Admin Tổng: bật / tắt đọc ảnh bằng AI cho từng chức năng (lib/ai-photo.ts) – lưu danh sách TẮT. */
+export async function saveAiPhoto(_: FormState, fd: FormData): Promise<FormState> {
+  try {
+    const admin = await assertAdmin();
+    if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
+    const { AI_PHOTO_KEYS } = await import("@/lib/ai-photo");
+    const on = new Set(fd.getAll("on").map(String));
+    const off = AI_PHOTO_KEYS.filter((k) => !on.has(k.key)).map((k) => k.key);
+    await connectDB();
+    await Settings.updateOne({ key: "main" }, { $set: { aiPhotoOff: off } }, { upsert: true });
+    await audit(adminActor(admin), "settings.aiPhoto", { type: "Settings" }, null, { off });
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return errMsg(e);
+  }
+}

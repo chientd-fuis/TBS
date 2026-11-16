@@ -1,3 +1,4 @@
+import { aiPhotoOn } from "@/lib/ai-photo";
 import Link from "next/link";
 import { isValidObjectId } from "mongoose";
 import { requirePerm } from "@/lib/guards";
@@ -45,6 +46,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
   const goodsOn = await goodsEnabled();
   const on = stock ? await stockEnabled() : goodsOn;
   const ocr = geminiConfigured() && (await aiAllowed("goodsOcr", `admin:${admin.accountId ?? "owner"}`));
+  const ocrByKind = { RECEIVE: await aiPhotoOn("receive"), RETURN: await aiPhotoOn("return"), STOCK: await aiPhotoOn("stock") };
 
   // tổng hợp: món × cơ sở (cộng theo đơn vị)
   const cols = store ? stores.filter((s) => s.id === store) : stores.filter((s) => list.some((r) => String(r.storeId) === s.id));
@@ -61,7 +63,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
       const byStore = sum.get(l.name) ?? new Map<string, Map<string, number>>();
       for (const k of [String(r.storeId), ""]) {
         const u = byStore.get(k) ?? new Map<string, number>();
-        u.set(l.unit ?? "", Math.round(((u.get(l.unit ?? "") ?? 0) + (l.qty ?? 0)) * 1000) / 1000);
+        u.set(l.unit ?? "", Math.round(((u.get(l.unit ?? "") ?? 0) + (r.kind === "RETURN" ? -1 : 1) * (l.qty ?? 0)) * 1000) / 1000); // trả hàng trừ vào hàng nhập
         byStore.set(k, u);
       }
       sum.set(l.name, byStore);
@@ -87,7 +89,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
             </Alert>
           ) : (
             <Card title={stock ? "Nhập tồn kho" : "Nhập nhận hàng"}>
-              <GoodsForm mode="admin" kind={kind} catalog={catalog} today={today} ocrEnabled={ocr} stores={stores} storeId={store || (stores.length === 1 ? stores[0].id : "")} save={saveGoodsAdmin} />
+              <GoodsForm mode="admin" kind={kind} allowReturn={!stock} ocrByKind={ocrByKind} catalog={catalog} today={today} ocrEnabled={ocr} stores={stores} storeId={store || (stores.length === 1 ? stores[0].id : "")} save={saveGoodsAdmin} />
               <p className="mt-2 text-xs text-ink/60">
                 Ảnh: chụp màn hình đoạn nhân viên báo “{stock ? "tồn" : "nhận"} …” trong nhóm chat, hoặc chụp <b>phiếu kiểm kê nguyên liệu</b> (AI lấy cột {stock ? "Tồn" : "Nhập"}) – tối đa 4 ảnh → AI tách từng tin / phiếu, ngày, người báo. Tin trùng với lần đã ghi sẽ được đánh dấu ⚠.
               </p>
@@ -163,7 +165,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                         .map((r) => {
                           const tg = TG[(r.telegram?.status ?? "PENDING") as keyof typeof TG];
                           return (
-                            <li key={String(r._id)} className="flex flex-wrap items-start gap-x-3 gap-y-1 py-2 text-sm">
+                            <li key={String(r._id)} className={`flex flex-wrap items-start gap-x-3 gap-y-1 py-2 text-sm ${r.kind === "RETURN" ? "-mx-2 rounded-lg bg-warn-soft px-2" : ""}`}>
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs text-ink/60">
                                   <b className="text-ink">{storeName.get(String(r.storeId)) ?? "?"}</b> · {r.byName}
@@ -171,6 +173,7 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                                 </p>
                                 <GoodsEntry raw={r.raw} sender={r.sender && r.sender !== r.byName ? r.sender : null} items={(r.items ?? []) as GoodsLine[]} note={r.note} />
                                 <div className="mt-1 flex flex-wrap gap-1">
+                                  {r.kind === "RETURN" ? <Badge tone="orange">↩ Trả hàng (−){r.reason ? ` · ${r.reason}` : ""}</Badge> : !stock && <Badge tone="green">Nhận</Badge>}
                                   <Badge tone={r.byAdmin ? "yellow" : "blue"}>{r.byAdmin ? "Admin nhập" : "Nhân viên"}</Badge>
                                   <Badge tone="gray">{SRC[(r.source ?? "TEXT") as keyof typeof SRC]}</Badge>
                                   <Badge tone={tg[1]}>{tg[0]}</Badge>
@@ -220,6 +223,8 @@ export default async function GoodsAdmin({ kind, sp }: { kind: GoodsKind; sp: Go
                 raw: edit.raw ?? "",
                 sender: edit.sender ?? "",
                 source: edit.source ?? "TEXT",
+                kind: (edit.kind ?? "RECEIVE") as GoodsKind,
+                reason: edit.reason ?? "",
               }}
               save={saveGoodsAdmin}
               doneHref={`${base}${date ? `&date=${date}` : ""}`}

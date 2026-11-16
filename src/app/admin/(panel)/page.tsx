@@ -2,7 +2,7 @@ import Link from "next/link";
 import { can } from "@/lib/permissions";
 import { latestAnomalyRun } from "@/lib/anomaly";
 import { requireAdmin } from "@/lib/guards";
-import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
+import { AdjustmentRequest, APPROVED_SHIFT, Attendance, CoverRequest, Device, PayrollFeedback, ProbationRequest, RevenueGap, ShiftAssignment, ShiftTemplate, StaffActivity, Store, User } from "@/lib/models";
 import { liveBadges, type LiveBadge } from "@/lib/live-badges";
 import { getSettings } from "@/lib/settings";
 import { localDate, localMonth, localTime, viMonth, weekdayVi } from "@/lib/time";
@@ -17,6 +17,8 @@ import { Alert, Badge, Card, LinkButton, PageTitle } from "@/components/ui";
 import { BellRing, ChevronRight, Package, Receipt } from "lucide-react";
 import ActivityFeed from "./activity/ActivityFeed";
 import { activityDays, loadActivities, loadSessions } from "./activity/data";
+import { widgetShown } from "@/lib/dashboard-widgets";
+import { adminDashHidden } from "@/lib/theme-server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +26,11 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const admin = await requireAdmin();
   const { error } = await searchParams;
+  // khối nào hiện: theo quyền + admin tự tắt bớt (Cài đặt → Trang Tổng quan hiển thị gì)
+  const show = widgetShown(admin, await adminDashHidden(admin.email).catch(() => []));
   const settings = await getSettings();
   // việc chờ xác nhận: loại theo cơ sở thì ghi rõ cần admin nào (Quản lý admin → Cơ sở quản lý), còn lại là việc chung
-  const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames] = await Promise.all([
+  const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames, pGaps] = await Promise.all([
     ProbationRequest.find({ status: "PENDING" }).select("storeId").lean(),
     CoverRequest.find({ status: "PENDING" }).select("storeId").lean(),
     AdjustmentRequest.find({ status: "PENDING" }).select("storeId").lean(),
@@ -37,6 +41,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
     adminDirectory(),
     Store.find().select("name").lean().then((l) => new Map(l.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]))),
+    RevenueGap.find({ status: "PENDING" }).select("storeId").lean(), // bù doanh thu chờ duyệt
   ]);
   const me = admin.kind === "OWNER" ? "Admin Tổng" : admin.name;
   const byStore = (list: { storeId?: unknown }[]) => {
@@ -46,6 +51,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   };
   type Todo = { key: string; icon: string; n: number; text: string; href: string; store?: string; names?: string[] };
   const assigned: Todo[] = [
+    ...byStore(pGaps).map(([sid, n]) => ({ key: `gap${sid}`, icon: "💸", n, text: "bù doanh thu (thiếu tiền → phạt)", href: "/admin/requests#bu-doanh-thu", store: storeNames.get(sid), names: who(sid, "revenue") })),
     ...byStore(pProbs).map(([sid, n]) => ({ key: `pb${sid}`, icon: "🟣", n, text: "thử việc (nhận / lên lương)", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.probation) })),
     ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm ngoài giờ / ngoài ca", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
     ...byStore(pCovers).map(([sid, n]) => ({ key: `cv${sid}`, icon: "⇄", n, text: "đổi ca / nhờ làm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.cover) })),
@@ -62,13 +68,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const stores = await Store.find({ active: true }).sort({ name: 1 }).lean();
   const now = new Date();
 
-  const showPay = can(admin, "payEstimate");
+  const showPay = can(admin, "payEstimate") && (show("payTotal") || (show("stores") && show("storePay")));
   // bất thường chốt ca & két (có số tiền doanh thu từng ca → chỉ Admin Tổng)
-  const anomaly = admin.kind === "OWNER" ? await latestAnomalyRun().catch(() => null) : null;
+  const anomaly = admin.kind === "OWNER" && show("anomaly") ? await latestAnomalyRun().catch(() => null) : null;
   const anomalyOpen = anomaly?.items.filter((i) => !i.resolved && i.sev >= 2) ?? [];
-  const wxOn = (await getAiConfig()).weather.overview; // Cài đặt → AI → thời tiết
+  const wxOn = show("stores") && show("weather") && (await getAiConfig()).weather.overview; // Cài đặt → AI → thời tiết
   const blocks = await Promise.all(
-    stores.map(async (s) => {
+    (show("stores") || show("payTotal") ? stores : []).map(async (s) => {
       const tz = s.timezone || "Asia/Ho_Chi_Minh";
       const today = localDate(now, tz);
       const [shifts, atts, users, tpls] = await Promise.all([
@@ -105,7 +111,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       const month = localMonth(now, tz);
       const pay = showPay ? await estimateStorePay(s._id, month) : null;
       // nhân viên được cấp quyền quản lý đã thao tác gì ở cơ sở này (7 ngày)
-      const staffActs = await StaffActivity.find({ storeId: s._id, createdAt: { $gte: new Date(now.getTime() - 7 * 86_400_000) } })
+      const staffActs = !show("staffActs") ? [] : await StaffActivity.find({ storeId: s._id, createdAt: { $gte: new Date(now.getTime() - 7 * 86_400_000) } })
         .sort({ createdAt: -1 })
         .limit(8)
         .lean();
@@ -119,6 +125,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageTitle sub="Tình hình chấm công hôm nay">Tổng quan</PageTitle>
+        {show("quick") && (
         <div className="mb-4 flex flex-wrap gap-2">
           <LinkButton href="/admin/finance/expenses" variant="secondary" className="py-2.5">
             <Receipt size={18} /> Nhập chi phí (sao kê / CK)
@@ -129,8 +136,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             </LinkButton>
           )}
         </div>
+        )}
       </div>
-      {todoTotal > 0 && (
+      {show("todo") && todoTotal > 0 && (
         <div className="mb-4 overflow-hidden rounded-2xl bg-warn-soft ring-1 ring-warn/40">
           <Link href={todo[0].href} className="flex items-center gap-2 px-4 py-3 text-warn">
             <BellRing size={20} className="shrink-0" />
@@ -191,7 +199,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           )}
         </Card>
       )}
-      {showPay && blocks.length > 1 && (
+      {showPay && show("payTotal") && blocks.length > 1 && (
         <Card>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-accent">💰 Tổng lương tạm tính tất cả cơ sở – tháng này (đến hôm nay)</span>
@@ -202,6 +210,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </p>
         </Card>
       )}
+      {show("stores") && (
       <div className="grid gap-4 xl:grid-cols-2">
         {blocks.map((b) => (
           <Card key={String(b.s._id)} title={b.s.name}>
@@ -248,7 +257,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 </ul>
               </div>
             )}
-            {b.pay && (
+            {b.pay && show("storePay") && (
             <div className="mt-2 rounded-xl bg-cream p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-xs font-semibold text-accent">💰 Lương tạm tính tháng {viMonth(b.month)} (đến hôm nay)</span>
@@ -264,7 +273,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             </div>
             )}
             <div className="mt-3 space-y-1 text-sm">
-              {b.working.map((a) => (
+              {show("people") && b.working.map((a) => (
                 <p key={String(a._id)} className="flex flex-wrap items-center gap-x-2">
                   <span className="tbs-live-dot mx-0.5" aria-hidden />
                   <span><b className="text-good">{b.name.get(String(a.userId))}</b> – vào {localTime(a.checkInAt, b.tz)}</span>
@@ -274,7 +283,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                   ))}
                 </p>
               ))}
-              {b.absent.map((sh) => (
+              {show("people") && b.absent.map((sh) => (
                 <p key={String(sh._id)}>🔴 {b.name.get(String(sh.userId)) || "?"} – ca {sh.startTime} chưa check-in</p>
               ))}
               {b.staffActs.length > 0 && (
@@ -290,7 +299,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                   </ul>
                 </div>
               )}
-              {b.missing > 0 && (
+              {show("missing") && b.missing > 0 && (
                 <p className="text-danger">
                   ⚠️ {b.missing} lượt quên check-out cần xử lý – <Link className="underline" href={`/admin/attendance?store=${b.s._id}&status=MISSING_CHECKOUT`}>xem</Link>
                 </p>
@@ -299,7 +308,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </Card>
         ))}
       </div>
-      {can(admin, "activity") && <AdminActivityCard />}
+      )}
+      {show("activity") && <AdminActivityCard />}
+      <p className="text-center text-xs text-ink/50">
+        Muốn bớt / thêm khối trên trang này? <Link className="text-accent underline" href="/admin/settings#tong-quan">Cài đặt → Trang Tổng quan hiển thị gì</Link>
+      </p>
     </>
   );
 }
@@ -330,7 +343,7 @@ async function AdminActivityCard() {
         {sessions.length > online.length && ` · ${sessions.length - online.length} phiên khác còn đăng nhập`}
       </p>
       <div className="max-h-[32rem] overflow-y-auto">
-        <ActivityFeed rows={rows.slice(0, SHOW)} today={days[0]} empty="Hôm nay và hôm qua chưa có admin nào thao tác" />
+        <ActivityFeed rows={rows.slice(0, SHOW)} today={days[0]} empty="Hôm nay và hôm qua chưa có admin nào thao tác" inBox />
       </div>
       {rows.length > SHOW && (
         <Link className="mt-2 block text-center text-sm text-accent underline" href="/admin/activity">
