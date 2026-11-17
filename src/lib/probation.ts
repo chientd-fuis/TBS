@@ -83,11 +83,11 @@ export async function syncTrial(userId: Id) {
   const { trialHalf } = await probationConfig();
   const factor = trialHalf ? 0.5 : 1;
   const sel = "storeId homeStoreId userId month workDate shiftAssignmentId shiftLabel checkInAt checkOutAt extraHours trial payFactor roundedHours";
-  const first = await Attendance.find({ userId: u._id, status: "COMPLETED", workDate: { $gte: u.probationStart } }).sort({ checkInAt: 1 }).limit(TRIAL_SHIFTS).select(sel).lean();
+  const first = await Attendance.find({ userId: u._id, status: "COMPLETED", workDate: { $gte: u.probationStart }, "support.status": { $ne: "REJECTED" } }).sort({ checkInAt: 1 }).limit(TRIAL_SHIFTS).select(sel).lean();
   const ids = first.map((a) => String(a._id));
   for (const a of first) if (!a.trial || (a.payFactor ?? 1) !== factor) await setFactor(a, true, factor);
   // lượt từng là ca thử việc nhưng không còn trong 3 lượt đầu (VD admin thêm lượt sớm hơn) → tính đủ lại
-  for (const a of await Attendance.find({ userId: u._id, trial: true, _id: { $nin: first.map((x) => x._id) } }).select(sel).lean()) await setFactor(a, false, 1);
+  for (const a of await Attendance.find({ userId: u._id, trial: true, _id: { $nin: first.map((x) => x._id) }, "support.status": { $ne: "REJECTED" } }).select(sel).lean()) await setFactor(a, false, 1);
 
   if (u.trialStage === "PENDING") {
     // đang chờ admin: cập nhật danh sách 3 ca trong yêu cầu

@@ -1,6 +1,9 @@
 import { getAdmin, adminActor } from "./admin-session";
 import { getCurrentUser } from "./guards";
-import { managedStoreIds, staffCan, type StaffPerm } from "./permissions";
+import { can, managedStoreIds, staffCan, type AdminPerm, type StaffPerm } from "./permissions";
+
+/** quyền admin tương ứng với quyền quản lý của nhân viên (đổi ca / làm hộ: admin dùng quyền duyệt riêng) */
+const ADMIN_PERM_OF: Partial<Record<StaffPerm, AdminPerm>> = { schedule: "schedule", bonus: "bonus" };
 import type { Actor } from "./audit";
 
 /**
@@ -24,7 +27,12 @@ export async function staffManager(perm: StaffPerm, storeId?: string) {
 /** Admin (ưu tiên) hoặc nhân viên có quyền ở cơ sở này. */
 export async function adminOrStaff(perm: StaffPerm, storeId: string) {
   const admin = await getAdmin();
-  if (admin) return { actor: adminActor(admin), admin, staff: null };
+  if (admin) {
+    // admin cũng cần quyền tương ứng (xếp ca / thưởng phạt) – Admin Tổng cấp ở Quản lý admin
+    const need = ADMIN_PERM_OF[perm];
+    if (need && !can(admin, need)) throw new Error("Bạn chưa được Admin Tổng cấp quyền cho chức năng này");
+    return { actor: adminActor(admin), admin, staff: null };
+  }
   const s = await staffManager(perm, storeId);
   return { actor: s.actor, admin: null, staff: s.user };
 }

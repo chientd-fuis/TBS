@@ -88,6 +88,8 @@ const A: Record<string, [ActivityGroup, string]> = {
   "user.transfer": ["people", "Chuyển tài khoản Gmail nhân viên"],
   "cash.transfer.create": ["revenue", "Ghi phiếu sổ quỹ (rút lãi / bổ sung vốn / nộp – rút TM, TK)"],
   "cash.transfer.delete": ["revenue", "Xoá phiếu sổ quỹ"],
+  "cash.transfer.update": ["revenue", "Sửa phiếu sổ quỹ"],
+  "cash.view": ["finance", "Xem sổ quỹ"],
   "cash.count": ["revenue", "Đếm tiền: tích đã lấy tiền mặt"],
   "cash.uncount": ["revenue", "Đếm tiền: bỏ tích đã lấy"],
   "cash.recount": ["revenue", "Đếm tiền: sửa tiền mặt thực tế (thiếu / thừa)"],

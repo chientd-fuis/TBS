@@ -151,7 +151,7 @@ const chainLines = (t: PnlLine) => [
 /* ---------- Báo cáo ngày ---------- */
 export async function buildDailyReport(date: string) {
   await connectDB();
-  const stores = await loadStores();
+  const stores = await loadStores({ from: `${date.slice(0, 7)}-01`, to: date });
   const [{ pnl }, issues, month] = await Promise.all([loadPnl(date, date, stores), dayIssues(date, stores), loadPnl(`${date.slice(0, 7)}-01`, date, stores)]);
   const lines: string[] = [`📊 BÁO CÁO NGÀY ${viDate(date)} (${weekdayVi(date)})`, ""];
   for (const s of stores) {
@@ -179,7 +179,7 @@ export async function buildDailyReport(date: string) {
 /* ---------- Báo cáo tuần / tháng ---------- */
 export async function buildPeriodReport(from: string, to: string, prevFrom: string, prevTo: string, title: string) {
   await connectDB();
-  const stores = await loadStores();
+  const stores = await loadStores({ from: prevFrom < from ? prevFrom : from, to });
   const [{ pnl }, prev] = await Promise.all([loadPnl(from, to, stores), loadPnl(prevFrom, prevTo, stores)]);
   const lines: string[] = [title, `${viDate(from)} – ${viDate(to)}`, ""];
   const ranked = [...stores].sort((a, b) => pnl.byStore[b._id].revenue - pnl.byStore[a._id].revenue);

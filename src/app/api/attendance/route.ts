@@ -11,7 +11,9 @@ import { distanceMeters } from "@/lib/calc";
 import { assertNotLocked, computeFields, findShiftFor, isStaleOpen, openAttendance, payStoreOf, storeTz } from "@/lib/attendance";
 import { audit } from "@/lib/audit";
 import { savePhoto } from "@/lib/drive";
-import { addDays, localDate, localMonth, localTime } from "@/lib/time";
+import { addDays, localDate, localMonth, localTime, viDate, weekdayVi } from "@/lib/time";
+import { queueRequestNotice, storeShort } from "@/lib/request-notify";
+import { APPROVE_PERM } from "@/lib/admin-stores";
 import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 import { checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 import { flagOvertime } from "@/lib/overtime";
@@ -140,23 +142,27 @@ export async function POST(req: Request) {
       });
       const supportStores = supportIds.length ? await Store.find({ _id: { $in: supportIds }, active: true }).lean() : [];
       const allowed: (typeof home)[] = [home];
+      const scheduled = new Set<string>(); // cơ sở có ca hỗ trợ đã duyệt đúng khung giờ
       for (const st of supportStores)
-        if (await findShiftFor(user._id, now, st.timezone || tzHome, st._id)) allowed.push(st);
+        if (await findShiftFor(user._id, now, st.timezone || tzHome, st._id)) {
+          allowed.push(st);
+          scheduled.add(String(st._id));
+        }
+      // cơ sở khác CHƯA xếp ca: vẫn cho chấm nếu xác thực được đang có mặt (vị trí / WiFi) → gửi admin duyệt "Hỗ trợ cơ sở"
+      for (const st of await Store.find({ active: true, _id: { $nin: allowed.map((x) => x._id) } }).lean()) if (verified(st)) allowed.push(st);
       const results = allowed.map((st) => ({ st, f: check(st) }));
       const isHome = (st: typeof home) => String(st._id) === String(home._id);
-      // ưu tiên: cơ sở xác thực được có mặt → cơ sở hỗ trợ (đang có ca) → gần nhất
+      // ưu tiên: cơ sở xác thực được có mặt → cơ sở có ca hỗ trợ (như trước) → cơ sở gốc → gần nhất
       const hit = results
         .filter((r) => !r.f)
-        .sort((x, y) => Number(verified(y.st)) - Number(verified(x.st)) || Number(isHome(x.st)) - Number(isHome(y.st)) || distTo(x.st) - distTo(y.st))[0];
-      if (!hit) {
-        // đang đứng ở cơ sở khác nhưng không có ca hỗ trợ ở đó
-        const near = (await Store.find({ active: true, _id: { $nin: allowed.map((x) => x._id) } }).lean()).find((st) => verified(st) && !check(st));
-        if (near)
-          throw new HttpError(400, `Bạn đang ở ${near.name} nhưng chưa được xếp ca hỗ trợ tại đây (hoặc chưa tới giờ ca). Liên hệ admin để được xếp ca.`, {
-            code: "NOT_ASSIGNED",
-          });
-        throw fail(results[0].f!);
-      }
+        .sort(
+          (x, y) =>
+            Number(verified(y.st)) - Number(verified(x.st)) ||
+            Number(scheduled.has(String(y.st._id))) - Number(scheduled.has(String(x.st._id))) ||
+            Number(isHome(y.st)) - Number(isHome(x.st)) ||
+            distTo(x.st) - distTo(y.st),
+        )[0];
+      if (!hit) throw fail(results[0].f!);
       store = hit.st;
     }
     const dist = distTo(store);
@@ -228,7 +234,8 @@ export async function POST(req: Request) {
       );
       if (!updated) throw new HttpError(409, "Lượt chấm công đã được check-out");
       // làm ngoài giờ (ra muộn > 30 phút / vào sớm làm tăng giờ công / ngoài ca) → chờ admin xác nhận, mặc định vẫn tính (báo nhóm chấm công sau)
-      const ot = await flagOvertime(updated._id, tz, { employeeName: user.name || user.email, storeId: store._id, storeName: store.name });
+      // lượt hỗ trợ chưa xếp ca: đã có yêu cầu "Hỗ trợ cơ sở" cho cả lượt → không tạo thêm "làm ngoài ca"
+      const ot = updated.support?.status ? null : await flagOvertime(updated._id, tz, { employeeName: user.name || user.email, storeId: store._id, storeName: store.name });
       if (ot) after(ot.notify);
       // nhân viên thử việc: 3 ca đầu = ca thử việc (50% giờ công – nhân viên xem ở Lịch sử, không báo khi check-out), đủ 3 ca → gửi admin Nhận / Không nhận
       let rounded = updated.roundedHours;
@@ -283,6 +290,7 @@ export async function POST(req: Request) {
     // ---- CHECK-IN ----
     await assertNotLocked(home._id, localMonth(now, tz), user._id); // bảng lương ở cơ sở gốc
     const shift = await findShiftFor(user._id, now, tz, store._id);
+    const unscheduledSupport = isSupport && !shift;
     const id = new Types.ObjectId();
     const photo = photoBuf
       ? await savePhoto(photoBuf, {
@@ -316,11 +324,25 @@ export async function POST(req: Request) {
         
         source: "SELF",
         status: "OPEN",
+        // chấm ở cơ sở khác mà chưa được xếp ca hỗ trợ → chờ admin duyệt (mặc định vẫn tính công)
+        ...(unscheduledSupport ? { support: { status: "PENDING" } } : {}),
       });
     } catch (e) {
       if ((e as { code?: number }).code === 11000) throw new HttpError(409, "Bạn đã check-in rồi");
       throw e;
     }
+    if (unscheduledSupport)
+      queueRequestNotice(
+        store._id,
+        [
+          "🏪 HỖ TRỢ CƠ SỞ – CHƯA ĐƯỢC XẾP CA",
+          `👤 Nhân viên: ${user.name || user.email} (cơ sở gốc ${storeShort(home.name)})`,
+          `🏪 Đang làm tại: ${storeShort(store.name)}`,
+          `📅 ${viDate(localDate(now, tz)).slice(0, 5)} (${weekdayVi(localDate(now, tz))}) · check-in ${localTime(now, tz).slice(0, 5)}`,
+          "💰 Mặc định vẫn tính công – Từ chối thì lượt này 0 giờ.",
+        ],
+        { kind: "support", perm: APPROVE_PERM.support, where: "Yêu cầu → Hỗ trợ cơ sở để Duyệt / Từ chối" },
+      );
     after(() =>
       notifyAttendance(
         store._id,

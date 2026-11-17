@@ -113,3 +113,20 @@ export async function recordActivity(actor: Actor, action: string, target?: { ty
     console.error("recordActivity failed", e);
   }
 }
+
+/**
+ * Admin (không phải Admin Tổng) mở trang cần theo dõi (VD sổ quỹ) → 1 dòng lịch sử hoạt động.
+ * Tải lại / chuyển tháng trong `gapMin` phút chỉ ghi 1 lần. Không bao giờ throw.
+ */
+export async function recordView(actor: Actor, action: string, after?: Record<string, unknown>, gapMin = 30) {
+  if (actor.kind !== "ADMIN") return;
+  try {
+    await connectDB();
+    const since = new Date(Date.now() - gapMin * 60_000);
+    const who = actor.sid ? { sid: actor.sid } : { adminName: actor.name };
+    if (await AdminActivity.exists({ ...who, action, createdAt: { $gte: since } })) return;
+    await recordActivity(actor, action, undefined, null, after);
+  } catch (e) {
+    console.error("recordView failed", e);
+  }
+}

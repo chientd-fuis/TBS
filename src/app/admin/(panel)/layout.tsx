@@ -36,7 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const admin = await requireAdmin();
   // chạy ngầm sau khi trả trang: tự check-out ca tối các cơ sở đã bật (tối đa 1 lần / 3 phút)
   after(() => maybeRunAutoCheckout());
-  const [approvals, devices, adj, fb, shiftRequests, covers, overtime, probations, gaps] = await Promise.all([
+  const [approvals, devices, adj, fb, shiftRequests, covers, overtime, probations, gaps, supports] = await Promise.all([
     User.countDocuments({ status: "PENDING" }),
     Device.countDocuments({ status: "PENDING", userId: { $in: await User.find({ status: "ACTIVE" }).distinct("_id") } }),
     AdjustmentRequest.countDocuments({ status: "PENDING" }),
@@ -46,6 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     Attendance.countDocuments({ "overtime.status": "PENDING" }), // làm thêm giờ chờ xác nhận
     ProbationRequest.countDocuments({ status: "PENDING" }), // thử việc chờ xác nhận
     RevenueGap.countDocuments({ status: "PENDING" }), // bù doanh thu (thiếu tiền) chờ duyệt
+    Attendance.countDocuments({ "support.status": "PENDING" }), // hỗ trợ cơ sở chưa xếp ca chờ duyệt
   ]);
   const ask = await aiRemaining("ask", `admin:${admin.accountId ?? "owner"}`).catch(() => ({ enabled: false, left: 0, limit: 0 }));
   // nút 📷 trong Hỏi AI: kiểm tra / nhập bill – cần quyền Bill + được dùng "Đọc bill"
@@ -54,7 +55,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     owner: admin.kind === "OWNER",
     perms: [...(admin.perms ?? [])],
     hide: (await goodsEnabled()) ? [] : ["/admin/goods"],
-    counts: { approvals, devices, requests: adj + fb + covers + overtime + probations + gaps, shiftRequests },
+    counts: { approvals, devices, requests: adj + fb + covers + overtime + probations + gaps + supports, shiftRequests },
   };
   // Admin Tổng cho phép (Cài đặt) + có hồ sơ nhân viên đang làm → nút sang app nhân viên
   const userApp =

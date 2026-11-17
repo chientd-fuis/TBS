@@ -1,7 +1,8 @@
 import { requireOwner } from "@/lib/guards";
 import { AdminAccount, AdminLoginLog, AdminLoginSession, Settings, Store } from "@/lib/models";
 import { parseUA } from "@/lib/device";
-import { ADMIN_PERMS } from "@/lib/permissions";
+import { ADMIN_PERMS, DEFAULT_ON_PERMS } from "@/lib/permissions";
+import { seedDefaultPerms } from "@/lib/admin-perm-seed";
 import { viDateTime } from "@/lib/time";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge, Card, Empty, Field, Input, PageTitle } from "@/components/ui";
@@ -19,15 +20,17 @@ type Dev = { deviceId: string; userAgent?: string | null; ip?: string | null; fi
 const groups = [...new Set(ADMIN_PERMS.map((p) => p.group))];
 
 function PermBoxes({ value = [] }: { value?: readonly string[] }) {
+  // quyền mặc định bật (★) – admin mới được tích sẵn
   return (
     <div className="rounded-xl bg-cream p-2.5">
-      <p className="mb-1 text-xs font-semibold text-accent">Quyền (mặc định không có)</p>
+      <p className="mb-1 text-xs font-semibold text-accent">Quyền · ★ = mặc định bật cho admin mới</p>
       {groups.map((g) => (
         <div key={g} className="flex flex-wrap gap-x-4 gap-y-1 py-0.5 text-sm">
           {ADMIN_PERMS.filter((p) => p.group === g).map((p) => (
             <label key={p.key} className="flex items-center gap-1.5">
               <input type="checkbox" name="perms" value={p.key} defaultChecked={value.includes(p.key)} className="accent-secondary" />
               {p.label}
+              {(DEFAULT_ON_PERMS as string[]).includes(p.key) && <span className="text-[10px] text-warn">★</span>}
             </label>
           ))}
         </div>
@@ -60,6 +63,7 @@ function StoreBoxes({ stores, value = [] }: { stores: { id: string; name: string
 /** Admin Tổng: danh sách admin (đăng nhập Gmail) – thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
 export default async function AdminsPage() {
   await requireOwner();
+  await seedDefaultPerms(); // quyền mặc định bật → hiện đúng trên thẻ admin cũ
   const list = await AdminAccount.find().sort({ status: 1, lastLoginAt: -1, createdAt: -1 }).lean();
   // tài khoản cũ chưa đặt riêng "Cho vào app nhân viên" → mặc định theo cài đặt chung trước đây
   const settings = await Settings.findOne({ key: "main" }).select("adminUserApp").lean();
@@ -83,7 +87,7 @@ export default async function AdminsPage() {
             <Field label="Gmail"><Input type="email" name="email" required placeholder="ten@gmail.com" /></Field>
             <Field label="Tên hiển thị" hint="Ghi vào lịch sử thao tác"><Input name="name" required placeholder="VD Lan – Văn Phú" /></Field>
           </div>
-          <PermBoxes />
+          <PermBoxes value={DEFAULT_ON_PERMS} />
           <StoreBoxes stores={stores} />
         </ActionForm>
       </Card>

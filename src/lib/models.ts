@@ -355,6 +355,20 @@ const AttendanceSchema = new Schema(
       ),
       default: undefined,
     },
+    // HỖ TRỢ CƠ SỞ CHƯA XẾP CA (api/attendance): check-in ở cơ sở khác cơ sở gốc mà không có ca hỗ trợ đã duyệt
+    // → vẫn cho chấm, gửi admin duyệt. Mặc định VẪN TÍNH công; Từ chối → lượt này 0 giờ (payFactor = 0).
+    support: {
+      type: new Schema(
+        {
+          status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"] },
+          decidedBy: String,
+          decidedAt: Date,
+          reply: String,
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     note: String, // ghi chú nội bộ (admin xem): "Sửa bởi …"
     staffNote: String, // ghi chú admin để lại cho nhân viên – hiện ở Lịch sử chấm công của nhân viên
     photosPurgedAt: Date, // ảnh check-in/out đã bị xoá khi dọn dữ liệu cũ
@@ -368,6 +382,7 @@ AttendanceSchema.index({ userId: 1, month: 1 });
 // Mỗi nhân viên chỉ có 1 lượt đang mở → chống chấm trùng / ghi đồng thời
 AttendanceSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: "OPEN" }, name: "one_open_per_user" });
 AttendanceSchema.index({ "overtime.status": 1 }, { partialFilterExpression: { "overtime.status": "PENDING" }, name: "overtime_pending" });
+AttendanceSchema.index({ "support.status": 1 }, { partialFilterExpression: { "support.status": "PENDING" }, name: "support_pending" });
 export type AttendanceDoc = InferSchemaType<typeof AttendanceSchema> & { _id: Types.ObjectId };
 export const Attendance = getModel("Attendance", AttendanceSchema);
 
@@ -949,6 +964,8 @@ const AdminAccountSchema = new Schema(
     name: { type: String, required: true }, // tên hiển thị trong lịch sử thao tác
     status: { type: String, enum: ["PENDING", "ACTIVE", "BLOCKED"], default: "PENDING" },
     perms: { type: [String], default: [] }, // lib/permissions.ts ADMIN_PERMS
+    // quyền mặc định bật đã được thêm cho tài khoản này (lib/admin-perm-seed.ts) – tắt sau thì không tự bật lại
+    permsSeeded: { type: [String], default: [] },
     // cơ sở quản lý (rỗng = mọi cơ sở) – gắn tên admin chịu trách nhiệm xác nhận yêu cầu của cơ sở (lib/admin-stores.ts), không giới hạn quyền
     storeIds: { type: [Schema.Types.ObjectId], ref: "Store", default: [] },
     // được vào app nhân viên (cần có hồ sơ nhân viên cùng Gmail). Chưa đặt (bản ghi cũ) → theo Settings.adminUserApp

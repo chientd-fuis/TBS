@@ -32,7 +32,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const remindersToday = can(admin, "reminders") ? await ShiftReminder.countDocuments({ date: localDate(new Date()) }).catch(() => 0) : 0;
   const settings = await getSettings();
   // việc chờ xác nhận: loại theo cơ sở thì ghi rõ cần admin nào (Quản lý admin → Cơ sở quản lý), còn lại là việc chung
-  const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames, pGaps] = await Promise.all([
+  const [pProbs, pCovers, pAdjs, pOts, pFb, pReg, pUsers, pDevices, who, storeNames, pGaps, pSups] = await Promise.all([
     ProbationRequest.find({ status: "PENDING" }).select("storeId").lean(),
     CoverRequest.find({ status: "PENDING" }).select("storeId").lean(),
     AdjustmentRequest.find({ status: "PENDING" }).select("storeId").lean(),
@@ -44,6 +44,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     adminDirectory(),
     Store.find().select("name").lean().then((l) => new Map(l.map((s) => [String(s._id), s.name.replace(/^TBS\s*/i, "")]))),
     RevenueGap.find({ status: "PENDING" }).select("storeId").lean(), // bù doanh thu chờ duyệt
+    Attendance.find({ "support.status": "PENDING" }).select("storeId").lean(), // hỗ trợ cơ sở chưa xếp ca
   ]);
   const me = admin.kind === "OWNER" ? "Admin Tổng" : admin.name;
   const byStore = (list: { storeId?: unknown }[]) => {
@@ -56,6 +57,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     ...byStore(pGaps).map(([sid, n]) => ({ key: `gap${sid}`, icon: "💸", n, text: "bù doanh thu (thiếu tiền → phạt)", href: "/admin/requests#bu-doanh-thu", store: storeNames.get(sid), names: who(sid, "revenue") })),
     ...byStore(pProbs).map(([sid, n]) => ({ key: `pb${sid}`, icon: "🟣", n, text: "thử việc (nhận / lên lương)", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.probation) })),
     ...byStore(pOts).map(([sid, n]) => ({ key: `ot${sid}`, icon: "⏱", n, text: "làm ngoài giờ / ngoài ca", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.overtime) })),
+    ...byStore(pSups).map(([sid, n]) => ({ key: `sp${sid}`, icon: "🏪", n, text: "hỗ trợ cơ sở chưa xếp ca", href: "/admin/requests#ho-tro", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.support) })),
     ...byStore(pCovers).map(([sid, n]) => ({ key: `cv${sid}`, icon: "⇄", n, text: "đổi ca / nhờ làm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.cover) })),
     ...byStore(pAdjs).map(([sid, n]) => ({ key: `aj${sid}`, icon: "🕘", n, text: "chấm công bù / chấm hộ", href: "/admin/requests", store: storeNames.get(sid), names: who(sid, APPROVE_PERM.adjustment) })),
   ];

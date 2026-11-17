@@ -43,16 +43,33 @@ export async function loadLabor(from: string, to: string) {
   const salaryHist = await SalaryHistory.find({ payType: "FULLTIME" }).select("userId").lean();
   const ftUsers = await User.find({ _id: { $in: [...new Set(salaryHist.map((h) => String(h.userId)))] } }).select("storeId status").lean();
   const ftHist = await SalaryHistory.find({ userId: { $in: ftUsers.map((u) => u._id) } }).lean();
+  // chấm công cả tháng của NV full-time (kỳ báo cáo có thể chỉ là 1 ngày / 1 tuần) → cơ sở làm nhiều nhất + ngày làm cuối
+  const ftAtts = ftUsers.length
+    ? await Attendance.find({
+        userId: { $in: ftUsers.map((u) => u._id) },
+        workDate: { $gte: `${months[0]}-01`, $lte: `${months[months.length - 1]}-31` },
+        status: "COMPLETED",
+      })
+        .select("userId storeId workDate")
+        .lean()
+    : [];
   for (const u of ftUsers) {
     const uid = String(u._id);
     for (const m of months) {
       const t = payTermsAt(ftHist.filter((h) => String(h.userId) === uid), m);
       if (t.payType !== "FULLTIME") continue;
       fixedKeys.add(`${uid}|${m}`);
-      if (u.status !== "ACTIVE" && !atts.some((a) => String(a.userId) === uid && a.workDate.startsWith(m))) continue;
-      if (!u.storeId) continue;
+      const mine = ftAtts.filter((a) => String(a.userId) === uid && a.workDate.startsWith(m));
+      if (u.status !== "ACTIVE" && !mine.length) continue;
+      // tính cho cơ sở NV làm nhiều nhất trong tháng đó (chuyển cơ sở không kéo lương tháng cũ sang cơ sở mới)
+      const cnt = new Map<string, number>();
+      for (const a of mine) cnt.set(String(a.storeId), (cnt.get(String(a.storeId)) ?? 0) + 1);
+      const storeId = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? (u.storeId ? String(u.storeId) : "");
+      if (!storeId) continue;
+      // đã nghỉ việc: chỉ tính tới ngày làm cuối của tháng đó (lương cứng theo ngày)
+      const lastDay = u.status !== "ACTIVE" ? mine.reduce((x, a) => (a.workDate > x ? a.workDate : x), "") : "";
       const perDay = t.monthlySalary / daysInMonth(m);
-      for (const d of dateRange(from, to)) if (d.startsWith(m)) out.push({ storeId: String(u.storeId), date: d, amount: perDay });
+      for (const d of dateRange(from, to)) if (d.startsWith(m) && (!lastDay || d <= lastDay)) out.push({ storeId, date: d, amount: perDay });
     }
   }
   for (const a of atts) {
@@ -75,9 +92,17 @@ export async function loadLabor(from: string, to: string) {
 export type StoreLite = { _id: string; name: string; short: string; grabFeePct: number; shopeeFeePct: number; createdAt?: Date };
 export const shortName = (n: string) => n.replace(/^TBS\s*/i, "");
 
-export async function loadStores(): Promise<StoreLite[]> {
+/**
+ * Cơ sở đưa vào báo cáo: đang hoạt động + (có `range`) cơ sở đã tắt nhưng còn chốt ca trong kỳ
+ * → tắt cơ sở không làm mất doanh thu / chi phí các tháng cũ của cơ sở đó.
+ */
+export async function loadStores(range?: { from: string; to: string }): Promise<StoreLite[]> {
   await connectDB();
-  return (await Store.find({ active: { $ne: false } }).sort({ createdAt: 1 }).lean()).map((s) => ({
+  const withData = range
+    ? await ShiftClosing.distinct("storeId", { workDate: { $gte: range.from, $lte: range.to }, "revenue.tm": { $ne: null } })
+    : [];
+  const q = withData.length ? { $or: [{ active: { $ne: false } }, { _id: { $in: withData } }] } : { active: { $ne: false } };
+  return (await Store.find(q).sort({ createdAt: 1 }).lean()).map((s) => ({
     _id: String(s._id),
     name: s.name,
     short: shortName(s.name),

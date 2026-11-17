@@ -42,7 +42,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const pm = monthRange(prevMonth(month));
   const span = Number(to.slice(8)) - 1;
   const prevTo = addDays(pm.first, span) > pm.last ? pm.last : addDays(pm.first, span);
-  const stores = await loadStores();
+  const stores = await loadStores({ from: pm.first, to });
   const [{ pnl, dates }, prev] = await Promise.all([loadPnl(first, to, stores), loadPnl(pm.first, prevTo, stores)]);
   return <PnlView month={month} first={first} to={to} prevFirst={pm.first} prevTo={prevTo} stores={stores} pnl={pnl} dates={dates} prev={prev.pnl} alloc={sp.alloc === "1"} />;
 }

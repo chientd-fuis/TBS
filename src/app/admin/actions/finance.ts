@@ -195,6 +195,22 @@ export async function saveCashTransfer(_: FormState, fd: FormData): Promise<Form
       note: str(fd.get("note")).slice(0, 200),
       createdBy: adminActor(admin).name,
     };
+    // sửa phiếu (kể cả tháng trước) → số tồn các tháng sau tự tính lại (sổ quỹ tính từ toàn bộ phiếu)
+    const id = str(fd.get("id"));
+    if (id) {
+      const old = isValidObjectId(id) ? await CashTransfer.findById(id).lean() : null;
+      if (!old || (old.kind !== "TAKE" && old.kind !== "ADD")) return { error: "Không tìm thấy phiếu" };
+      if (k.kind !== "TAKE" && k.kind !== "ADD") return { error: "Chọn loại phiếu" };
+      const counted = k.value === "ADD_TM" && !!fd.get("counted");
+      const { counted: _c, createdBy: _b, ...set } = doc as typeof doc & { counted?: boolean };
+      await CashTransfer.updateOne(
+        { _id: id },
+        { $set: { ...set, ...(counted ? { counted: true } : {}) }, $unset: { ...(counted ? {} : { counted: 1 }), ...(storeId ? {} : { storeId: 1 }) } },
+      );
+      await audit(adminActor(admin), "cash.transfer.update", { type: "CashTransfer", id }, old, doc);
+      revalidatePath("/admin/finance", "layout");
+      return { ok: true };
+    }
     const c = await CashTransfer.create(doc);
     await audit(adminActor(admin), "cash.transfer.create", { type: "CashTransfer", id: String(c._id) }, null, doc);
     revalidatePath("/admin/finance", "layout");

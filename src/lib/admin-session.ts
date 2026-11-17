@@ -120,6 +120,8 @@ export async function getAdmin(): Promise<AdminSession | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
+    // quyền mặc định bật (tách quyền mới) → thêm cho admin cũ trước khi đọc quyền
+    await (await import("./admin-perm-seed")).seedDefaultPerms();
     const s = payload.sid ? await loadSession(String(payload.sid)) : null;
     // phiên phải thuộc đúng Gmail đang đăng nhập (đổi tài khoản Google → phải vào lại)
     if (!s || s.account.email !== email) return null;

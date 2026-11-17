@@ -20,7 +20,7 @@ export const CASH_KINDS = [
 export const cashKindOf = (m: { kind: string; account?: string | null }) =>
   CASH_KINDS.find((k) => k.kind === m.kind && (k.account ?? null) === (m.kind === "TAKE" || m.kind === "ADD" ? (m.account ?? "TK") : null));
 
-export type CashSide = { revenue: number; bills: number; payroll: number; take: number; add: number; transferIn: number; transferOut: number; balance: number };
+export type CashSide = { revenue: number; /** Grab + Shopee sau phí sàn (hãng chuyển về tài khoản) */ app: number; bills: number; payroll: number; take: number; add: number; transferIn: number; transferOut: number; balance: number };
 
 /** Phiếu "Thanh toán lương" tự sinh từ bảng lương đã trả (trừ tài khoản) – không lưu riêng: mở khoá "Đã trả" là tự mất. */
 export type PayEntry = { date: string; amount: number; note: string };
@@ -96,20 +96,61 @@ export function recountCash({ counted, dayTm, closingTm, original }: { counted: 
   return { newTm, original: base, diff: newTm - base };
 }
 
-export function cashBalance({ revenue, bills, moves, payroll = [] }: { revenue: { tk: number; tm: number }[]; bills: { amount: number }[]; moves: CashMove[]; payroll?: { amount: number }[] }) {
+export function cashBalance({ revenue, bills, moves, payroll = [] }: { revenue: { tk: number; tm: number; app?: number }[]; bills: { amount: number }[]; moves: CashMove[]; payroll?: { amount: number }[] }) {
   const sum = (xs: number[]) => xs.reduce((s, x) => s + (Number(x) || 0), 0);
   const of = (kind: CashKind, acc?: CashAccount) =>
     sum(moves.filter((m) => m.kind === kind && (!acc || (m.account ?? "TK") === acc)).map((m) => m.amount));
   const deposit = of("DEPOSIT");
   const withdraw = of("WITHDRAW");
-  const side = (revenue: number, billsAmt: number, pay: number, acc: CashAccount, tIn: number, tOut: number): CashSide => {
+  const side = (revenue: number, billsAmt: number, pay: number, acc: CashAccount, tIn: number, tOut: number, app = 0): CashSide => {
     const take = of("TAKE", acc);
     const add = of("ADD", acc);
-    return { revenue, bills: billsAmt, payroll: pay, take, add, transferIn: tIn, transferOut: tOut, balance: revenue - billsAmt - pay - take + add + tIn - tOut };
+    return { revenue, app, bills: billsAmt, payroll: pay, take, add, transferIn: tIn, transferOut: tOut, balance: revenue + app - billsAmt - pay - take + add + tIn - tOut };
   };
   return {
     // lương đã trả: chuyển khoản từ tài khoản
-    tk: side(sum(revenue.map((r) => r.tk)), sum(bills.map((b) => b.amount)), sum(payroll.map((p) => p.amount)), "TK", deposit, withdraw),
+    tk: side(sum(revenue.map((r) => r.tk)), sum(bills.map((b) => b.amount)), sum(payroll.map((p) => p.amount)), "TK", deposit, withdraw, sum(revenue.map((r) => r.app ?? 0))),
     tm: side(sum(revenue.map((r) => r.tm)), 0, 0, "TM", withdraw, deposit),
+  };
+}
+
+/** Phí sàn mặc định khi cơ sở chưa cài % (Cài đặt tài chính) */
+export const DEFAULT_APP_FEE_PCT = 30;
+/** Grab / Shopee hãng chuyển về tài khoản = doanh thu − phí sàn (% cơ sở; chưa cài → 30%). */
+export function appPayout(grab: number, shopee: number, fee?: { grab?: number | null; shopee?: number | null }) {
+  const pct = (p?: number | null) => (p && p > 0 ? p : DEFAULT_APP_FEE_PCT);
+  return Math.round((grab || 0) * (1 - pct(fee?.grab) / 100) + (shopee || 0) * (1 - pct(fee?.shopee) / 100));
+}
+
+/** Tách theo tháng: before = trước ngày 1 của tháng (để tính số tồn), within = trong tháng đó. */
+export function splitByMonth<T extends { date: string }>(xs: T[], month: string) {
+  const start = `${month}-01`;
+  const end = `${month}-31`;
+  return { before: xs.filter((x) => x.date < start), within: xs.filter((x) => x.date >= start && x.date <= end) };
+}
+
+/**
+ * Sổ quỹ theo tháng: số dư cuối tháng trước (tính lại từ toàn bộ phiếu → sửa phiếu tháng trước tự đổi số tồn tháng sau)
+ * + các khoản phát sinh trong tháng. Phiếu sau tháng đang xem không tính (xem tháng cũ = số dư cuối tháng đó).
+ */
+export function monthCashbook({ month, revenue, bills, moves, payroll = [] }: {
+  month: string;
+  revenue: { date: string; tk: number; tm: number; app?: number }[];
+  bills: { date: string; amount: number }[];
+  moves: (CashMove & { date: string })[];
+  payroll?: { date: string; amount: number }[];
+}) {
+  const [r, b, m, p] = [revenue, bills, moves, payroll].map((xs) => splitByMonth(xs as { date: string }[], month)) as [
+    { before: typeof revenue; within: typeof revenue },
+    { before: typeof bills; within: typeof bills },
+    { before: typeof moves; within: typeof moves },
+    { before: typeof payroll; within: typeof payroll },
+  ];
+  const open = cashBalance({ revenue: r.before, bills: b.before, moves: m.before, payroll: p.before });
+  const cur = cashBalance({ revenue: r.within, bills: b.within, moves: m.within, payroll: p.within });
+  return {
+    opening: { tk: open.tk.balance, tm: open.tm.balance },
+    tk: { ...cur.tk, balance: open.tk.balance + cur.tk.balance },
+    tm: { ...cur.tm, balance: open.tm.balance + cur.tm.balance },
   };
 }

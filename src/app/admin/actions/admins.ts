@@ -6,7 +6,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
 import { isOwnerEmail } from "@/lib/auth";
-import { isAdminPerm } from "@/lib/permissions";
+import { DEFAULT_ON_PERMS, isAdminPerm } from "@/lib/permissions";
 import { errMsg, str, type FormState } from "./types";
 
 /* Admin Tổng quản lý admin (đăng nhập Gmail): thêm Gmail, duyệt yêu cầu, phân quyền, đổi tên, khoá, xoá, đăng xuất. */
@@ -56,7 +56,7 @@ export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormS
     const perms = permsOf(fd);
     const storeIds = await storesOf(fd);
     // admin mới: mặc định không vào app nhân viên (tick sau ở thẻ tài khoản)
-    const acc = await AdminAccount.create({ email, name, perms, storeIds, status: "ACTIVE", approvedBy: owner.email, approvedAt: new Date(), userApp: false });
+    const acc = await AdminAccount.create({ email, name, perms, permsSeeded: DEFAULT_ON_PERMS, storeIds, status: "ACTIVE", approvedBy: owner.email, approvedAt: new Date(), userApp: false });
     await dropEmptyUser(email);
     await audit(adminActor(owner), "admin.account.approve", { type: "AdminAccount", id: String(acc._id) }, null, { email, name, perms, storeIds: storeIds.map(String) });
     return done();

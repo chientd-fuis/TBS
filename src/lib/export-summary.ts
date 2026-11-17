@@ -121,8 +121,8 @@ export type MonthSummaryData = {
 
 /** Đọc toàn bộ dữ liệu của 1 tháng cho sheet tổng hợp. */
 export async function loadMonthSummary(month: string, storesIn?: StoreLite[]): Promise<MonthSummaryData> {
-  const stores = storesIn ?? (await loadStores());
   const { first, last } = monthRange(month);
+  const stores = storesIn ?? (await loadStores({ from: first, to: last }));
   const today = localDate(new Date());
   const to = month === today.slice(0, 7) ? today : last;
   const ids = stores.map((s) => s._id);

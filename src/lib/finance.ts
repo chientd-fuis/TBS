@@ -77,6 +77,12 @@ export const daysInMonth = (month: string) => {
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 };
 
+/** Số tiền / tháng chia cho ngày thứ `day` (1…n): làm tròn luỹ kế → cộng đủ cả tháng đúng bằng số tiền tháng, không lệch đồng nào. */
+export const monthDayShare = (amountPerMonth: number, month: string, day: number) => {
+  const n = daysInMonth(month);
+  return Math.round((amountPerMonth * day) / n) - Math.round((amountPerMonth * (day - 1)) / n);
+};
+
 /*
  * Mô hình lãi lỗ CHUỖI:
  *  - Mỗi cơ sở: Doanh thu thực thu (TM + TK + Grab + Shopee + tiền két đã chi) − phí sàn − chi phí trong ca (két)
@@ -235,8 +241,11 @@ export function computePnl(inp: PnlInput): PnlResult {
     // tiền két đã tính trong "Thu chi" chốt ca; khoản bỏ tick "tính vào chi phí" (VD lương) → không cộng
     if (!inDate.has(e.date) || !isCountedExpense(e)) continue;
     costGroups[expenseGroup(e.category)] += e.amount;
-    if (e.scope === "STORE" && e.storeId && inStore.has(String(e.storeId))) addLine(cell(e.date, String(e.storeId)), { direct: e.amount });
-    else {
+    if (e.scope === "STORE" && e.storeId) {
+      // bill gắn riêng 1 cơ sở không nằm trong báo cáo (đã tắt, không có doanh thu kỳ này) → không dồn sang chi phí chung
+      if (inStore.has(String(e.storeId))) addLine(cell(e.date, String(e.storeId)), { direct: e.amount });
+      else costGroups[expenseGroup(e.category)] -= e.amount;
+    } else {
       addCommon(e.date, e.amount);
       addCat(categoryGroup(e.category), e.amount); // gộp: Nguyên liệu / Điện nước / Lương / Khác
     }
@@ -246,10 +255,13 @@ export function computePnl(inp: PnlInput): PnlResult {
     for (const d of dates) {
       const m = d.slice(0, 7);
       if (m < f.startMonth || (f.endMonth && m > f.endMonth)) continue;
-      const perDay = Math.round(f.amountPerMonth / daysInMonth(m));
+      const perDay = monthDayShare(f.amountPerMonth, m, Number(d.slice(8)));
       costGroups.MAT_BANG += perDay;
-      if (f.scope === "STORE" && f.storeId && inStore.has(String(f.storeId))) addLine(cell(d, String(f.storeId)), { fixed: perDay });
-      else {
+      if (f.scope === "STORE" && f.storeId) {
+        // thuê nhà của cơ sở đã tắt (không có doanh thu kỳ này) → bỏ, không dồn sang chi phí chung
+        if (inStore.has(String(f.storeId))) addLine(cell(d, String(f.storeId)), { fixed: perDay });
+        else costGroups.MAT_BANG -= perDay;
+      } else {
         addCommon(d, perDay);
         addCat("KHAC", perDay);
       }

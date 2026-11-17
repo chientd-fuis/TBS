@@ -22,6 +22,7 @@ export const REQUEST_KINDS = [
   { key: "device", label: "📱 Đổi / thêm thiết bị chấm công" },
   { key: "adjustment", label: "✏️ Sửa giờ chấm công / chấm bù ca" },
   { key: "overtime", label: "⏱ Làm ngoài giờ / ngoài ca" },
+  { key: "support", label: "🏪 Hỗ trợ cơ sở khác (chưa xếp ca)" },
   { key: "probation", label: "🟣 Thử việc (hết 3 ca / hết tháng)" },
   { key: "cover", label: "🤝 Nhờ làm hộ / đổi ca" },
   { key: "shiftReg", label: "🗓 Đăng ký ca" },

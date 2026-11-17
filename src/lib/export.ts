@@ -144,9 +144,8 @@ export async function buildExport(f: ExportFilter) {
   if (f.type === "tonghopthang") {
     // mỗi tháng 1 sheet – toàn chuỗi (bỏ qua lọc cơ sở / nhân viên)
     const { addMonthSummarySheet } = await import("./export-summary");
-    const { loadStores } = await import("./finance-data");
-    const all = await loadStores();
-    for (const m of ms) await addMonthSummarySheet(wb, m, sheetName(`T${m.slice(5)}-${m.slice(0, 4)}`, used), meta, all);
+    // mỗi tháng tự lấy cơ sở của tháng đó (gồm cơ sở đã tắt nhưng còn doanh thu tháng đó)
+    for (const m of ms) await addMonthSummarySheet(wb, m, sheetName(`T${m.slice(5)}-${m.slice(0, 4)}`, used), meta);
   }
 
   if (f.type === "chamcong" || f.type === "tonghop") {

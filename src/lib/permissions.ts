@@ -7,9 +7,17 @@
  */
 export const ADMIN_PERMS = [
   { key: "adjustments", label: "Duyệt yêu cầu chấm công bù (nhân viên gửi)", group: "Chấm công" },
+  { key: "attendance.edit", label: "Chấm hộ / sửa giờ / xoá chấm công", group: "Chấm công" },
+  { key: "schedule", label: "Xếp ca / duyệt đăng ký ca", group: "Chấm công" },
+  { key: "employees.edit", label: "Thêm / sửa thông tin nhân viên (tên, SĐT, STK, cơ sở, nghỉ việc)", group: "Nhân viên" },
+  { key: "employees.pay", label: "Đổi lương giờ / hình thức lương (full-time, lương cứng), thử việc", group: "Nhân viên" },
+  { key: "employees.approve", label: "Duyệt nhân viên mới & thiết bị chấm công", group: "Nhân viên" },
+  { key: "employees.merge", label: "Gộp / chuyển tài khoản nhân viên", group: "Nhân viên" },
+  { key: "employees.staffPerms", label: "Cấp quyền quản lý cho nhân viên", group: "Nhân viên" },
   { key: "reminders", label: "Nhắc nhở – Bảng tin Bơ Sầu (nhắc việc theo ca cho nhân viên)", group: "Chấm công" },
   { key: "attendance.cutoff", label: "Chốt giờ công ca tối – bật / đổi giờ chốt từng cơ sở (Cài đặt)", group: "Chấm công" },
   { key: "revenue", label: "Doanh thu – xem bảng chốt ca luỹ kế theo ngày (menu Doanh thu, không sửa)", group: "Doanh thu" },
+  { key: "closing.edit", label: "Doanh thu – sửa / xoá số liệu chốt ca", group: "Doanh thu" },
   { key: "finance.shiftExpenses", label: "Tài chính – Chi phí trong ca", group: "Tài chính" },
   { key: "finance.bills", label: "Tài chính – Bill / chuyển khoản", group: "Tài chính" },
   { key: "finance.rent", label: "Tài chính – Tiền thuê nhà", group: "Tài chính" },
@@ -21,6 +29,7 @@ export const ADMIN_PERMS = [
   { key: "finance.cashcount.detail", label: "Tài chính – Sổ quỹ: xem số tiền mặt thực tế + chi tiết (đã lấy / chưa lấy, vốn đã lấy)", group: "Tài chính" },
   { key: "finance.settings", label: "Tài chính – Cài đặt", group: "Tài chính" },
   { key: "payroll", label: "Bảng lương", group: "Lương" },
+  { key: "bonus", label: "Thưởng / phạt (tạo / sửa / xoá)", group: "Lương" },
   { key: "payEstimate", label: "Lương tạm tính ở Tổng quan", group: "Lương" },
   { key: "goods", label: "Nhận hàng / tồn kho các cơ sở (xem / nhập)", group: "Hàng hoá" },
   { key: "goods.items", label: "Nguyên liệu & giá nhập (thêm / sửa / xoá món, giá)", group: "Hàng hoá" },
@@ -31,6 +40,21 @@ export const ADMIN_PERMS = [
 ] as const;
 export type AdminPerm = (typeof ADMIN_PERMS)[number]["key"];
 export const ADMIN_PERM_KEYS = ADMIN_PERMS.map((p) => p.key) as AdminPerm[];
+/**
+ * Quyền trước đây admin nào cũng có (chưa tách quyền) → MẶC ĐỊNH BẬT: admin cũ được tự thêm 1 lần (lib/admin-perm-seed.ts),
+ * admin mới được tích sẵn. Admin Tổng tắt sau thì giữ tắt (không tự bật lại).
+ */
+export const DEFAULT_ON_PERMS: AdminPerm[] = [
+  "attendance.edit",
+  "schedule",
+  "employees.edit",
+  "employees.pay",
+  "employees.approve",
+  "employees.merge",
+  "employees.staffPerms",
+  "closing.edit",
+  "bonus",
+];
 export const FINANCE_PERMS: AdminPerm[] = ["finance.shiftExpenses", "finance.bills", "finance.rent", "finance.revenue", "finance.cashbook", "finance.settings"];
 export const isAdminPerm = (v: unknown): v is AdminPerm => typeof v === "string" && (ADMIN_PERM_KEYS as string[]).includes(v);
 

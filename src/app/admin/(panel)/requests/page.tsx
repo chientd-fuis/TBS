@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
 import { AdjustmentRequest, Attendance, CoverRequest, PayrollFeedback, ProbationRequest, Store, User } from "@/lib/models";
 import { resolveOvertime } from "../../actions/overtime";
+import { resolveSupport } from "../../actions/support";
 import { resolveProbation } from "../../actions/probation";
 import { probationConfig, trialShiftLines } from "@/lib/probation";
 import { extraKinds, hoursShort, OVERTIME_GRACE_MIN } from "@/lib/overtime";
@@ -40,6 +41,11 @@ export default async function RequestsPage() {
     Attendance.find({ "overtime.status": "PENDING" }).sort({ checkOutAt: 1 }).lean(),
     Attendance.find({ "overtime.status": { $in: ["APPROVED", "REJECTED"] } }).sort({ "overtime.decidedAt": -1 }).limit(10).lean(),
   ]);
+  // hỗ trợ cơ sở chưa xếp ca (tự check-in ở cơ sở khác) chờ duyệt + 10 cái vừa xử lý
+  const [sups, supsDone] = await Promise.all([
+    Attendance.find({ "support.status": "PENDING" }).sort({ checkInAt: 1 }).lean(),
+    Attendance.find({ "support.status": { $in: ["APPROVED", "REJECTED"] } }).sort({ "support.decidedAt": -1 }).limit(10).lean(),
+  ]);
   // thử việc: hết 3 ca thử việc (Nhận / Không nhận) · hết tháng thử việc (Đồng ý 22k / Gia hạn)
   const [probs, probsDone, probCfg] = await Promise.all([
     ProbationRequest.find({ status: "PENDING" }).sort({ createdAt: 1 }).lean(),
@@ -47,7 +53,7 @@ export default async function RequestsPage() {
     probationConfig(),
   ]);
   const trialLines = new Map(await Promise.all(probs.filter((p) => p.kind === "TRIAL").map(async (p) => [String(p._id), await trialShiftLines(p.attendanceIds ?? [])] as const)));
-  const ids = [...reqs, ...done, ...fbs, ...ots, ...otsDone, ...probs, ...probsDone]
+  const ids = [...reqs, ...done, ...fbs, ...ots, ...otsDone, ...sups, ...supsDone, ...probs, ...probsDone]
     .map((r) => r.userId)
     .concat([...covers, ...coversDone].flatMap((c) => [c.fromUserId, c.toUserId]));
   const users = new Map((await User.find({ _id: { $in: ids } }).select("name").lean()).map((u) => [String(u._id), u.name]));
@@ -227,6 +233,54 @@ export default async function RequestsPage() {
                   </Badge>{" "}
                   {a.overtime?.decidedBy && <span className="text-ink/60">· {a.overtime.decidedBy}</span>}
                   {a.overtime?.reply && <span className="text-ink/60"> – {a.overtime.reply}</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </Card>
+      <Card title={`🏪 Hỗ trợ cơ sở chưa xếp ca (${sups.length})`} className="mb-4">
+        <p id="ho-tro" className="mb-2 text-xs text-ink/60">
+          Nhân viên tự check-in ở cơ sở khác cơ sở gốc khi chưa được xếp ca hỗ trợ. Mặc định <b>vẫn tính công</b> (lương do cơ sở gốc trả).{" "}
+          <b>Duyệt</b> = giữ nguyên. <b>Từ chối</b> = lượt này 0 giờ. Lần sau xếp ca hỗ trợ trước thì không cần duyệt.
+        </p>
+        {!canAdj && sups.length > 0 && <p className="mb-2 text-xs text-warn">Cần quyền &quot;Duyệt yêu cầu chấm công bù&quot; để xác nhận – bạn chỉ xem.</p>}
+        {sups.length === 0 ? (
+          <Empty>Không có yêu cầu hỗ trợ cơ sở</Empty>
+        ) : (
+          <div className="space-y-3">
+            {sups.map((a) => (
+              <div key={String(a._id)} className="rounded-xl bg-warn-soft p-3 text-sm ring-1 ring-warn-line">
+                <p>
+                  <b>{users.get(String(a.userId))}</b> · {weekdayVi(a.workDate)} {viDate(a.workDate)}
+                </p>
+                <p>
+                  Cơ sở gốc <b>{stores.get(String(a.homeStoreId ?? "")) ?? "?"}</b> → làm tại <b>{stores.get(String(a.storeId))}</b>
+                </p>
+                <p>
+                  vào <b>{hm(a.checkInAt, a.storeId)}</b> → ra <b>{a.checkOutAt ? hm(a.checkOutAt, a.storeId) : a.status === "OPEN" ? "đang làm" : "quên check-out"}</b>
+                  {a.checkOutAt ? <span className="text-xs text-ink/70"> · đang tính {a.roundedHours ?? 0}h công</span> : null}
+                </p>
+                <Who storeId={a.storeId} perm={APPROVE_PERM.support} />
+                {canAdj && (
+                  <ApproveRejectForm action={resolveSupport} approveLabel="Duyệt hỗ trợ" placeholder="Ghi chú (tuỳ chọn)">
+                    <input type="hidden" name="id" value={String(a._id)} />
+                  </ApproveRejectForm>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {supsDone.length > 0 && (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-accent">Đã xử lý gần đây</summary>
+            <ul className="mt-2 space-y-1 text-xs">
+              {supsDone.map((a) => (
+                <li key={String(a._id)}>
+                  {users.get(String(a.userId))} · {viDate(a.workDate)} · {stores.get(String(a.storeId))}{" "}
+                  <Badge tone={a.support?.status === "APPROVED" ? "green" : "red"}>{a.support?.status === "APPROVED" ? "Đã duyệt" : "Từ chối – 0 giờ"}</Badge>{" "}
+                  {a.support?.decidedBy && <span className="text-ink/60">· {a.support.decidedBy}</span>}
+                  {a.support?.reply && <span className="text-ink/60"> – {a.support.reply}</span>}
                 </li>
               ))}
             </ul>

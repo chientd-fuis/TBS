@@ -170,7 +170,7 @@ async function syncTemplateAssignments(tplId: string, from: string) {
 /** Xếp ca hàng loạt: nhiều nhân viên × khoảng ngày × thứ trong tuần. */
 export async function assignShifts(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("schedule");
     const tpl = await ShiftTemplate.findById(str(fd.get("templateId"))).lean();
     if (!tpl) return { error: "Chọn ca" };
     const userIds = fd.getAll("userIds").map(String).filter(Boolean);
@@ -203,7 +203,7 @@ export async function assignShifts(_: FormState, fd: FormData): Promise<FormStat
 
 export async function removeAssignment(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("schedule");
     const id = str(fd.get("id"));
     const a = await ShiftAssignment.findByIdAndDelete(id).lean();
     await audit(adminActor(admin), "shift.unassign", { type: "ShiftAssignment", id }, a, null);
@@ -217,7 +217,7 @@ export async function removeAssignment(_: FormState, fd: FormData): Promise<Form
 /** Copy lịch tuần trước sang tuần đang xem. */
 export async function copyPrevWeek(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("schedule");
     const storeId = str(fd.get("storeId"));
     const weekStart = str(fd.get("weekStart"));
     const prev = await ShiftAssignment.find({ storeId, date: { $gte: addDays(weekStart, -7), $lt: weekStart }, ...APPROVED_SHIFT }).lean();
@@ -245,7 +245,7 @@ export async function copyPrevWeek(_: FormState, fd: FormData): Promise<FormStat
 /** Chấm công hộ – không cần nhân viên xác nhận (spec 3.5). */
 export async function manualAttendance(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("attendance.edit");
     await upsertAttendance(admin, {
       userId: str(fd.get("userId")),
       date: str(fd.get("date")),
@@ -276,7 +276,7 @@ const MAX_BULK = 60;
  */
 export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; dryRun: boolean }): Promise<{ error?: string; results?: BulkResult[] }> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("attendance.edit");
     const reason = (input.reason ?? "").trim();
     if (!input.dryRun && reason.length < 3) return { error: "Bắt buộc nhập lý do" };
     if (!Array.isArray(input.rows) || input.rows.length > MAX_BULK) return { error: `Tối đa ${MAX_BULK} lượt mỗi lần gửi` };
@@ -343,7 +343,7 @@ export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; d
 
 export async function editAttendance(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("attendance.edit");
     const id = str(fd.get("id"));
     const a = await Attendance.findById(id).lean();
     if (!a) return { error: "Không tìm thấy" };
@@ -369,7 +369,7 @@ export async function editAttendance(_: FormState, fd: FormData): Promise<FormSt
 
 export async function deleteAttendance(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("attendance.edit");
     const id = str(fd.get("id"));
     const reason = str(fd.get("reason"));
     if (reason.length < 3) return { error: "Nhập lý do xoá" };
@@ -389,7 +389,7 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
 /* ===== Thưởng / phạt – admin nhập tự do (spec 3.6) ===== */
 export async function createBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("bonus");
     // 1 người (userId) hoặc nhiều người cùng lúc (userIds – chọn nhiều)
     const ids = [...new Set([...fd.getAll("userIds"), fd.get("userId")].map((v) => str(v)).filter((v) => /^[a-f\d]{24}$/i.test(v)))];
     if (!ids.length) return { error: "Chọn nhân viên" };
@@ -424,7 +424,7 @@ export async function createBonusPenalty(_: FormState, fd: FormData): Promise<Fo
 /** Sửa khoản thưởng/phạt (khi tháng chưa chốt). */
 export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("bonus");
     const bp = await BonusPenalty.findById(str(fd.get("id")));
     if (!bp) return { error: "Không tìm thấy" };
     const date = str(fd.get("date"));
@@ -449,7 +449,7 @@ export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<Fo
 
 export async function deleteBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("bonus");
     const bp = await BonusPenalty.findById(str(fd.get("id")));
     if (!bp) return { error: "Không tìm thấy" };
     await assertNotLocked(bp.storeId, bp.month, bp.userId);
@@ -710,7 +710,7 @@ export async function replyFeedback(_: FormState, fd: FormData): Promise<FormSta
 /** Xoá hàng loạt lượt chấm công đã tích (bảng chấm công của 1 nhân viên). Tháng đã chốt lương → bỏ qua lượt đó. */
 export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("attendance.edit");
     const actor = adminActor(admin);
     const ids = [...new Set(fd.getAll("ids").map(String))].filter((x) => Types.ObjectId.isValid(x));
     if (!ids.length) return { error: "Chưa tích lượt nào" };

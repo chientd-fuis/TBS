@@ -49,7 +49,10 @@ export default async function HomePage() {
   // cách chấm công cần chuẩn bị: cơ sở đang check-in (để check-out) hoặc cơ sở gốc + cơ sở hỗ trợ hôm nay
   const candIds = open ? [String(open.storeId)] : [String(user.storeId), ...shifts.map((s) => String(s.storeId))];
   const cand = await Store.find({ _id: { $in: [...new Set(candIds)] } }).select("name checkFace faceDetect checkGps checkWifi wifiName").lean();
-  const methods = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
+  const base = cand.length ? anyMethods(cand.map(methodsOf)) : methodsOf(store);
+  // chưa check-in: được chấm ở cơ sở khác dù chưa xếp ca (gửi admin duyệt hỗ trợ) → lấy vị trí nếu có cơ sở nào kiểm tra vị trí
+  const anyGps = !open && !base.gps && (await Store.exists({ active: true, checkGps: { $ne: false } }));
+  const methods = anyGps ? { ...base, gps: true } : base;
   // nhân viên thử việc: không Chốt ca / Nhận hàng / Tồn kho
   const trial = isProbation(user);
   // 3 ca thử việc: đã xong mấy ca

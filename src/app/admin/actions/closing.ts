@@ -64,7 +64,7 @@ export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormSt
 /** Admin sửa số liệu doanh thu của 1 lượt chốt ca → cộng lại ngày (ngày đã ghi sheet thì ghi lại). */
 export async function editClosingRevenue(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("closing.edit");
     const id = str(fd.get("id"));
     const { ShiftClosing } = await import("@/lib/models");
     const { evalMoneyExpr, REVENUE_KEYS } = await import("@/lib/revenue");
@@ -117,7 +117,7 @@ export async function testRevenueSheet(_: FormState, fd: FormData): Promise<Form
 /** Xoá hẳn 1 lượt chốt ca → cộng lại doanh thu ngày (ngày đã ghi sheet thì ghi lại số mới). */
 export async function deleteClosing(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("closing.edit");
     const id = str(fd.get("id"));
     const { ShiftClosing, DayRevenue } = await import("@/lib/models");
     const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");

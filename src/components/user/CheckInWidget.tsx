@@ -156,7 +156,11 @@ export default function CheckInWidget({
       const where = res.storeName ? ` · ${res.storeName}${res.support ? " (hỗ trợ)" : ""}` : "";
       // 1 thông báo duy nhất: "thành công" + lưu ý (nếu có) ngay bên dưới – không hiện thêm ô cảnh báo riêng như báo lỗi
       const notes = [
-        res.action === "CHECK_IN" && res.outOfShift ? "Bạn không có ca được xếp vào giờ này – giờ làm sẽ được gửi quản lý xác nhận. Nhớ CHECK-OUT khi về." : "",
+        res.action === "CHECK_IN" && res.outOfShift
+          ? res.support
+            ? `Bạn chưa được xếp ca hỗ trợ tại ${res.storeName ?? "cơ sở này"} – đã gửi admin duyệt hỗ trợ. Nhớ CHECK-OUT tại đây khi về.`
+            : "Bạn không có ca được xếp vào giờ này – giờ làm sẽ được gửi quản lý xác nhận. Nhớ CHECK-OUT khi về."
+          : "",
         res.action === "CHECK_IN" && res.lateMinutes ? `Đi muộn ${minutesVi(res.lateMinutes)}.` : "",
         res.cappedAt ? `Quá giờ chốt ca tối – chỉ tính công tới ${res.cappedAt}.` : "",
         res.earlyMinutes ? `Về sớm ${minutesVi(res.earlyMinutes)}.` : "",

@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { AdminAccount, Device, ProbationRequest, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
-import { assertAdmin, assertOwner } from "@/lib/guards";
+import { assertAdmin, assertOwner, assertPerm } from "@/lib/guards";
+import { can } from "@/lib/permissions";
 import { isOwnerEmail } from "@/lib/auth";
 import { isPayType, payTermsAt, type PayType } from "@/lib/salary";
 import { adminActor } from "@/lib/admin-session";
@@ -16,7 +17,7 @@ import { makeOfficial, PROBATION_WAGE } from "@/lib/probation";
 /* ===== Duyệt đăng ký (spec 3.1) ===== */
 export async function approveUser(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.approve");
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user || user.status !== "PENDING") return { error: "Đăng ký không còn ở trạng thái chờ duyệt" };
@@ -50,7 +51,7 @@ export async function approveUser(_: FormState, fd: FormData): Promise<FormState
  */
 export async function probationAction(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.pay");
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
@@ -94,7 +95,7 @@ export async function probationAction(_: FormState, fd: FormData): Promise<FormS
 
 export async function rejectUser(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.approve");
     const reason = str(fd.get("reason"));
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy" };
@@ -139,7 +140,7 @@ async function applyPayTerms(user: UserInstance, payType: PayType, monthlySalary
 /** Card "Hình thức lương" ở Chi tiết nhân viên. */
 export async function setPayTerms(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.pay");
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
@@ -200,7 +201,7 @@ export async function createAdminStaff(_: FormState, fd: FormData): Promise<Form
 /* ===== Quản lý nhân viên (spec 3.3) ===== */
 export async function updateEmployee(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.edit");
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
     const before = { name: user.name, phone: user.phone, bankName: user.bankName, storeId: String(user.storeId), status: user.status };
@@ -234,7 +235,7 @@ export async function updateEmployee(_: FormState, fd: FormData): Promise<FormSt
 /** Đổi lương giờ có ngày hiệu lực (hỗ trợ đổi lương giữa tháng). */
 export async function setWage(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.pay");
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
     const wage = num(fd.get("hourlyWage"));
@@ -256,7 +257,7 @@ export async function setWage(_: FormState, fd: FormData): Promise<FormState> {
 /* ===== Thiết bị (spec 4.1.1) ===== */
 export async function deviceAction(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.approve");
     const id = str(fd.get("deviceRefId"));
     const op = str(fd.get("op"));
     const dev = await Device.findById(id);
@@ -280,7 +281,7 @@ export async function deviceAction(_: FormState, fd: FormData): Promise<FormStat
 /* ===== Chuyển tài khoản: dữ liệu Gmail cũ → Gmail mới, rồi xoá tài khoản cũ ===== */
 export async function previewAccountTransfer(fromId: string, toId: string) {
   try {
-    await assertAdmin();
+    await assertPerm("employees.merge");
     const { previewMerge } = await import("@/lib/account-merge");
     return { ok: true as const, preview: await previewMerge(fromId, toId) };
   } catch (e) {
@@ -290,7 +291,7 @@ export async function previewAccountTransfer(fromId: string, toId: string) {
 
 export async function transferAccount(fromId: string, toId: string) {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.merge");
     const { mergeUserAccount } = await import("@/lib/account-merge");
     const r = await mergeUserAccount(fromId, toId);
     await audit(adminActor(admin), "user.transfer", { type: "User", id: toId }, { userId: fromId, email: r.fromEmail }, { userId: toId, email: r.toEmail, moved: r.moved });
@@ -304,7 +305,7 @@ export async function transferAccount(fromId: string, toId: string) {
 /* ===== Cấp quyền quản lý cho nhân viên (xếp ca / thưởng-phạt / duyệt đổi ca-làm hộ) ===== */
 export async function setStaffPerms(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.staffPerms");
     const { isStaffPerm } = await import("@/lib/permissions");
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
@@ -361,7 +362,7 @@ async function makeOfflineStaff(
 /** Form ở trang Nhân viên. */
 export async function createOfflineStaff(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.edit");
     await makeOfflineStaff(admin, {
       name: str(fd.get("name")),
       storeId: str(fd.get("storeId")),
@@ -381,7 +382,7 @@ export async function createOfflineStaff(_: FormState, fd: FormData): Promise<Fo
 /** Tạo nhanh từ màn Import Excel (sheet không khớp nhân viên nào) → trả id để gán luôn. */
 export async function quickCreateOfflineStaff(name: string, storeId: string, hourlyWage: number): Promise<{ id?: string; name?: string; error?: string }> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.edit");
     const u = await makeOfflineStaff(admin, { name, storeId, hourlyWage, active: false });
     return { id: String(u._id), name: u.name };
   } catch (e) {
@@ -395,7 +396,7 @@ export async function quickCreateOfflineStaff(name: string, storeId: string, hou
  */
 export async function quickEditEmployee(_: FormState, fd: FormData): Promise<FormState> {
   try {
-    const admin = await assertAdmin();
+    const admin = await assertPerm("employees.edit");
     await connectDB();
     const user = await User.findById(str(fd.get("userId")));
     if (!user) return { error: "Không tìm thấy nhân viên" };
@@ -407,6 +408,12 @@ export async function quickEditEmployee(_: FormState, fd: FormData): Promise<For
     const from = str(fd.get("effectiveFrom")) || localDate(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Ngày hiệu lực không hợp lệ" };
     const before = { name: user.name, hourlyWage: user.hourlyWage, payType: user.payType, monthlySalary: user.monthlySalary };
+    // đổi lương / hình thức lương cần thêm quyền "Đổi lương" (chỉ đổi tên thì không)
+    const payChanged =
+      payType !== (user.payType ?? "HOURLY") ||
+      (payType === "HOURLY" && wage !== user.hourlyWage) ||
+      (payType === "FULLTIME" && Math.round(num(fd.get("monthlySalary"))) !== (user.monthlySalary ?? 0));
+    if (payChanged && !can(admin, "employees.pay")) return { error: "Bạn chưa được Admin Tổng cấp quyền đổi lương" };
     user.name = name;
     // hình thức lương đổi theo tháng (tháng của ngày hiệu lực)
     await applyPayTerms(user, payType, num(fd.get("monthlySalary")), from.slice(0, 7), adminActor(admin).name, dec(fd.get("paidLeaveDays")));
