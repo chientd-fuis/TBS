@@ -106,6 +106,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {isOwner && (
+          <Card title="🔒 Chính sách quyền riêng tư">
+            <p className="text-sm text-ink/70">
+              {(s.privacyVersion ?? 0) > 0 ? (
+                <>Đang áp dụng <b>v{s.privacyVersion}</b>. </>
+              ) : (
+                <><b className="text-warn">Chưa phát hành.</b> </>
+              )}
+              Soạn bằng Markdown, xem trước rồi phát hành. Nhân viên đọc ở trang Chính sách, phải đồng ý khi đăng ký và khi có bản mới thì mới chấm công được.{" "}
+              <Link className="text-accent underline" href="/admin/settings/privacy">Mở Quyền riêng tư →</Link>
+            </p>
+          </Card>
+        )}
+
+        {isOwner && (
           <Card title="📦 Nhận hàng các cơ sở">
             <ActionForm action={saveGoodsEnabled} submitLabel="Lưu" successText="Đã lưu">
               <label className="flex items-start gap-2 text-sm">

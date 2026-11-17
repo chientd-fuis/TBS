@@ -6,6 +6,7 @@ import { Store, User } from "@/lib/models";
 import { encrypt } from "@/lib/crypto";
 import { HttpError, jsonError } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { getSettings } from "@/lib/settings";
 
 const Body = z.object({
   storeId: z.string().min(1),
@@ -13,7 +14,8 @@ const Body = z.object({
   phone: z.string().trim().min(8).max(20),
   bankName: z.string().trim().max(60).default(""),
   bankAccount: z.string().trim().max(30).default(""),
-  consent: z.literal(true),
+  consent: z.literal(true), // đồng ý Chính sách quyền riêng tư
+  consentBio: z.literal(true), // đồng ý ảnh khuôn mặt + vị trí khi chấm công
 });
 
 /** Đăng ký vào cửa hàng lần đầu (spec 4.1). */
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
     const parsed = Body.safeParse(await req.json());
     if (!parsed.success) throw new HttpError(400, "Thông tin chưa hợp lệ – kiểm tra lại các trường bắt buộc");
     const b = parsed.data;
+    const { privacyVersion } = await getSettings();
     const store = await Store.findOne({ _id: b.storeId, active: true }).lean();
     if (!store) throw new HttpError(400, "Cơ sở không tồn tại");
 
@@ -40,6 +43,8 @@ export async function POST(req: Request) {
           status: "PENDING",
           registeredAt: new Date(),
           consentFaceAt: new Date(),
+          privacyVersion: privacyVersion ?? 0,
+          privacyConsentAt: new Date(),
         },
         $unset: { rejectReason: 1 },
       },

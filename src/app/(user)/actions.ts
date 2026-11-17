@@ -164,3 +164,19 @@ export async function setMyTheme(theme: string): Promise<{ ok?: boolean; error?:
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/** Đồng ý Chính sách quyền riêng tư (popup khi có bản mới). version = bản nhân viên đã xem – admin vừa phát hành bản mới hơn thì bắt đọc lại. */
+export async function acceptPrivacy(version: number): Promise<{ ok?: boolean; error?: string }> {
+  const user = await requireActiveUser();
+  const { getSettings } = await import("@/lib/settings");
+  const cur = (await getSettings()).privacyVersion ?? 0;
+  if (!cur) return { ok: true };
+  if (version !== cur) return { error: "Chính sách vừa được cập nhật – tải lại trang để đọc bản mới nhất." };
+  const { User } = await import("@/lib/models");
+  const now = new Date();
+  await User.updateOne({ _id: user._id }, { $set: { privacyVersion: cur, privacyConsentAt: now, consentFaceAt: now } });
+  const { audit } = await import("@/lib/audit");
+  await audit({ kind: "USER", name: user.email }, "user.privacy.accept", { type: "User", id: String(user._id) }, null, { version: cur });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

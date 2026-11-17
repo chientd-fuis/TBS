@@ -10,12 +10,14 @@ import { SignOutButton } from "@/components/user/AuthButtons";
 import ThemePicker from "@/components/user/ThemePicker";
 import { isThemeId } from "@/lib/themes";
 import { setMyTheme } from "../actions";
+import { getSettings } from "@/lib/settings";
 
 export default async function AccountPage() {
   const user = await requireActiveUser();
   const store = await Store.findById(user.storeId).lean();
   const devices = await Device.find({ userId: user._id }).sort({ lastSeenAt: -1 }).lean();
   const acc = decrypt(user.bankAccountEnc);
+  const pv = (await getSettings()).privacyVersion ?? 0;
   return (
     <>
       <Card title="Màu giao diện">
@@ -55,6 +57,19 @@ export default async function AccountPage() {
             </li>
           ))}
         </ul>
+      </Card>
+      <Card title="🔒 Quyền riêng tư">
+        <dl className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 text-sm">
+          <dt>Chính sách quyền riêng tư</dt>
+          <dd><a href="/privacy" className="font-bold text-accent underline">Xem{pv ? ` (v${pv})` : ""}</a></dd>
+          <dt>Đồng ý xử lý dữ liệu</dt>
+          <dd className={user.privacyConsentAt ? "font-bold text-good" : "text-ink/60"}>
+            {user.privacyConsentAt ? `✓ ${viDateTime(user.privacyConsentAt)}${user.privacyVersion ? ` · v${user.privacyVersion}` : ""}` : "—"}
+          </dd>
+          <dt>Ảnh khuôn mặt & vị trí</dt>
+          <dd className={user.consentFaceAt ? "font-bold text-good" : "text-ink/60"}>{user.consentFaceAt ? `✓ ${viDateTime(user.consentFaceAt)}` : "—"}</dd>
+        </dl>
+        <p className="mt-2 text-xs text-ink/60">Muốn rút lại đồng ý hoặc xin xoá dữ liệu: báo người phụ trách ghi trong Chính sách. Rút đồng ý ảnh & vị trí thì không chấm công trên app được.</p>
       </Card>
       <div className="text-center"><SignOutButton /></div>
     </>

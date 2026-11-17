@@ -72,6 +72,12 @@ const SettingsSchema = new Schema(
     // Thử việc (lib/probation.ts)
     probationMonthOn: { type: Boolean, default: true }, // có tháng thử việc (20k/h, hết tháng hỏi admin lên 22k) – tắt: nhận sau 3 ca là chính thức luôn
     probationTrialHalf: { type: Boolean, default: true }, // 3 ca thử việc tính 50% giờ công – tắt: tính đủ
+    // Chính sách quyền riêng tư (lib/privacy.ts): Admin Tổng soạn Markdown ở Cài đặt → Quyền riêng tư.
+    // privacyVersion 0 = chưa phát hành (không bắt nhân viên đồng ý). Phát hành bản mới → nhân viên phải đồng ý lại mới chấm công được.
+    privacyMd: { type: String, default: "" },
+    privacyVersion: { type: Number, default: 0 },
+    privacyPublishedAt: Date,
+    privacyUpdatedAt: Date,
   },
   { timestamps: true },
 );
@@ -155,6 +161,9 @@ const UserSchema = new Schema(
     firstWorkDate: String,
     registeredAt: Date,
     consentFaceAt: Date,
+    // phiên bản Chính sách quyền riêng tư nhân viên đã đồng ý (Settings.privacyVersion) + lúc đồng ý
+    privacyVersion: { type: Number, default: 0 },
+    privacyConsentAt: Date,
     // quyền quản lý admin cấp cho nhân viên (lib/permissions.ts): schedule | bonus | cover
     // nhân viên admin tự tạo, không có Gmail đăng nhập (VD đã nghỉ việc – để nhập chấm công / tính lương tháng cũ)
     noLogin: { type: Boolean, default: false },

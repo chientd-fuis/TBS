@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/guards";
 import { APPROVED_SHIFT, Attendance, Device, ShiftAssignment, Store } from "@/lib/models";
+import { needsPrivacyConsent } from "@/lib/privacy";
 import { getSettings } from "@/lib/settings";
 import { checkDeviceForAttendance, clientInfo } from "@/lib/device";
 import { ipAllowed, methodsOf } from "@/lib/checkin-methods";
@@ -54,6 +55,9 @@ export async function POST(req: Request) {
     if (!parsed.success) throw new HttpError(400, "Dữ liệu chấm công không hợp lệ");
     const b = parsed.data;
     const settings = await getSettings();
+    // Chính sách quyền riêng tư có bản mới chưa đồng ý → chưa cho chấm công (popup đồng ý ở app)
+    if (needsPrivacyConsent(settings, user))
+      throw new HttpError(403, "Bạn cần đọc và đồng ý Chính sách quyền riêng tư trước khi chấm công – bấm “Đồng ý” ở thông báo trên màn hình.", { code: "PRIVACY" });
 
     // 0. Thiết bị
     const dev = await checkDeviceForAttendance(user._id);

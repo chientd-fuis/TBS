@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getSettings } from "@/lib/settings";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/guards";
 import { Attendance, AttendanceArchive, Device, LoginLog, ProbationRequest, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
@@ -22,6 +23,7 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
   const { id } = await params;
   const { transferred } = await searchParams;
   const u = await User.findById(id).lean().catch(() => null);
+  const privacyVersion = (await getSettings()).privacyVersion ?? 0;
   if (!u) notFound();
   const [stores, devices, wages, logs, others, salaries] = await Promise.all([
     Store.find().sort({ name: 1 }).lean(),
@@ -77,7 +79,21 @@ export default async function EmployeeDetail({ params, searchParams }: { params:
                   Thâm niên: <b>{seniorityText(startDay, localDate(new Date()))}</b> (từ {viDate(startDay)}) · {workDays} ngày công
                 </p>
               )}
-              <p>Đồng ý điều khoản chấm công: {u.consentFaceAt ? viDateTime(u.consentFaceAt) : "—"}</p>
+              <p>Đồng ý ảnh & vị trí chấm công: {u.consentFaceAt ? viDateTime(u.consentFaceAt) : "—"}</p>
+              <p>
+                Chính sách quyền riêng tư:{" "}
+                {(u.privacyVersion ?? 0) > 0 ? (
+                  <b className={(u.privacyVersion ?? 0) >= privacyVersion ? "text-good" : "text-warn"}>
+                    ✓ Đã đồng ý v{u.privacyVersion}
+                    {u.privacyConsentAt ? ` · ${viDateTime(u.privacyConsentAt)}` : ""}
+                    {(u.privacyVersion ?? 0) < privacyVersion ? ` – chưa đồng ý bản mới v${privacyVersion}` : ""}
+                  </b>
+                ) : privacyVersion > 0 ? (
+                  <b className="text-red-700">Chưa đồng ý (chưa chấm công được)</b>
+                ) : (
+                  "—"
+                )}
+              </p>
             </div>
           </div>
           <ActionForm action={updateEmployee}>

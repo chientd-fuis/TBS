@@ -17,6 +17,9 @@ import { THEME_ROOT_ID, themeClass, themeOf } from "@/lib/themes";
 import { themeViewport } from "@/lib/theme-server";
 import ReminderPopup from "@/components/ShiftReminders";
 import { activeRemindersFor } from "@/lib/reminders";
+import { getSettings } from "@/lib/settings";
+import { needsPrivacyConsent } from "@/lib/privacy";
+import PrivacyConsentModal from "@/components/user/PrivacyConsentModal";
 
 // các nút AI (Hỏi AI, Trợ lý, Giải thích lương, Gợi ý số người) gọi Gemini 1–2 lần → cho server chạy tối đa 60 giây
 export const maxDuration = 60;
@@ -34,6 +37,9 @@ export default async function UserLayout({ children }: { children: React.ReactNo
   const trial = isProbation(user);
   // Bảng tin Bơ Sầu: nhắc việc chưa xem của ca sắp / đang làm → popup ở mọi trang
   const reminders = (await activeRemindersFor(user._id).catch(() => [])).filter((r) => !r.seen);
+  // Chính sách quyền riêng tư có bản chưa đồng ý → popup đồng ý (chấm công bị chặn đến khi đồng ý)
+  const settings = await getSettings();
+  const askPrivacy = needsPrivacyConsent(settings, user);
   return (
     <div id={THEME_ROOT_ID} className={cn("min-h-screen", themeClass(themeOf(user)))}>
     <div className="mx-auto min-h-screen max-w-lg pb-24">
@@ -70,6 +76,7 @@ export default async function UserLayout({ children }: { children: React.ReactNo
         )}
       </header>
       <main className="space-y-4 p-4">
+        {askPrivacy && <PrivacyConsentModal version={settings.privacyVersion ?? 0} renewed={(user.privacyVersion ?? 0) > 0} />}
         <UserNotices userId={user._id} />
         <RegRequestAlert userId={user._id} tz={store?.timezone || "Asia/Ho_Chi_Minh"} />
         {children}
