@@ -10,7 +10,7 @@ import { Badge, Card } from "@/components/ui";
 import ClosingForm from "./ClosingForm";
 import { resolveClosingContext } from "@/lib/closing-context";
 import { ocrConfigured } from "@/lib/ocr";
-import { CLOSING_SHIFTS, closingWorkDate, sortClosings, defaultClosingShift, revenueDiff, type ClosingShiftKey, type Revenue } from "@/lib/revenue";
+import { CLOSING_SHIFTS, closingWorkDate, defaultClosingShift, type ClosingShiftKey } from "@/lib/revenue";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +29,6 @@ export default async function ClosingPage() {
   const defaultShift = defaultClosingShift(hour);
   const today = ctx?.today ?? "";
   const dateOf = (k: ClosingShiftKey) => (today ? closingWorkDate(k, today, hour, addDays) : "");
-  // các ca đã chốt trước trong ngày của ca Tối (ca cuối thấy tổng ngày trước khi ghi sheet)
-  const nightDate = dateOf("T");
   // ca đã chốt rồi (cùng ngày + ca) → mở lại để SỬA, không tạo bản ghi mới
   const existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string; total?: string }>> = {};
   if (ctx)
@@ -48,16 +46,6 @@ export default async function ClosingPage() {
         by: doc.employeeName ?? "",
       };
     }
-  // các ca đã chốt trước ca Tối trong ngày (số LUỸ KẾ: ca Chiều đã gồm ca Sáng)
-  const dayBefore = ctx
-    ? sortClosings(
-        await ShiftClosing.find({ storeId: ctx.store._id, workDate: nightDate, "revenue.tm": { $ne: null }, shiftName: { $ne: "Tối" } }).lean(),
-      ).map((c) => ({
-        label: `${c.shiftName ? `Ca ${c.shiftName}` : "Ngoài ca"} · ${c.employeeName ?? ""}`,
-        dt: (c.revenue?.tm ?? 0) + (c.revenue?.tk ?? 0) + (c.revenue?.grab ?? 0) + (c.revenue?.shopee ?? 0) + (c.revenue?.cp ?? 0),
-        diff: c.revenue?.dt != null ? revenueDiff((c.revenue ?? {}) as Partial<Revenue>) : 0,
-      }))
-    : [];
   const recent = await ShiftClosing.find({ userId: user._id }).sort({ createdAt: -1 }).limit(5).lean();
   return (
     <>
@@ -72,7 +60,6 @@ export default async function ClosingPage() {
         checkIn={att ? localTime(att.checkInAt, tz).slice(0, 5) : null}
         employee={`${user.name}${user.phone ? ` · ${user.phone}` : ""}`}
         storeName={ctx?.store.name}
-        dayBefore={dayBefore}
         existing={existing}
         ocrEnabled={ocrConfigured() && (await aiPhotoOn("closing")) && (await aiAllowed("closingOcr", `user:${user._id}`))}
       />

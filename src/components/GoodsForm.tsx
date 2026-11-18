@@ -4,11 +4,15 @@ import { useRouter } from "next/navigation";
 import { Camera, Loader2, Minus, PencilLine, Plus, Sparkles, X } from "lucide-react";
 import { Alert, Button } from "@/components/ui";
 import { DatePickButton } from "@/components/DatePickButton";
-import { mergeLines, parseGoodsText, qtyVi, RETURN_REASONS, type GoodsItem, type GoodsKind, type GoodsLine } from "@/lib/goods";
+import { mergeLines, parseGoodsText, qtyAlert, qtyAlertText, qtyVi, RETURN_REASONS, type GoodsItem, type GoodsKind, type GoodsLine } from "@/lib/goods";
 import type { GoodsInput } from "@/lib/goods-server";
 
-type Draft = { key: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; time?: string; source: "TEXT" | "PHOTO" | "MANUAL"; dup?: string; unknown?: string[] };
-type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: GoodsKind; reason?: string; photos?: string[] };
+type Draft = { key: string; date: string; lines: GoodsLine[]; note: string; raw?: string; sender?: string; time?: string; source: "TEXT" | "PHOTO" | "MANUAL"; dup?: string; unknown?: string[];
+  /** phiếu kiểm kê: số AI đọc ở cột XUẤT (khi đang nhận hàng) – hỏi lại người nhập */
+  out?: GoodsLine[] };
+type SaveInput = { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind: GoodsKind; reason?: string; photos?: string[]; alsoReturn?: { drafts: GoodsInput[]; reason: string } };
+const OUT_REASON = "Xuất theo phiếu kiểm kê";
+const lineText = (l: GoodsLine) => `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`;
 /** chữ gõ khi trả hàng: bỏ chữ "trả / trả lại / hoàn" để bộ đọc món hiểu như nhận hàng */
 const stripReturnWords = (s: string) => s.replace(/(^|\s)(đã\s+|da\s+)?(trả\s+lại|tra\s+lai|trả|tra|hoàn|hoan)(?=\s|$)/gi, " ");
 type Result = { ok?: boolean; error?: string; message?: string };
@@ -133,6 +137,9 @@ export default function GoodsForm({
   // chế độ Nhận / Trả (chỉ khi allowReturn); sửa 1 lần đã ghi → giữ đúng loại của lần đó
   const [k, setK] = useState<GoodsKind>(initial?.kind ?? kind);
   const [reason, setReason] = useState(initial?.reason ?? "");
+  // cột XUẤT trên phiếu khi nhận hàng: null = chưa hỏi · notMistake = không nhầm, hỏi tiếp có đưa sang Xuất · asReturn = lưu kèm phần Xuất
+  const [outMode, setOutMode] = useState<null | "notMistake" | "asReturn">(null);
+  const [outReason, setOutReason] = useState(OUT_REASON);
   const stock = k === "STOCK";
   const ret = k === "RETURN";
   const isUser = mode === "user";
@@ -176,8 +183,12 @@ export default function GoodsForm({
         return;
       }
       // ảnh nhóm chat → mỗi tin báo 1 lần. Nhân viên: luôn ngày hôm nay + luôn báo nhóm; admin: theo ngày trên tin, mặc định không báo lại
-      const fresh = got.map((g) => ({ ...blank(today), ...g, date: isUser ? today : g.date, note: "", source: "PHOTO" as const }));
-      setDrafts((ds) => [...ds.filter((d) => d.lines.length), ...fresh]);
+      const fresh = got.map((g) => ({ ...blank(today), ...g, out: k === "RECEIVE" ? g.out ?? [] : [], date: isUser ? today : g.date, note: "", source: "PHOTO" as const }));
+      setDrafts((ds) => [...ds.filter((d) => d.lines.length || d.out?.length), ...fresh]);
+      if (fresh.some((d) => d.out.length)) {
+        setOutMode(null);
+        setOutReason(OUT_REASON);
+      }
       if (!isUser) setTelegram(false);
       setMsg({ tone: "green", text: `AI đọc được ${fresh.length} tin báo ${stock ? "tồn" : ret ? "trả" : "nhận"} – kiểm tra lại số rồi bấm Lưu` });
     } catch {
@@ -210,9 +221,16 @@ export default function GoodsForm({
       setText("");
     }
     const used = ds.filter((d) => d.lines.length);
-    if (!used.length) return setMsg({ tone: "red", text: `Chưa có món nào – gõ “${stock ? "tồn" : ret ? "trả" : "nhận"} 5mn, 2nl…” hoặc thêm món` });
+    const outs = ds.filter((d) => d.out?.length);
+    if (outs.length && outMode !== "asReturn") return setMsg({ tone: "red", text: "Phiếu có số ở cột XUẤT – trả lời câu hỏi bên trên trước khi lưu" });
+    if (outs.length && !outReason.trim()) return setMsg({ tone: "red", text: "Nhập lý do cho phần Xuất" });
+    if (!used.length && !outs.length) return setMsg({ tone: "red", text: `Chưa có món nào – gõ “${stock ? "tồn" : ret ? "trả" : "nhận"} 5mn, 2nl…” hoặc thêm món` });
     if (ret && !reason.trim()) return setMsg({ tone: "red", text: "Chọn lý do trả hàng" });
     if (mode === "admin" && !storeId) return setMsg({ tone: "red", text: "Chọn cơ sở" });
+    // số lượng bất thường (xúc xích, nước dừa, hoa quả, rick, ambie, sữa đặc, bột mì > 200) → bắt xác nhận lại
+    const odd = used.flatMap((d) => d.lines.filter((l) => qtyAlert(l) === "abnormal")).map((l) => `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`);
+    if (odd.length && !window.confirm(`Số lượng BẤT THƯỜNG (> 200): ${odd.join(", ")}.
+Đã kiểm tra lại đúng số chưa? Bấm OK để vẫn lưu, Huỷ để sửa.`)) return;
     setBusy("save");
     setMsg(null);
     const r = await save({
@@ -223,13 +241,16 @@ export default function GoodsForm({
       id: initial?.id,
       drafts: used.map((d) => ({ date: d.date, lines: d.lines, note: d.note, raw: d.raw, sender: d.sender, source: d.source })),
       // ảnh quá nặng (giới hạn gửi lên ~4MB) → bỏ ảnh, nhóm vẫn nhận nội dung gốc từng tin
-      photos: !initial && used.some((d) => d.source === "PHOTO") && photos.join("").length < 3_200_000 ? photos : undefined,
+      photos: !initial && [...used, ...outs].some((d) => d.source === "PHOTO") && photos.join("").length < 3_200_000 ? photos : undefined,
+      alsoReturn: outs.length ? { reason: outReason.trim(), drafts: outs.map((d) => ({ date: d.date, lines: d.out, note: d.note, raw: d.raw, sender: d.sender, source: d.source })) } : undefined,
     }).catch(() => ({ error: "Mất kết nối – thử lại" }) as Result);
     setBusy("");
     if (r.error) return setMsg({ tone: "red", text: r.error });
     setMsg({ tone: "green", text: r.message || "Đã lưu ✔" });
     if (!initial) {
       setReason("");
+      setOutMode(null);
+      setOutReason(OUT_REASON);
       setDrafts([blank(today)]);
       setTelegram(true);
       setPhotos([]);
@@ -239,6 +260,18 @@ export default function GoodsForm({
   }
 
   const total = drafts.reduce((s, d) => s + d.lines.length, 0);
+  const outLines = drafts.flatMap((d) => d.out ?? []);
+  /** Đúng là ghi nhầm → đưa số cột Xuất vào Nhập */
+  const outToReceive = () => {
+    setDrafts((ds) => ds.map((d) => (d.out?.length ? { ...d, lines: mergeLines([...d.lines, ...d.out]), out: [] } : d)));
+    setOutMode(null);
+    setMsg({ tone: "green", text: "Đã chuyển số ở cột Xuất vào phần Nhập – kiểm tra lại rồi bấm Lưu" });
+  };
+  const outDrop = () => {
+    setDrafts((ds) => ds.map((d) => ({ ...d, out: [] })));
+    setOutMode(null);
+  };
+  const setOut = (key: string, f: (l: GoodsLine[]) => GoodsLine[]) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, out: f(d.out ?? []) } : d)));
   return (
     <div className="space-y-3">
       {/* Nhận hàng (mặc định) / Trả hàng – chỉ nút đang chọn đổi màu (màu accent của theme), nút lưu / thêm giữ như cũ */}
@@ -327,7 +360,14 @@ export default function GoodsForm({
             <div className="space-y-1 text-sm">
               {preview.lines.length > 0 && (
                 <p className="text-good">
-                  Hiểu là: <b>{preview.lines.map((l) => (l.qty === 0 ? `${l.name} hết` : `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`)).join(" · ")}</b>
+                  Hiểu là:{" "}
+                  {preview.lines.map((l, i) => (
+                    <b key={i} className={qtyAlert(l) ? "text-danger" : ""}>
+                      {i > 0 && " · "}
+                      {l.qty === 0 ? `${l.name} hết` : `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`}
+                      {qtyAlert(l) && " ⚠"}
+                    </b>
+                  ))}
                 </p>
               )}
               {preview.unknown.length > 0 && (
@@ -356,7 +396,14 @@ export default function GoodsForm({
           <div className="mt-1.5 space-y-1 text-sm">
             {preview.lines.length > 0 && (
               <p className="text-good">
-                Hiểu là: <b>{preview.lines.map((l) => `${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`).join(" · ")}</b>
+                Hiểu là:{" "}
+                {preview.lines.map((l, i) => (
+                  <b key={i} className={qtyAlert(l) ? "text-danger" : ""}>
+                    {i > 0 && " · "}
+                    {`${l.name} ${qtyVi(l.qty)}${l.unit ? ` ${l.unit}` : ""}`}
+                    {qtyAlert(l) && " ⚠"}
+                  </b>
+                ))}
               </p>
             )}
             {preview.unknown.length > 0 && (
@@ -387,6 +434,72 @@ export default function GoodsForm({
       </div>
       )}
 
+      {/* phiếu kiểm kê: có số ở cột XUẤT khi đang nhận hàng → hỏi lại */}
+      {outLines.length > 0 && outMode !== "asReturn" && (
+        <div className="space-y-2 rounded-2xl bg-bad-bg/50 p-3 text-sm ring-1 ring-bad-line">
+          <p className="font-bold text-danger">⚠ Phiếu có số ở cột XUẤT</p>
+          <p className="text-[13px]">{outLines.map(lineText).join(" · ")}</p>
+          {outMode === null ? (
+            <>
+              <p className="font-semibold">Có phải ghi nhầm cột NHẬP sang cột XUẤT không?</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={outToReceive} className="flex-1 basis-40">
+                  Đúng, ghi nhầm → đưa vào Nhập
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setOutMode("notMistake")} className="flex-1 basis-40">
+                  Không phải nhầm
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">Có muốn đưa các món này vào phần XUẤT (trả hàng – trừ vào hàng nhập), lưu cùng lần này không?</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => setOutMode("asReturn")} className="flex-1 basis-40">
+                  Có, lưu cả phần Xuất
+                </Button>
+                <Button type="button" variant="outline" onClick={outDrop} className="flex-1 basis-40">
+                  Không, bỏ qua
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {outLines.length > 0 && outMode === "asReturn" && (
+        <div className="space-y-2 rounded-2xl bg-late-bg/60 p-3 ring-1 ring-line">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-bold text-late-fg">Xuất (−) – lưu cùng lần nhận này</span>
+            <button type="button" onClick={outDrop} className="text-xs text-danger underline">
+              Bỏ phần xuất
+            </button>
+          </div>
+          {drafts.filter((d) => d.out?.length).map((d) => (
+            <ul key={d.key} className="divide-y divide-line">
+              {(d.out ?? []).map((l, li) => (
+                <li key={`${l.name}|${l.unit}`} className="flex items-center gap-2 py-1.5">
+                  <span className="min-w-0 flex-1 truncate font-semibold">
+                    <span className="mr-1 text-late-fg">−</span>
+                    {l.name}
+                  </span>
+                  <QtyInput value={l.qty} onChange={(v) => setOut(d.key, (ls) => ls.map((x, j) => (j === li ? { ...x, qty: v } : x)))} />
+                  <span className="w-12 text-xs text-ink/70">{l.unit}</span>
+                  <button type="button" aria-label="Xoá" onClick={() => setOut(d.key, (ls) => ls.filter((_, j) => j !== li))} className="text-ink/40 hover:text-danger">
+                    <X size={17} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+          <label className="block space-y-1 text-xs text-ink/60">
+            <span>
+              Lý do xuất <span className="text-danger">*</span>
+            </span>
+            <input value={outReason} onChange={(e) => setOutReason(e.target.value.slice(0, 120))} className="w-full rounded-xl border border-line-strong bg-card px-3 py-2 text-sm text-ink" />
+          </label>
+        </div>
+      )}
+
       {drafts.map((d, di) => (
         <div key={d.key} className={`rounded-2xl p-3 ring-1 ${d.dup ? "bg-warn-soft ring-warn/40" : "bg-card ring-line"}`}>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
@@ -412,18 +525,23 @@ export default function GoodsForm({
               <span className="block text-[11px] font-semibold not-italic text-ink/50">Nội dung gốc{d.sender ? ` – ${d.sender}` : ""}</span>“{d.raw}”
             </p>
           )}
-          {!!d.unknown?.length && <p className="mb-2 text-xs text-warn">Không có trong danh mục: {d.unknown.join(", ")}</p>}
+          {!!d.unknown?.length && <p className="mb-2 text-xs text-warn">Chưa hiểu / thiếu số: {d.unknown.join(", ")}</p>}
 
           {d.lines.length === 0 ? (
             <p className="py-2 text-center text-sm text-ink/50">Chưa có món – gõ ở ô trên hoặc chọn bên dưới</p>
           ) : (
             <ul className="divide-y divide-line">
-              {d.lines.map((l, li) => (
-                <li key={`${l.name}|${l.unit}`} className="flex items-center gap-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate font-semibold">
-                    {ret && <span className="mr-1 text-late-fg">−</span>}
-                    {l.name}
-                    {stock && l.qty === 0 && <span className="ml-1.5 rounded-full bg-bad-bg px-2 py-0.5 text-[11px] font-bold text-bad-fg">Hết</span>}
+              {d.lines.map((l, li) => {
+                const alert = qtyAlert(l);
+                return (
+                <li key={`${l.name}|${l.unit}`} className={`flex items-center gap-2 py-1.5 ${alert ? "-mx-1.5 rounded-lg bg-bad-bg/60 px-1.5" : ""}`}>
+                  <span className="min-w-0 flex-1 font-semibold">
+                    <span className="block truncate">
+                      {ret && <span className="mr-1 text-late-fg">−</span>}
+                      {l.name}
+                      {stock && l.qty === 0 && <span className="ml-1.5 rounded-full bg-bad-bg px-2 py-0.5 text-[11px] font-bold text-bad-fg">Hết</span>}
+                    </span>
+                    {alert && <span className="block text-[11px] font-bold text-danger">⚠ {qtyAlertText(alert)}</span>}
                   </span>
                   <button type="button" aria-label="Bớt" onClick={() => setLines(d.key, (ls) => ls.map((x, k) => (k === li ? { ...x, qty: Math.max(stock ? 0 : 1, x.qty - 1) } : x)))} className="grid h-8 w-8 place-items-center rounded-full bg-cream">
                     <Minus size={15} />
@@ -442,7 +560,8 @@ export default function GoodsForm({
                     <X size={17} />
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           <select
@@ -494,7 +613,7 @@ export default function GoodsForm({
       )}
       {stockUser && monthNote && <p className="text-xs text-ink/60">{monthNote}</p>}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
-      <Button type="button" onClick={onSave} disabled={!!busy || (!total && !preview.lines.length)} className="w-full py-3 text-base">
+      <Button type="button" onClick={onSave} disabled={!!busy || (!total && !preview.lines.length && !outLines.length)} className="w-full py-3 text-base">
         {busy === "save" ? <Loader2 size={18} className="animate-spin" /> : stock ? "📋" : ret ? "↩" : "📦"} {initial ? "Lưu sửa" : stock ? "Lưu tồn kho" : ret ? "Lưu trả hàng" : "Lưu nhận hàng"}
         {stockUser && total > 0 && ` · ${total} món`}
       </Button>

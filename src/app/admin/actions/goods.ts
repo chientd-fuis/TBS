@@ -6,7 +6,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
 import { GoodsItemModel, GoodsReceipt, Store } from "@/lib/models";
-import { cleanInputs, getGoodsCatalog, getGoodsItems, GOODS_OFF, goodsEnabled, notifyGoods, notifyGoodsSaved, cleanPhotos, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
+import { cleanAlsoReturn, hasLines, cleanInputs, getGoodsCatalog, type AlsoReturn, getGoodsItems, GOODS_OFF, goodsEnabled, notifyGoods, notifyGoodsSaved, cleanPhotos, STOCK_OFF, stockEnabled, type GoodsInput } from "@/lib/goods-server";
 import { foldGoods } from "@/lib/goods";
 import { isYmd, localDate } from "@/lib/time";
 import { errMsg, str, type FormState } from "./types";
@@ -14,7 +14,7 @@ import { errMsg, str, type FormState } from "./types";
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Admin nhập / sửa nhận hàng cho 1 cơ sở → (tuỳ chọn) báo nhóm Telegram cơ sở. id có → sửa bản ghi đó. */
-export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[] }): Promise<GoodsSaveResult> {
+export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[]; alsoReturn?: AlsoReturn }): Promise<GoodsSaveResult> {
   try {
     const admin = await assertPerm("goods");
     await connectDB();
@@ -25,7 +25,10 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
     if (kind === "RETURN" && !reason) return { error: "Chọn lý do trả hàng" };
     if (kind === "STOCK" && !(await stockEnabled())) return { error: `${STOCK_OFF} – Admin Tổng bật ở Cài đặt` };
     if (!isValidObjectId(input?.storeId) || !(await Store.exists({ _id: input.storeId }))) return { error: "Chọn cơ sở" };
-    const rows = cleanInputs(input.drafts, await getGoodsCatalog(), { max: localDate(new Date()) }, kind);
+    const catalog = await getGoodsCatalog();
+    // phiếu kiểm kê có số ở cột XUẤT → lưu luôn phần xuất (trả hàng) trong cùng lần bấm (chỉ khi thêm mới)
+    const also = kind === "RECEIVE" && !input.id ? cleanAlsoReturn(input.alsoReturn, catalog, { max: localDate(new Date()) }) : null;
+    const rows = also && !hasLines(input.drafts, catalog) ? [] : cleanInputs(input.drafts, catalog, { max: localDate(new Date()) }, kind);
     const byName = admin.kind === "OWNER" ? "Admin Tổng" : `Admin ${admin.name}`;
     const tg = { status: input.telegram ? "PENDING" : "SKIPPED" };
     if (input.id) {
@@ -45,9 +48,19 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
     }
     await audit(adminActor(admin), "goods.create", { type: "GoodsReceipt", id: saved.map((x) => x.id).join(",") }, null, rows);
     if (input.telegram) await notifyGoodsSaved(saved, cleanPhotos(input.photos));
+    if (also) {
+      const out: { id: string; source: string }[] = [];
+      for (const d of also.rows) {
+        const doc = await GoodsReceipt.create({ ...d, kind: "RETURN", reason: also.reason, storeId: input.storeId, month: d.date.slice(0, 7), byName, byAdmin: true, telegram: tg });
+        out.push({ id: String(doc._id), source: rows.length ? "MANUAL" : d.source });
+      }
+      await audit(adminActor(admin), "goods.create", { type: "GoodsReceipt", id: out.map((x) => x.id).join(",") }, null, { kind: "RETURN", rows: also.rows });
+      if (input.telegram) await notifyGoodsSaved(out, rows.length ? undefined : cleanPhotos(input.photos));
+    }
     revalidateGoods();
+    if (!rows.length) return { ok: true, message: `Đã ghi xuất (trả hàng)${input.telegram ? " và báo nhóm cơ sở" : ""} ✔` };
     const what = kind === "STOCK" ? "tồn kho" : kind === "RETURN" ? "trả hàng" : "nhận hàng";
-    return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what}${input.telegram ? " và báo nhóm cơ sở" : ""} ✔` };
+    return { ok: true, message: `Đã ghi ${rows.length > 1 ? `${rows.length} lần ${what}` : what}${also ? " + xuất (trả hàng)" : ""}${input.telegram ? " và báo nhóm cơ sở" : ""} ✔` };
   } catch (e) {
     const r = errMsg(e);
     return { error: r?.error };

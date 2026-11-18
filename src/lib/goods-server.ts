@@ -4,7 +4,7 @@ import { connectDB } from "./db";
 import { GoodsItemModel, GoodsReceipt, Settings, Store } from "./models";
 import { geminiGenerate } from "./ocr";
 import { sendPhotosToTelegram, sendTelegramText, telegramConfigured } from "./telegram";
-import { cleanLines, DEFAULT_GOODS, kindFilter, foldGoods, goodsHeader, goodsMessage, lineVi, parseCatalog, sameLines, type GoodsItem, type GoodsKind, type GoodsLine, type PriceEntry } from "./goods";
+import { cleanLines, isScoop, DEFAULT_GOODS, kindFilter, foldGoods, goodsHeader, goodsMessage, lineVi, parseCatalog, sameLines, type GoodsItem, type GoodsKind, type GoodsLine, type PriceEntry } from "./goods";
 import { isYmd } from "./time";
 
 /** Lần đầu: tạo danh mục từ bản chữ cũ (Settings.goodsCatalog) hoặc danh mục mặc định. */
@@ -54,7 +54,9 @@ export async function goodsEnabled() {
 export const GOODS_OFF = "Chức năng Nhận hàng đang tắt";
 
 /** 1 lần báo nhận (1 tin nhắn) AI đọc được */
-export type GoodsDraft = { date: string; time?: string; sender?: string; raw?: string; lines: GoodsLine[]; unknown: string[]; dup?: string };
+export type GoodsDraft = { date: string; time?: string; sender?: string; raw?: string; lines: GoodsLine[]; unknown: string[]; dup?: string;
+  /** nhận hàng từ phiếu kiểm kê: số ở cột XUẤT (thường là ghi nhầm cột Nhập) – form hỏi lại người nhập */
+  out?: GoodsLine[] };
 
 const PROMPT = `Bạn đọc ảnh / chữ của 1 cơ sở quán chè – kem – trà sữa ở Việt Nam. Có 2 loại:
 (A) Tin nhắn trong nhóm chat (Facebook Messenger / Telegram / Zalo).
@@ -63,7 +65,11 @@ const PROMPT = `Bạn đọc ảnh / chữ của 1 cơ sở quán chè – kem �
 - date: ngày của tin (theo dòng phân cách ngày / giờ gửi trên nhóm chat), YYYY-MM-DD. Không thấy ngày → null. Không ghi năm → năm {YEAR}. Hôm nay là {TODAY}.
 - time: giờ gửi HH:mm (nếu thấy). sender: tên người gửi (nếu thấy). text: nguyên văn tin.
 - items: mỗi món { item, qty, unit }: item = ĐÚNG 1 tên trong danh mục bên dưới (so cả cách gọi tắt), qty = số lượng (số), unit = đơn vị nếu tin có ghi (kg, hộp, thùng, túi…) không thì null.
-  Không ghi số → qty 1. Số đứng liền chữ là số lượng của món đó: "5mn" = 5 Mini, "2nl" = 2 Ngàn lớp.
+  Không ghi số → qty 1 – TRỪ khi tin ghi theo quy luật "TÊN SỐ TÊN SỐ…" (VD tồn kho "Xúc xích 19 Nước dừa Mít 4,5"): khi đó món thiếu số ("Nước dừa") KHÔNG tự cho 1 mà đưa vào unknown dạng "Nước dừa – thiếu số lượng";
+  chữ không khớp danh mục kèm số ("sầu 8" – không rõ sầu sên hay sầu múi) → đưa CẢ CỤM vào unknown, KHÔNG gán số đó sang món đứng sau.
+  Số đứng liền chữ là số lượng của món đó: "5mn" = 5 Mini, "2nl" = 2 Ngàn lớp.
+- KEM (các món tên bắt đầu "Kem"): nhân viên ghi số HỘP hoặc số GAM cân được. Số < 100 = hộp (unit "hộp"), ≥ 100 = gam (unit "g"). "2h" = 2 hộp.
+  "1+245" = 1 hộp VÀ 245 g → trả 2 item cùng tên: { qty 1, unit "hộp" } và { qty 245, unit "g" }. KHÔNG cộng 2 số này. VD "Kem cl 1+245" = Kem scl 1 hộp + 245 g; "Kem xoài 1545" = 1545 g.
 - unknown: các món trong tin KHÔNG khớp món nào trong danh mục (nguyên văn) – không được tự gán bừa.
 KHÔNG bịa món / số. Chữ mờ không đọc được thì bỏ qua.
 
@@ -73,7 +79,7 @@ CÁCH ĐỌC PHIẾU KIỂM KÊ (loại B):
 - Mỗi tờ phiếu = 1 phần tử trong "entries". date = ô "Ngày: …" ở đầu phiếu (VD "9/11" → {YEAR}-11-09). sender = chữ ở ô "Cơ sở" / "Ca" nếu có ghi, không thì null.
 - Chữ viết tay hay bị lệch / nghiêng sang dòng trên hoặc dưới: dóng theo đường kẻ ngang và số thứ tự STT để biết số thuộc dòng nào; không chắc dòng nào → bỏ, KHÔNG đoán. Ô trống = bỏ qua (không phải 0).
 - Đơn vị: unit = đơn vị viết cạnh số nếu có (VD "1,9kg", "955g", "8,2"), không thì lấy cột ĐVT của dòng đó (viết thường). Số viết bằng "g" mà ĐVT là Kg → đổi ra kg (955g → qty 0.955, unit "kg"). Dấu phẩy là phần thập phân: "1,9" = 1.9.
-- Ghi "1+1" → cộng lại = 2. Số ở dưới bảng, ngoài các dòng (VD "2,9kg" ghi lẻ dưới cùng) → không rõ món nào thì bỏ vào unknown dạng "dưới bảng: 2,9kg".
+- Ghi "1+1" → cộng lại = 2 (trừ KEM – tách hộp / gam như trên). Số ở dưới bảng, ngoài các dòng (VD "2,9kg" ghi lẻ dưới cùng) → không rõ món nào thì bỏ vào unknown dạng "dưới bảng: 2,9kg".
 - Tên trên phiếu có thể khác danh mục 1 chút (VD "Cốc 360ml" = "Cốc nhựa 360ml", "Hộp NL" = "Hộp nhựa NL", "Bông ngô" = "Bỏng ngô") → khớp tên gần nhất trong danh mục; không có trong danh mục → unknown.
 - text: tóm tắt lại những gì đọc được để đối chiếu, dạng "Phiếu kiểm kê 09/11 – {COL}: Sầu sên 8,2kg, Bơ 2, Kem dừa 1,9kg…" (chỉ các dòng có số ở cột đó).
 Danh mục (Tên | cách gọi tắt):
@@ -99,7 +105,7 @@ Mỗi tin báo tồn → 1 phần tử trong "entries" (qty = số CÒN):`,
 const SHEET: Record<GoodsKind, string> = {
   STOCK: `Đang ghi TỒN KHO → chỉ lấy số ở cột "Tồn" (số còn lại). Bỏ qua các cột Nhập / Xuất / Huỷ.`,
   RETURN: `Đang ghi TRẢ HÀNG → lấy số ở cột "Trả" / "Xuất trả" / "Hoàn" nếu có; phiếu giao hàng thì lấy số lượng các món được trả.`,
-  RECEIVE: `Đang ghi NHẬN HÀNG → chỉ lấy số ở cột "Nhập" (hàng nhận vào). Bỏ qua các cột Xuất / Huỷ / Tồn. Phiếu không có số nào ở cột Nhập → entries rỗng.`,
+  RECEIVE: `Đang ghi NHẬN HÀNG → "items" CHỈ lấy số ở cột "Nhập" (hàng nhận vào). Số ở cột "Xuất" ghi RIÊNG vào "outItems" (cùng cách đọc: item, qty, unit) – KHÔNG trộn vào items (nhân viên hay ghi nhầm Nhập sang Xuất, app sẽ hỏi lại). Bỏ qua cột Huỷ / Tồn. Phiếu không có số ở cả cột Nhập lẫn Xuất → entries rỗng. Tin nhắn chat (loại A) → outItems rỗng.`,
 };
 
 export async function readGoods(input: { photos?: string[]; text?: string }, catalog: GoodsItem[], today: string, actor: string, kind: GoodsKind = "RECEIVE"): Promise<GoodsDraft[]> {
@@ -139,28 +145,40 @@ export async function readGoods(input: { photos?: string[]; text?: string }, cat
                 },
               },
               unknown: { type: "ARRAY", items: { type: "STRING" } },
+              outItems: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: { item: { type: "STRING", enum: names }, qty: { type: "NUMBER", nullable: true }, unit: { type: "STRING", nullable: true } },
+                  required: ["item"],
+                },
+              },
             },
           },
         },
       },
     },
-  })) as { entries?: { date?: string | null; time?: string | null; sender?: string | null; text?: string | null; items?: { item?: string; qty?: number | null; unit?: string | null }[]; unknown?: string[] }[] };
+  })) as { entries?: { date?: string | null; time?: string | null; sender?: string | null; text?: string | null; items?: Ai[]; outItems?: Ai[]; unknown?: string[] }[] };
   const unitOf = new Map(catalog.map((c) => [foldGoods(c.name), c.unit]));
+  const toLines = (list: Ai[] | undefined) =>
+    cleanLines(
+      (list ?? []).map((i) => ({ name: i.item, qty: i.qty != null && i.qty >= 0 ? i.qty : 1, unit: String(i.unit ?? "").trim() || (isScoop(String(i.item)) ? "" : unitOf.get(foldGoods(String(i.item))) || "") })),
+      catalog,
+      kind === "STOCK",
+    );
   return (json?.entries ?? [])
     .map((e) => ({
       date: isYmd(e.date) && e.date <= today ? e.date : today,
       time: /^\d{1,2}:\d{2}$/.test(e.time ?? "") ? e.time! : undefined,
       sender: String(e.sender ?? "").trim().slice(0, 60) || undefined,
       raw: String(e.text ?? "").trim().slice(0, 500) || undefined,
-      lines: cleanLines(
-        (e.items ?? []).map((i) => ({ name: i.item, qty: i.qty != null && i.qty >= 0 ? i.qty : 1, unit: String(i.unit ?? "").trim() || unitOf.get(foldGoods(String(i.item))) || "" })),
-        catalog,
-        kind === "STOCK",
-      ),
+      lines: toLines(e.items),
+      out: kind === "RECEIVE" ? toLines(e.outItems) : [],
       unknown: (e.unknown ?? []).map((u) => String(u).trim().slice(0, 80)).filter(Boolean).slice(0, 10),
     }))
-    .filter((d) => d.lines.length || d.unknown.length);
+    .filter((d) => d.lines.length || d.unknown.length || d.out.length);
 }
+type Ai = { item?: string; qty?: number | null; unit?: string | null };
 
 /** Đánh dấu lần báo có vẻ đã nhập rồi (cùng cơ sở + ngày + đúng các món / số). */
 export async function markDupes(storeId: string, drafts: GoodsDraft[], kind: GoodsKind = "RECEIVE") {
@@ -256,6 +274,19 @@ export const cleanPhotos = (p: unknown) =>
 
 /** Dữ liệu 1 lần nhận gửi lên từ form */
 export type GoodsInput = { date: string; lines: unknown; note?: string; raw?: string; sender?: string; source?: string };
+
+/** Phần XUẤT lưu kèm lần nhận hàng (phiếu kiểm kê có số ở cột Xuất, người nhập xác nhận không phải ghi nhầm) */
+export type AlsoReturn = { drafts: GoodsInput[]; reason: string };
+export function cleanAlsoReturn(a: AlsoReturn | undefined, catalog: GoodsItem[], range: { min?: string; max: string }, forceDate?: string) {
+  if (!a || !Array.isArray(a.drafts) || !a.drafts.length) return null;
+  const reason = String(a.reason ?? "").trim().slice(0, 120);
+  if (!reason) throw new Error("Nhập lý do cho phần Xuất");
+  const rows = cleanInputs(a.drafts.map((d) => ({ ...d, ...(forceDate ? { date: forceDate } : {}) })), catalog, range, "RETURN");
+  return { rows, reason };
+}
+
+/** có ít nhất 1 món hợp lệ */
+export const hasLines = (inputs: GoodsInput[], catalog: GoodsItem[]) => (Array.isArray(inputs) ? inputs : []).some((d) => cleanLines(d?.lines, catalog).length > 0);
 
 /** Chuẩn hoá các lần nhận từ form; lỗi → ném Error dễ hiểu. */
 export function cleanInputs(inputs: GoodsInput[], catalog: GoodsItem[], range: { min?: string; max: string }, kind: GoodsKind = "RECEIVE") {

@@ -23,9 +23,9 @@ export const DEFAULT_GOODS: GoodsItem[] = [
   ["Kem km", "", "kem khoai môn"],
   ["Kem matcha", "", "kem trà xanh"],
   ["Kem bạc hà", "", ""],
-  ["Kem scl", "", "kem socola, kem sô cô la, kem chocolate"],
+  ["Kem scl", "", "kem socola, kem sô cô la, kem chocolate, kem cl, kem sl"],
   ["Kem cv", "", ""],
-  ["Xúc xích", "", ""],
+  ["Xúc xích", "", "xx"],
   ["Nước dừa", "", ""],
   ["Mít", "", ""],
   ["Xoài", "", ""],
@@ -139,69 +139,211 @@ function aliasIndex(catalog: GoodsItem[]): Alias[] {
 
 const isNum = (t: string) => /^\d+(\.\d+)?$/.test(t);
 
+/** Kem (tên bắt đầu "Kem "): nhân viên ghi số HỘP hoặc số GAM cân được */
+export const isScoop = (name: string) => foldGoods(name).startsWith("kem ");
+/** kem không ghi đơn vị: < 100 = hộp, ≥ 100 = gam */
+export const scoopUnit = (q: number) => (q < 100 ? "hộp" : "g");
 /**
- * Đọc tin nhắn nhận hàng → các món + số lượng.
+ * Đơn vị tự hiểu khi nhân viên không ghi:
+ *  kem: < 100 = hộp, ≥ 100 = gam
+ *  bơ (nguyên liệu chính, ghi túi hoặc kg tuỳ người): số thập phân ("2,5") = kg, số nguyên → để trống (nhân viên tự ghi)
+ */
+export function autoUnit(name: string, qty: number): string {
+  if (!(qty > 0)) return "";
+  if (isScoop(name)) return scoopUnit(qty);
+  if (foldGoods(name) === "bo" && !Number.isInteger(qty)) return "kg";
+  return "";
+}
+/** dấu nối "1+245" giữ lại trong token (sau khi bỏ dấu câu) */
+const PLUS = "zplusz";
+
+type Part = { q: number; unit: string };
+/**
+ * Số ghi cho 1 món → các dòng:
+ *  kem: mỗi phần 1 dòng theo đơn vị (1+245 → 1 hộp + 245 g, không cộng)
+ *  món khác: cộng lại ("1+1" = 2), đơn vị theo phần đầu có ghi
+ */
+function resolveQty(name: string, itemUnit: string, parts: Part[]): { qty: number; unit: string }[] {
+  if (isScoop(name)) return parts.map((p) => ({ qty: p.q, unit: p.unit || (p.q === 0 ? itemUnit : scoopUnit(p.q)) }));
+  return [{ qty: Math.round(parts.reduce((s, p) => s + p.q, 0) * 1000) / 1000, unit: parts.find((p) => p.unit)?.unit || itemUnit }];
+}
+
+/** Token giữ cả chữ gốc (để báo "chưa hiểu" đúng chữ nhân viên gõ): t = đã bỏ dấu, o = nguyên văn */
+type Tok = { t: string; o: string };
+function rawTokens(s: string): Tok[] {
+  return s
+    .normalize("NFC")
+    .replace(/(\d),(\d)/g, "$1.$2")
+    .replace(/(\d)(\p{L})/gu, "$1 $2")
+    .replace(/(\p{L})(\d)/gu, "$1 $2")
+    .split(/[^\p{L}\p{M}\p{N}.]+/u)
+    .map((o) => o.replace(/^\.+|\.+$/g, ""))
+    .flatMap((o) => {
+      const t = foldGoods(o).replace(/[^a-z0-9.]/g, "");
+      return t ? [{ t, o }] : [];
+    });
+}
+
+/** tách đoạn: dấu phẩy / xuống dòng / ; / + giữa 2 món  (giữ "1,5kg" và "1+245" = 1 hộp + 245 g) */
+const SEG = /(?<!\d),|,(?!\d)|[;\n]+|(?<!\d[a-zA-Z]*\s*)\+|\+(?!\s*\d)|\s[-–]\s/;
+const segTokens = (seg: string) => rawTokens(seg.replace(/(\d[a-zA-Z]*)\s*\+\s*(?=\d)/g, `$1 ${PLUS} `));
+
+/**
+ * Tin ghi kiểu "TÊN SỐ, TÊN SỐ…" (tồn kho: "Xúc xích 19 Mít 4,5") hay "SỐ TÊN" ("nhận 5mn, 2nl")?
+ * Đếm món có số đứng NGAY SAU vs NGAY TRƯỚC – kiểu nào nhiều hơn là quy luật của cả tin.
+ */
+function nameFirst(segs: Tok[][], idx: Alias[]) {
+  let after = 0;
+  let before = 0;
+  for (const tk of segs)
+    for (let i = 0; i < tk.length; i++) {
+      const hit = idx.find((a) => a.toks.every((t, k) => tk[i + k]?.t === t));
+      if (!hit) continue;
+      const j = i + hit.toks.length;
+      if (isNum(tk[j]?.t ?? "")) after++;
+      if (isNum(tk[i - 1]?.t ?? "") || (UNITS[tk[i - 1]?.t ?? ""] && isNum(tk[i - 2]?.t ?? ""))) before++;
+      i = j - 1;
+    }
+  return after > before;
+}
+
+const show = (toks: Tok[]) =>
+  toks
+    .map((x) => (x.t === PLUS ? "+" : x.o))
+    .join(" ")
+    .replace(/ \+ /g, "+")
+    .slice(0, 80);
+
+/**
+ * Đọc tin nhắn nhận hàng / tồn kho → các món + số lượng.
  *   "nhận 5mn, 2nl, 3 bột na"   → Mini 5 hộp · Ngàn lớp 2 bánh · Bột năng 3
  *   "sầu múi 2kg" / "2kg sầu múi" / "mini x5"
- * Món không có số → 1. Đoạn không hiểu → unknown (nguyên văn) để người nhập sửa / nhờ AI.
+ *   kem: "Kem dâu 1+194" → 1 hộp + 194 g
+ * Tự nhận ra quy luật của tin:
+ *   - kiểu "TÊN SỐ" (tồn kho): món không có số → báo "thiếu số lượng" (không tự cho 1);
+ *     số đứng sau chữ lạ ("sầu 8", "XX 19") → báo chưa hiểu cả cụm, KHÔNG gán sang món kế tiếp.
+ *   - kiểu "SỐ TÊN" / không ghi số ("nhận mini, bơ"): món không có số → 1.
  */
 export function parseGoodsText(text: string, catalog: GoodsItem[] = DEFAULT_GOODS): { lines: GoodsLine[]; unknown: string[] } {
   const idx = aliasIndex(catalog);
-  const lines: (GoodsLine & { open?: boolean })[] = [];
+  type L = GoodsLine & { open?: boolean; iu?: string; drop?: boolean };
+  const lines: L[] = [];
   const unknown: string[] = [];
-  // tách theo dấu phẩy / xuống dòng / + / ;  (giữ "1,5kg")
-  for (const seg of String(text ?? "").split(/(?<!\d),|,(?!\d)|[;\n+]+|\s[-–]\s/)) {
-    const tk = tokens(seg);
-    let pending: { qty: number; unit: string } | null = null;
-    let open: (GoodsLine & { open?: boolean }) | null = null; // món vừa gặp chưa có số → số đứng sau là của nó
+  const segs = String(text ?? "").split(SEG).map(segTokens);
+  const strict = nameFirst(segs, idx);
+  for (const tk of segs) {
+    let pending: Part[] | null = null;
+    let open: L | null = null; // món vừa gặp chưa có số → số đứng sau là của nó
+    let buf: Tok[] = []; // chữ lạ chưa thuộc món nào (kiểu "TÊN SỐ")
+    let bufJunk = 0;
+    const give = (line: L, parts: Part[]) => {
+      const [first, ...rest] = resolveQty(line.name, line.iu ?? "", parts);
+      line.qty = first.qty;
+      line.unit = first.unit;
+      line.open = false;
+      for (const r of rest) lines.push({ name: line.name, ...r });
+    };
+    // kiểu "TÊN SỐ": món đang chờ số mà gặp món khác / chữ lạ / hết đoạn → thiếu số lượng
+    const closeMissing = () => {
+      if (strict && open?.open) {
+        open.drop = true;
+        unknown.push(`${open.name} – thiếu số lượng`);
+      }
+      open = null;
+    };
+    const flushBuf = (extra: Tok[] = []) => {
+      if (bufJunk || extra.length) {
+        const s = show([...buf, ...extra]);
+        if (s) unknown.push(s);
+      }
+      buf = [];
+      bufJunk = 0;
+    };
     let found = 0;
     let junk = 0;
     for (let i = 0; i < tk.length; i++) {
-      const hit = idx.find((a) => a.toks.every((t, k) => tk[i + k] === t));
+      const hit = idx.find((a) => a.toks.every((t, k) => tk[i + k]?.t === t));
       if (hit) {
-        const line = { name: hit.item.name, qty: pending ? pending.qty : NaN, unit: pending?.unit || hit.item.unit, open: !pending };
+        closeMissing();
+        if (strict) flushBuf();
+        const line: L = { name: hit.item.name, qty: NaN, unit: hit.item.unit, open: !pending, iu: hit.item.unit };
         lines.push(line);
+        if (pending) give(line, pending);
         open = pending ? null : line;
         pending = null;
         found++;
         i += hit.toks.length - 1;
         continue;
       }
-      if (isNum(tk[i])) {
-        const q = Number(tk[i]);
-        const u = UNITS[tk[i + 1] ?? ""];
-        // "2 hop nhua mini": "hop" là đầu tên món → không ăn làm đơn vị
-        const unitIsItem = u && idx.some((a) => a.toks.every((t, k) => tk[i + 1 + k] === t));
-        const unit = u && !unitIsItem ? u : "";
-        if (unit) i++;
+      if (isNum(tk[i].t)) {
+        const start = i;
+        const read = (): Part => {
+          const q = Number(tk[i].t);
+          const u = UNITS[tk[i + 1]?.t ?? ""];
+          // "2 hop nhua mini": "hop" là đầu tên món → không ăn làm đơn vị
+          const unitIsItem = u && idx.some((a) => a.toks.every((t, k) => tk[i + 1 + k]?.t === t));
+          const unit = u && !unitIsItem ? u : "";
+          if (unit) i++;
+          return { q, unit };
+        };
+        const parts = [read()];
+        // "1+245" / "1h + 245g"
+        while (tk[i + 1]?.t === PLUS && isNum(tk[i + 2]?.t ?? "")) {
+          i += 2;
+          parts.push(read());
+        }
         if (open) {
-          open.qty = q;
-          if (unit) open.unit = unit;
-          open.open = false;
+          give(open, parts);
           open = null;
-        } else pending = { qty: q, unit };
+        } else if (strict) flushBuf(tk.slice(start, i + 1)); // "sầu 8" / "XX 19": số của chữ lạ – không gán sang món sau
+        else pending = parts;
         continue;
       }
-      if (tk[i] === "het") {
+      if (tk[i].t === PLUS) continue;
+      if (tk[i].t === "het") {
         // "hết sầu múi" / "sầu múi hết" → còn 0 (báo tồn kho)
         if (open) {
-          open.qty = 0;
-          open.open = false;
+          give(open, [{ q: 0, unit: "" }]);
           open = null;
-        } else pending = { qty: 0, unit: "" };
+        } else pending = [{ q: 0, unit: "" }];
         continue;
       }
-      if (UNITS[tk[i]] || FILLER.has(tk[i])) continue;
+      if (UNITS[tk[i].t] || FILLER.has(tk[i].t)) {
+        if (strict && buf.length) buf.push(tk[i]);
+        continue;
+      }
       junk++;
+      if (strict) {
+        closeMissing();
+        buf.push(tk[i]);
+        bufJunk++;
+      }
     }
-    if (!found && (junk || pending)) {
-      const raw = seg.trim();
+    closeMissing();
+    if (strict) flushBuf();
+    else if (!found && (junk || pending)) {
+      const raw = show(tk);
       // chỉ có chữ "nhận …" không kèm món → bỏ qua, không báo lỗi
-      if (raw && junk) unknown.push(raw.slice(0, 80));
+      if (raw && junk) unknown.push(raw);
     }
   }
-  return { lines: mergeLines(lines.map(({ name, qty, unit }) => ({ name, qty: Number.isNaN(qty) ? 1 : qty, unit }))), unknown };
+  return {
+    lines: mergeLines(lines.filter((l) => !l.drop).map(({ name, qty, unit }) => ({ name, qty: Number.isNaN(qty) ? 1 : qty, unit: unit || autoUnit(name, Number.isNaN(qty) ? 1 : qty) }))),
+    unknown,
+  };
 }
+
+/**
+ * Món đếm theo cái / quả / chai / gói… – số lượng thường nhỏ: > 50 cần xem lại, > 200 là bất thường (gõ nhầm / lẫn sang gam).
+ * Không áp dụng khi ghi theo gam / ml.
+ */
+const COUNTED = new Set(["xuc xich", "nuoc dua", "mit", "xoai", "dua hau", "thanh long", "rick", "ambie", "sua dac", "bot mi"]);
+export type QtyAlert = "high" | "abnormal";
+export function qtyAlert(l: GoodsLine): QtyAlert | null {
+  if (!COUNTED.has(foldGoods(l.name)) || /^(g|gr|gam|ml)$/i.test(foldGoods(l.unit ?? ""))) return null;
+  return l.qty > 200 ? "abnormal" : l.qty > 50 ? "high" : null;
+}
+export const qtyAlertText = (a: QtyAlert) => (a === "abnormal" ? "Bất thường (> 200)" : "Số lớn (> 50) – xem lại");
 
 /** Gộp món trùng (cùng tên + đơn vị) */
 export function mergeLines(lines: GoodsLine[]): GoodsLine[] {
@@ -265,14 +407,17 @@ export function cleanLines(input: unknown, catalog: GoodsItem[], allowZero = fal
     const item = byKey.get(foldGoods(String(o.name ?? "")));
     const qty = Math.round(Number(o.qty) * 1000) / 1000;
     if (!item || !Number.isFinite(qty) || qty < 0 || (qty === 0 && !allowZero) || qty > 100_000) continue;
-    out.push({ name: item.name, qty, unit: String(o.unit ?? item.unit ?? "").trim().slice(0, 20) });
+    let unit = String(o.unit ?? item.unit ?? "").trim().slice(0, 20);
+    // kem không ghi đơn vị: < 100 = hộp, ≥ 100 = gam
+    if (!unit) unit = autoUnit(item.name, qty);
+    out.push({ name: item.name, qty, unit });
   }
   return mergeLines(out);
 }
 
 /** Hai lần nhận giống hệt nhau (cùng món + số) – để báo "có vẻ đã nhập rồi" */
 export const sameLines = (a: GoodsLine[], b: GoodsLine[]) => {
-  const key = (l: GoodsLine[]) => l.map((x) => `${foldGoods(x.name)}=${x.qty}`).sort().join("|");
+  const key = (l: GoodsLine[]) => l.map((x) => `${foldGoods(x.name)}=${x.qty}${foldGoods(x.unit ?? "")}`).sort().join("|");
   return a.length > 0 && key(a) === key(b);
 };
 

@@ -57,7 +57,8 @@ export async function POST(req: Request) {
     }
     const catalog = await getGoodsCatalog();
     const drafts = await readGoods({ photos: p.data.photos, text: p.data.text }, catalog, today, actor, kind).catch((e: Error) => {
-      throw new HttpError(502, e.message, { code: "OCR_FAILED" });
+      console.error("[goods read]", e.message); // chi tiết (key, model, hết lượt…) chỉ ghi log – nhân viên thấy câu chung
+      throw new HttpError(502, "AI đang lỗi, không đọc được ảnh – hãy chụp/quét lại sau ít phút hoặc nhập tay.", { code: "OCR_FAILED" });
     });
     if (!drafts.length) throw new HttpError(422, kind === "STOCK" ? "Không thấy tin báo tồn kho nào – chụp rõ đoạn “tồn …” hoặc gõ tay" : "Không thấy tin báo nhận hàng nào – chụp rõ đoạn có chữ “nhận …” hoặc gõ tay");
     return NextResponse.json({ ok: true, drafts: await markDupes(storeId, drafts, kind) });

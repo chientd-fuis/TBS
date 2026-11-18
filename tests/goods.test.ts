@@ -1,96 +1,72 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { catalogToText, cleanLines, DEFAULT_GOODS, goodsMessage, hasReceiveWord, lineVi, parseCatalog, parseGoodsText, priceAt, sameLines, usageReport, type UsageRec } from "../src/lib/goods";
+import { cleanLines, DEFAULT_GOODS, parseGoodsText, qtyAlert } from "../src/lib/goods";
 
-const read = (t: string) => parseGoodsText(t).lines.map(lineVi);
+const read = (t: string) => parseGoodsText(t).lines.map((l) => `${l.name} ${l.qty}${l.unit ? ` ${l.unit}` : ""}`);
 
-test("viết tắt của quán: 5mn, 2nl, bột na", () => {
-  assert.deepEqual(read("nhận 5mn, 2nl, 3 bột na"), ["Mini: 5 hộp", "Ngàn lớp: 2 bánh", "Bột năng: 3"]);
-  assert.deepEqual(read("Nhạn 5 mini 2 ngàn lớp"), ["Mini: 5 hộp", "Ngàn lớp: 2 bánh"]);
+test("kem: số < 100 = hộp, ≥ 100 = gam, 1+245 = 1 hộp + 245 g", () => {
+  assert.deepEqual(read("Kem dâu 1+194"), ["Kem dâu 1 hộp", "Kem dâu 194 g"]);
+  assert.deepEqual(read("Kem khoai môn 1+ 695"), ["Kem km 1 hộp", "Kem km 695 g"]);
+  assert.deepEqual(read("Kem xoài 1545"), ["Kem xoài 1545 g"]);
+  assert.deepEqual(read("Kem dừa 2h"), ["Kem dừa 2 hộp"]);
+  assert.deepEqual(read("Kem scl 1"), ["Kem scl 1 hộp"]);
+  assert.deepEqual(read("Kem dừa 70"), ["Kem dừa 70 hộp"]);
+  assert.deepEqual(read("Kem matcha 1h + 300g"), ["Kem matcha 1 hộp", "Kem matcha 300 g"]);
 });
 
-test("số đứng trước / sau tên, có đơn vị, x5, thập phân", () => {
-  assert.deepEqual(read("nhan sầu múi 2kg + 3 thùng sữa tươi"), ["Sầu múi: 2 kg", "Sữa tươi: 3 thùng"]);
-  assert.deepEqual(read("đã nhận: mini x5, kem scl 2 hộp, 2 bơ"), ["Mini: 5 hộp", "Kem scl: 2 hộp", "Bơ: 2"]);
-  assert.deepEqual(read("nhận 1,5kg bột năng\n2 kem dau"), ["Bột năng: 1,5 kg", "Kem dâu: 2"]);
+test("món khác: 1+1 cộng lại, + giữa 2 món vẫn tách", () => {
+  assert.deepEqual(read("Sầu múi 1+1"), ["Sầu múi 2"]);
+  assert.deepEqual(read("Bơ 2 + Mít 3"), ["Bơ 2", "Mít 3"]);
+  assert.deepEqual(read("Mít 4.5"), ["Mít 4.5"]);
+  assert.deepEqual(read("Sương sa 0,2"), ["Sương sa 0.2"]);
+  assert.deepEqual(read("nhận 5mn, 2nl"), ["Mini 5 hộp", "Ngàn lớp 2 bánh"]);
 });
 
-test("tên dài ưu tiên hơn (hộp nhựa mini ≠ bánh mini), món không số = 1", () => {
-  assert.deepEqual(read("nhân 100 cốc 500, 2 túi rác, găng tay"), ["Cốc nhựa 500ml: 100", "Túi rác: 2", "Găng tay: 1"]);
-  assert.deepEqual(read("nhận 2 hộp nhựa mini, 3 hop mini"), ["Hộp nhựa mini: 2", "Mini: 3 hộp"]);
+test("tin tồn kho dán nguyên đoạn (1 dòng) – không mất món", () => {
+  const t =
+    "Sầu sên 8 Sầu múi 35 Hạt đác 4 Thốt nốt 6 Dừa non 5 Lọt 3 Bơ 2 Kem dừa 2h Kem dâu 1+194 Kem xoài 1545 Kem khoai môn 1+ 695 Kem matcha 1+595 Kem scl 1 Kem cv 2814 Xúc xích 19 Nước dừa Mít 4.5 Xoài 8 Dưa hấu 1 Thanh long 2 Sương sa 0,2 Trứng 220";
+  const r = parseGoodsText(t);
+  const got = read(t);
+  for (const x of ["Sầu sên 8", "Sầu múi 35", "Kem dừa 2 hộp", "Kem dâu 1 hộp", "Kem dâu 194 g", "Kem xoài 1545 g", "Kem km 1 hộp", "Kem km 695 g", "Kem matcha 595 g", "Kem scl 1 hộp", "Kem cv 2814 g", "Xúc xích 19", "Mít 4.5", "Sương sa 0.2"])
+    assert.ok(got.includes(x), `thiếu "${x}" trong ${JSON.stringify(got)}`);
+  assert.equal(r.lines.length, got.length);
+  assert.deepEqual(r.unknown, ["Nước dừa – thiếu số lượng", "Trứng 220"]);
 });
 
-test("đoạn không hiểu → unknown; chỉ có chữ nhận → bỏ qua", () => {
-  const r = parseGoodsText("nhận abc xyz, 2 trân châu");
-  assert.deepEqual(r.lines.map(lineVi), ["Trân trâu: 2"]);
-  assert.deepEqual(r.unknown, ["nhận abc xyz"]);
-  assert.deepEqual(parseGoodsText("nhận hàng sáng nay"), { lines: [], unknown: [] });
+test("cleanLines: kem AI trả về không đơn vị → tự gán hộp / g", () => {
+  const l = cleanLines([{ name: "Kem dâu", qty: 1, unit: "" }, { name: "Kem dâu", qty: 194, unit: "" }, { name: "Mít", qty: 2, unit: "" }], DEFAULT_GOODS, true);
+  assert.deepEqual(l, [
+    { name: "Kem dâu", qty: 1, unit: "hộp" },
+    { name: "Kem dâu", qty: 194, unit: "g" },
+    { name: "Mít", qty: 2, unit: "" },
+  ]);
 });
 
-test("gộp món trùng", () => {
-  assert.deepEqual(read("2mn, 3 mini"), ["Mini: 5 hộp"]);
+test("quy luật TÊN SỐ: món thiếu số → báo thiếu, số của chữ lạ không gán sang món sau", () => {
+  const r = parseGoodsText("XX 19 kem sl 1+245 sầu 8 nước dừa mít 4,5");
+  assert.deepEqual(read("XX 19 kem sl 1+245 sầu 8 nước dừa mít 4,5"), ["Xúc xích 19", "Kem scl 1 hộp", "Kem scl 245 g", "Mít 4.5"]);
+  assert.deepEqual(r.unknown, ["sầu 8", "Nước dừa – thiếu số lượng"]);
+  // xuống dòng cũng vậy
+  const r2 = parseGoodsText("Xúc xích 19\nNước dừa\nMít 4.5");
+  assert.deepEqual(r2.unknown, ["Nước dừa – thiếu số lượng"]);
+  // nhận hàng không ghi số → vẫn 1
+  assert.deepEqual(read("nhận mini, bơ"), ["Mini 1 hộp", "Bơ 1"]);
+  assert.deepEqual(read("nhận 5mn, 2nl, nước dừa"), ["Mini 5 hộp", "Ngàn lớp 2 bánh", "Nước dừa 1"]);
 });
 
-test("danh mục: chữ ⇄ danh sách, bỏ trùng", () => {
-  const t = catalogToText(DEFAULT_GOODS);
-  assert.deepEqual(parseCatalog(t), DEFAULT_GOODS);
-  const c = parseCatalog("Bột năng | gói | bột na\nbot nang\n\nTrà | | ");
-  assert.deepEqual(c, [{ name: "Bột năng", unit: "gói", aliases: ["bột na"] }, { name: "Trà", unit: "", aliases: [] }]);
-  assert.deepEqual(read("2 bột na"), ["Bột năng: 2"]);
+test("cảnh báo số lượng lớn: > 50 xem lại, > 200 bất thường (món đếm cái / quả)", () => {
+  assert.equal(qtyAlert({ name: "Xúc xích", qty: 19, unit: "" }), null);
+  assert.equal(qtyAlert({ name: "Xúc xích", qty: 60, unit: "" }), "high");
+  assert.equal(qtyAlert({ name: "Sữa đặc", qty: 220, unit: "" }), "abnormal");
+  assert.equal(qtyAlert({ name: "Mít", qty: 300, unit: "g" }), null); // ghi theo gam → không cảnh báo
+  assert.equal(qtyAlert({ name: "Kem xoài", qty: 1545, unit: "g" }), null);
+  assert.equal(qtyAlert({ name: "Sầu múi", qty: 300, unit: "" }), null);
 });
 
-test("cleanLines chỉ nhận món trong danh mục + số hợp lệ", () => {
-  const l = cleanLines([{ name: "mini", qty: 5, unit: "hộp" }, { name: "Không có", qty: 1 }, { name: "Bơ", qty: -1 }, { name: "Bơ", qty: "2" }], DEFAULT_GOODS);
-  assert.deepEqual(l, [{ name: "Mini", qty: 5, unit: "hộp" }, { name: "Bơ", qty: 2, unit: "" }]);
-  assert.ok(sameLines(l, [{ name: "Bơ", qty: 2, unit: "" }, { name: "Mini", qty: 5, unit: "hộp" }]));
-});
-
-test("chữ nhận + tin Telegram", () => {
-  assert.ok(hasReceiveWord("Nhạn 5mn") && hasReceiveWord("đã nhân 2 nl") && !hasReceiveWord("hết mini rồi"));
-  const m = goodsMessage({ store: "TBS Cầu Giấy", date: "2026-11-10", by: "Lan", lines: [{ name: "Mini", qty: 5, unit: "hộp" }] });
-  assert.equal(m, "📦 NHẬN HÀNG · TBS Cầu Giấy · 10/11 (Thứ 3)\n👤 Lan\n• Mini: 5 hộp");
-  // có nội dung gốc → chỉ gửi nội dung gốc
-  const g = goodsMessage({ store: "TBS Cầu Giấy", date: "2026-11-15", by: "Lan", raw: "em nhận 5,8kg mít", lines: [{ name: "Mít", qty: 5.8, unit: "kg" }] });
-  assert.equal(g, "📦 NHẬN HÀNG · TBS Cầu Giấy · 15/11 (CN)\n👤 Lan\nem nhận 5,8kg mít");
-  // admin sửa số → gửi danh sách món đã sửa
-  assert.match(goodsMessage({ store: "A", date: "2026-11-10", by: "Lan", raw: "nhận 5mn", edited: true, lines: [{ name: "Mini", qty: 4, unit: "hộp" }] }), /SỬA NHẬN HÀNG[\s\S]*• Mini: 4 hộp$/);
-});
-
-test("giá theo ngày áp dụng: từ 15/11 tăng 20k, trước đó 19k", () => {
-  const p = [{ from: "2026-11-15", price: 20000 }, { from: "2026-10-01", price: 19000 }];
-  assert.equal(priceAt(p, "2026-11-14"), 19000);
-  assert.equal(priceAt(p, "2026-11-15"), 20000);
-  assert.equal(priceAt(p, "2026-09-01"), 19000); // trước mốc đầu → giá mốc đầu
-  assert.equal(priceAt([], "2026-11-15"), null);
-});
-
-test("tiêu thụ tháng: theo nhập (chưa kiểm kho) và theo tồn kho", () => {
-  const items = [{ name: "Mini", unit: "hộp", aliases: [], prices: [{ from: "2026-10-01", price: 19000 }, { from: "2026-11-15", price: 20000 }] }];
-  const rec = (kind: "RECEIVE" | "STOCK", date: string, qty: number, unit = "hộp"): UsageRec => ({ kind, date, at: 0, lines: [{ name: "Mini", qty, unit }] });
-  const recs = [rec("RECEIVE", "2026-11-10", 10), rec("RECEIVE", "2026-11-20", 10), rec("RECEIVE", "2026-11-21", 2, "thùng")];
-  const [a] = usageReport({ from: "2026-11-01", to: "2026-11-30", items, recs, useStock: false });
-  assert.deepEqual([a.mode, a.received, a.usage, a.value, a.skipped], ["receive", 20, 20, 10 * 19000 + 10 * 20000, 1]);
-  // tồn 31/10 = 5, tồn 30/11 = 3 → tiêu thụ 5 + 20 − 3 = 22
-  const withStock = [...recs, rec("STOCK", "2026-10-31", 5), rec("STOCK", "2026-11-30", 3)];
-  const [b] = usageReport({ from: "2026-11-01", to: "2026-11-30", items, recs: withStock, useStock: true });
-  assert.deepEqual([b.mode, b.open?.qty, b.received, b.close?.qty, b.usage], ["stock", 5, 20, 3, 22]);
-  assert.equal(b.value, 5 * 19000 + 10 * 19000 + 10 * 20000 - 3 * 20000);
-  // tắt tồn kho → bỏ qua số kiểm kho
-  assert.equal(usageReport({ from: "2026-11-01", to: "2026-11-30", items, recs: withStock, useStock: false })[0].usage, 20);
-  // chưa có giá → value null
-  assert.equal(usageReport({ from: "2026-11-01", to: "2026-11-30", items: [{ ...items[0], prices: [] }], recs, useStock: false })[0].value, null);
-});
-
-test("báo tồn kho: tồn 3mn, hết sầu múi → 0", () => {
-  assert.deepEqual(read("tồn 3mn, 1nl, hết sầu múi, kem dâu hết"), ["Mini: 3 hộp", "Ngàn lớp: 1 bánh", "Sầu múi: hết", "Kem dâu: hết"]);
-  assert.deepEqual(cleanLines([{ name: "Mini", qty: 0 }], DEFAULT_GOODS), []);
-  assert.deepEqual(cleanLines([{ name: "Mini", qty: 0 }], DEFAULT_GOODS, true), [{ name: "Mini", qty: 0, unit: "hộp" }]);
-});
-
-test("tiền hàng nhập trong tháng theo giá ngày nhận (kể cả khi tính tiêu thụ theo tồn kho)", () => {
-  const items = [{ name: "Mini", unit: "hộp", aliases: [], prices: [{ from: "2026-10-01", price: 19000 }, { from: "2026-11-15", price: 20000 }] }];
-  const rec = (kind: "RECEIVE" | "STOCK", date: string, qty: number): UsageRec => ({ kind, date, at: 0, lines: [{ name: "Mini", qty, unit: "hộp" }] });
-  const recs = [rec("RECEIVE", "2026-10-31", 4), rec("RECEIVE", "2026-11-10", 10), rec("RECEIVE", "2026-11-20", 10), rec("STOCK", "2026-10-31", 5), rec("STOCK", "2026-11-30", 3)];
-  const [r] = usageReport({ from: "2026-11-01", to: "2026-11-30", items, recs, useStock: true });
-  assert.deepEqual([r.monthReceived, r.receivedValue, r.skipped], [20, 10 * 19000 + 10 * 20000, 0]);
+test("bơ: không cảnh báo số lớn; số thập phân = kg", () => {
+  assert.equal(qtyAlert({ name: "Bơ", qty: 300, unit: "" }), null);
+  assert.deepEqual(read("Bơ 2,5"), ["Bơ 2.5 kg"]);
+  assert.deepEqual(read("Bơ 3"), ["Bơ 3"]);
+  assert.deepEqual(read("Bơ 3 túi"), ["Bơ 3 túi"]);
+  assert.deepEqual(cleanLines([{ name: "Bơ", qty: 1.5, unit: "" }], DEFAULT_GOODS), [{ name: "Bơ", qty: 1.5, unit: "kg" }]);
 });

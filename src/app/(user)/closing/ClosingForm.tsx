@@ -23,7 +23,6 @@ export default function ClosingForm({
   checkIn,
   employee,
   storeName,
-  dayBefore,
   existing,
   ocrEnabled,
 }: {
@@ -33,8 +32,6 @@ export default function ClosingForm({
   checkIn?: string | null;
   employee?: string;
   storeName?: string;
-  /** các ca đã chốt trước trong ngày (để ca cuối thấy tổng ngày) */
-  dayBefore: { label: string; dt: number; diff: number }[];
   /** ca đã chốt rồi → nạp lại số để sửa (1 ca chỉ 1 bản ghi) */
   existing: Partial<Record<ClosingShiftKey, { input: Record<string, string>; note: string; at: string; by: string; total?: string }>>;
   /** đã cấu hình Gemini đọc ảnh */
@@ -56,7 +53,6 @@ export default function ClosingForm({
     setNote(existing[k]?.note ?? "");
     setTotal(existing[k]?.total ?? "");
   };
-  const isDayEnd = shiftKey === "T";
   const [busy, setBusy] = useState(false);
   const [shooting, setShooting] = useState(false); // đang mở camera chụp ảnh chốt ca
   const [result, setResult] = useState<{ tone: "green" | "orange" | "red"; text: string } | null>(null);
@@ -82,8 +78,6 @@ export default function ClosingForm({
   const missing = REQUIRED.filter((k) => !raw[k].trim());
   const invalid = REVENUE_KEYS.some((k) => raw[k].trim() && !evals[k].ok) || (!!total.trim() && !totalEval.ok);
   const ready = !missing.length && !invalid;
-  // số luỹ kế: ca Tối chính là doanh thu cả ngày
-  const dayThu = revenue.tm + revenue.tk + revenue.grab + revenue.shopee + revenue.cp; // DT thật
 
   // chụp xong 1 ảnh → gửi luôn (ảnh chỉ gửi vào nhóm Telegram, không lưu)
   const submit = async () => {
@@ -279,19 +273,6 @@ export default function ClosingForm({
         <p className="mt-1 text-[11px] text-ink/60">
           {hasDt ? "= Doanh thu máy − (Tiền mặt + Tài khoản + Thu chi + Grab + Shopee)" : "Chưa có Doanh thu máy (DTm) – admin sẽ bổ sung rồi tính âm/dương."}
         </p>
-
-        {isDayEnd && (
-          <div className="mt-3 rounded-xl bg-info-soft p-3 text-xs text-info-fg">
-            <p className="font-semibold">Ca Tối = doanh thu CẢ NGÀY (số luỹ kế) – chốt xong sẽ ghi lên Google Sheet.</p>
-            {dayBefore.map((x) => (
-              <p key={x.label} className="flex justify-between"><span>{x.label} (luỹ kế)</span><span className="tabular-nums">{x.dt.toLocaleString("vi-VN")} đ{x.diff ? ` (lệch ${x.diff.toLocaleString("vi-VN")})` : ""}</span></p>
-            ))}
-            <p className="mt-1 flex justify-between border-t border-info-line pt-1 font-bold"><span>Doanh thu thật cả ngày (TK + TM + Shopee/Grab + két)</span><span className="tabular-nums">{dayThu.toLocaleString("vi-VN")} đ</span></p>
-            {dayBefore.length > 0 && (
-              <p className="flex justify-between"><span>Riêng ca Tối</span><span className="tabular-nums">{(dayThu - dayBefore[dayBefore.length - 1].dt).toLocaleString("vi-VN")} đ</span></p>
-            )}
-          </div>
-        )}
 
         <Field label="Ghi chú (không bắt buộc)">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="VD: thiếu 20k do trả lại khách" />

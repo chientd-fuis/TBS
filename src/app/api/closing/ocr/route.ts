@@ -37,7 +37,8 @@ export async function POST(req: Request) {
       employee: user.name || user.email,
       actor: `user:${user._id}`,
     }).catch((e: Error) => {
-      throw new HttpError(502, e.message, { code: "OCR_FAILED" });
+      console.error("[closing ocr]", e.message); // chi tiết (key, model, hết lượt…) chỉ ghi log – nhân viên thấy câu chung
+      throw new HttpError(502, "AI đang lỗi, không đọc được ảnh – hãy chụp/quét lại sau ít phút hoặc nhập tay.", { code: "OCR_FAILED" });
     });
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
