@@ -2,7 +2,10 @@
 import { useEffect, useState, useTransition } from "react";
 import { BellRing, Megaphone } from "lucide-react";
 import { cn } from "@/lib/format";
-import { shiftLabel, type ReminderItem } from "@/lib/reminders";
+import type { ReminderItem } from "@/lib/reminders";
+
+// (component phía trình duyệt – không import giá trị từ lib/reminders vì file đó chạy server: mongoose, telegram…)
+const shiftLabel = (s: string) => (s === "Tất cả" ? "cả ngày (mọi ca)" : "ca " + s);
 import { markShiftRemindersSeen } from "@/app/reminder-actions";
 
 const dm = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`;
