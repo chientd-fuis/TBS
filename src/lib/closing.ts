@@ -54,8 +54,9 @@ function revenueLines(r: CaptionData["revenue"], input?: CaptionData["revenueInp
     lines.push(d === 0 ? `🧮 Tổng NV ghi ${money(staffTotal)} – ✅ cộng đúng` : `🧮 Tổng NV ghi ${money(staffTotal)} – ⚠️ cộng SAI, đúng là ${money(sum)} (lệch ${d > 0 ? "+" : ""}${money(d)})`);
   }
   if (r.dt != null) {
-    const diff = r.dt - sum;
-    lines.push(`${diff === 0 ? "✅" : "⚠️"} Âm/Dương: ${diff > 0 ? "+" : ""}${money(diff)}`);
+    // Âm/Dương = thực thu − DT máy: âm = thiếu tiền, dương = thừa (chưa ra đơn?)
+    const diff = sum - r.dt;
+    lines.push(`${diff === 0 ? "✅" : "⚠️"} Âm/Dương: ${diff > 0 ? "+" : ""}${money(diff)}${diff < 0 ? " (ÂM – thiếu tiền)" : diff > 0 ? " (DƯƠNG – thừa tiền, chưa ra đơn?)" : ""}`);
   }
   return lines;
 }

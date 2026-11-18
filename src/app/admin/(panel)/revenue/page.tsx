@@ -52,7 +52,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
       </div>
       <Card>
         <p className="mb-3 text-xs text-ink/60">
-          Chốt ca là số <b>luỹ kế</b>: ca Chiều đã gồm ca Sáng, ca Tối = cả ngày. Doanh thu thật = TK + TM + Shopee/Grab + Két; Âm/Dương = DT máy − DT thật. Doanh thu
+          Chốt ca là số <b>luỹ kế</b>: ca Chiều đã gồm ca Sáng, ca Tối = cả ngày. Doanh thu thật = TK + TM + Shopee/Grab + Két; Âm/Dương = DT thật − DT máy: <b>âm = thiếu tiền</b> (ra đơn thừa chưa huỷ, thu thiếu, mất tiền, thối sai…), <b>dương = thừa tiền</b> (bán chưa ra đơn, cọc, khách trả nợ…). Doanh thu
           ngày = số chốt ca <b>Tối</b> (chưa chốt Tối → tạm tính theo ca chốt gần nhất).
         </p>
         <DailyRevenueTable rows={rows} today={localDate(new Date())} canEdit={owner} hideable pickups={pickups} />

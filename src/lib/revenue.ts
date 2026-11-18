@@ -213,10 +213,24 @@ export function parseOcrDate(s: string, refDate?: string): string | null {
   return Number.isNaN(Date.parse(iso + "T00:00:00Z")) ? null : iso;
 }
 
-/** Âm/Dương (chênh lệch) = Doanh thu máy − (Tiền mặt + Tài khoản + Thu chi + Grab + Shopee). */
+/**
+ * Âm/Dương = Doanh thu thật (TM + TK + Thu chi + Grab + Shopee) − Doanh thu máy (đơn ra trên KiotViet).
+ *  - ÂM (< 0, DT máy cao hơn tiền thực nhận) = THIẾU tiền: ra đơn thừa chưa huỷ, thu thiếu, mất / lấy tiền mặt, thối sai… → NV phải tìm nguyên nhân.
+ *  - DƯƠNG (> 0, DT máy thấp hơn) = THỪA tiền: chủ yếu bán chưa ra đơn (nghiêm trọng); hoặc cọc bánh sinh nhật, khách trả nợ hôm trước…
+ */
 export function revenueDiff(r: Partial<Revenue>) {
   const n = (k: RevenueKey) => Number(r[k] ?? 0) || 0;
-  return n("dt") - (n("tm") + n("tk") + n("cp") + n("grab") + n("shopee"));
+  return n("tm") + n("tk") + n("cp") + n("grab") + n("shopee") - n("dt");
+}
+
+/** Chữ kèm số Âm/Dương: "âm – thiếu tiền" / "dương – thừa tiền (chưa ra đơn?)". */
+export function diffWord(d: number) {
+  return d < 0 ? "âm – thiếu tiền" : d > 0 ? "dương – thừa tiền (chưa ra đơn?)" : "khớp";
+}
+
+/** Màu Âm/Dương: âm đỏ, dương cam, khớp xanh. */
+export function diffTone(d: number | null | undefined) {
+  return !d ? "text-good" : d < 0 ? "text-danger" : "text-warn";
 }
 
 export function sumRevenue(list: Partial<Revenue>[]): Revenue {

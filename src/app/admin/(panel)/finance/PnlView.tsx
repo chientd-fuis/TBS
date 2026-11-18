@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { StoreLite } from "@/lib/finance-data";
 import { contributionMargin, COST_GROUP_LABEL, COST_GROUPS, COST_LABEL, margin, STORE_COST_KEYS, type PnlLine, type PnlResult } from "@/lib/finance";
 import { viDate, viMonth, weekdayVi } from "@/lib/time";
-import { MonthPicker } from "@/components/MonthPicker";
+import PeriodPicker from "./PeriodPicker";
 import { Card, Empty } from "@/components/ui";
 import { cn } from "@/lib/format";
 import CostPie, { type Slice } from "./CostPie";
@@ -26,7 +26,7 @@ function Delta({ now, prev, invert = false }: { now: number; prev: number; inver
 
 /** Lãi lỗ TOÀN CHUỖI (mặc định) + lãi gộp từng cơ sở (tuỳ chọn phân bổ chi phí chung). */
 export default function PnlView({
-  month,
+  period,
   first,
   to,
   prevFirst,
@@ -37,7 +37,8 @@ export default function PnlView({
   prev,
   alloc = false,
 }: {
-  month: string;
+  /** kỳ đang xem: theo tháng hoặc khoảng ngày (from–to = khoảng đã chọn, có thể quá hôm nay) */
+  period: { mode: "month" | "range"; month: string; from: string; to: string };
   first: string;
   to: string;
   prevFirst: string;
@@ -52,7 +53,8 @@ export default function PnlView({
   const pt = prev.total;
   const storeKeys = STORE_COST_KEYS.filter((k) => k !== "direct" || t.direct > 0);
   const shownDates = [...dates].reverse();
-  const link = (a: boolean) => `/admin/finance?month=${month}${a ? "&alloc=1" : ""}`;
+  const base = period.mode === "range" ? `from=${period.from}&to=${period.to}` : `month=${period.month}`;
+  const link = (a: boolean) => `/admin/finance?${base}${a ? "&alloc=1" : ""}`;
 
   // biểu đồ tròn: màu cố định theo loại chi phí (không đổi theo thứ hạng)
   const cat = (k: string) => pnl.byCategory[k] ?? 0;
@@ -78,9 +80,10 @@ export default function PnlView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <MonthPicker month={month} base="/admin/finance" params={{ alloc: alloc ? "1" : undefined }} />
+        <PeriodPicker mode={period.mode} month={period.month} from={period.from} to={period.to} alloc={alloc} />
         <span className="text-xs text-ink/60">
-          {viDate(first)} – {viDate(to)} · so với {viDate(prevFirst)} – {viDate(prevTo)}
+          Đang tính {viDate(first)} – {viDate(to)}
+          {to < period.to && " (tới hôm nay)"} · so với {viDate(prevFirst)} – {viDate(prevTo)}
         </span>
       </div>
 
@@ -173,7 +176,7 @@ export default function PnlView({
                           ))}
                           <tr className="text-xs text-ink/45">
                             <td className="pb-1 pl-10" colSpan={2}>
-                              DT máy {l.machine ? vnd(l.machine) : "—"} · Âm/Dương {l.machine ? `${l.machine - l.revenue > 0 ? "+" : ""}${vnd(l.machine - l.revenue)}` : "—"}
+                              DT máy {l.machine ? vnd(l.machine) : "—"} · Âm/Dương {l.machine ? `${l.revenue - l.machine > 0 ? "+" : ""}${signed(l.revenue - l.machine)}` : "—"}
                             </td>
                           </tr>
                         </Fragment>
@@ -330,11 +333,11 @@ export default function PnlView({
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-ink/55">Chi phí chung tính vào ngày chi (ngày trên sao kê) nên lãi từng ngày dao động – xem tổng tháng để đánh giá.</p>
+        <p className="mt-2 text-xs text-ink/55">Chi phí chung tính vào ngày chi (ngày trên sao kê) nên lãi từng ngày dao động – xem tổng cả kỳ để đánh giá.</p>
       </Card>
 
       <p className="text-xs text-ink/60">
-        T{viMonth(month)} · Doanh thu thật = TK + TM + Grab + Shopee + Chi phí két (từ chốt ca, lấy ca Tối). Âm/Dương = DT máy − Doanh thu thật.
+        {period.mode === "month" ? `T${viMonth(period.month)}` : `${viDate(first)} – ${viDate(to)}`} · Doanh thu thật = TK + TM + Grab + Shopee + Chi phí két (từ chốt ca, lấy ca Tối). Âm/Dương = Doanh thu thật − DT máy (âm = thiếu tiền, dương = thừa tiền / chưa ra đơn).
         Lãi = Doanh thu thật − Chi phí két − Lương NV − Chi phí admin nhập (có tick &quot;Tính vào chi phí&quot;) − Mặt bằng − Phí sàn.
       </p>
     </div>

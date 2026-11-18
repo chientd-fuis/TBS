@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { ActionForm } from "@/components/ActionForm";
 import { Badge } from "@/components/ui";
 import { cn } from "@/lib/format";
+import { diffTone } from "@/lib/revenue";
 import { syncDayRevenue } from "@/app/admin/actions/closing";
 import { setRevenuePickup } from "@/app/admin/actions/revenue";
 
@@ -235,7 +236,7 @@ export default function DailyRevenueTable({
                   <td className={cn("text-right tabular-nums text-ink/60", col("ket"))}>{vnd(r.ket)}</td>
                   <td className={cn("text-right font-bold tabular-nums", col("thu"))}>{vnd(r.thu)}</td>
                   <td className={cn("text-right tabular-nums", col("dtm"))}>{r.dtm != null ? vnd(r.dtm) : <span className="text-warn">chưa có</span>}</td>
-                  <td className={cn("text-right font-semibold tabular-nums", r.diff ? "text-danger" : "text-good", col("diff"))}>{signed(r.diff)}</td>
+                  <td className={cn("text-right font-semibold tabular-nums", diffTone(r.diff), col("diff"))}>{signed(r.diff)}</td>
                   <td className={cn("text-center whitespace-nowrap", col("done"))}>
                     {(["Sáng", "Chiều", "Tối"] as const).map((n) => (
                       <span key={n} className={cn("mx-0.5 inline-block rounded px-1.5 text-[10px] font-bold", r.done.includes(n) ? "bg-secondary text-white" : "bg-mute-bg text-mute-fg")}>
@@ -286,7 +287,7 @@ export default function DailyRevenueTable({
                                 <td className="text-right font-semibold tabular-nums">{vnd(s.thu)}</td>
                                 <td className="text-right tabular-nums text-accent">{vnd(s.own)}</td>
                                 <td className="text-right tabular-nums">{s.dtm != null ? vnd(s.dtm) : "—"}</td>
-                                <td className={cn("text-right tabular-nums", s.diff ? "text-danger" : "text-good")}>{signed(s.diff)}</td>
+                                <td className={cn("text-right tabular-nums", diffTone(s.diff))}>{signed(s.diff)}</td>
                                 <td className={cn("text-right tabular-nums", s.totalOk === false ? "text-danger" : "text-good")}>
                                   {s.staffTotal != null ? `${vnd(s.staffTotal)} ${s.totalOk ? "✓" : "✗"}` : "—"}
                                 </td>
@@ -335,7 +336,7 @@ export default function DailyRevenueTable({
             <td className={cn("text-right tabular-nums", col("ket"))}>{vnd(tot.ket)}</td>
             <td className={cn("text-right tabular-nums", col("thu"))}>{vnd(tot.thu)}</td>
             <td className={cn("text-right tabular-nums", col("dtm"))}>{vnd(tot.dtm)}</td>
-            <td className={cn("text-right tabular-nums", tot.diff ? "text-danger" : "text-good", col("diff"))}>{signed(tot.diff)}</td>
+            <td className={cn("text-right tabular-nums", diffTone(tot.diff), col("diff"))}>{signed(tot.diff)}</td>
             <td className={col("done")} />
           </tr>
         </tfoot>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarPlus, ImageUp, Loader2, Send, Sparkles, X } from "lucide-react";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { Alert, Button, Field, Select, Textarea } from "@/components/ui";
-import { closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue, type RevenueKey } from "@/lib/revenue";
+import { closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, diffTone, diffWord, type Revenue, type RevenueKey } from "@/lib/revenue";
 
 type StoreOpt = { id: string; name: string; staff: { id: string; name: string }[]; missing: string[] };
 type Raw = Record<RevenueKey, string>;
@@ -304,8 +304,8 @@ export default function AddClosing({ stores, existing, today, ocrEnabled }: { st
           </span>
         )}
         {hasDt && !keepOld && (
-          <span className={revenueDiff(revenue) === 0 ? "text-good" : "text-warn"}>
-            Âm/Dương (DT máy − DT thật): <b>{vnd(revenue.dt - thu)}</b>
+          <span className={diffTone(revenueDiff(revenue))}>
+            Âm/Dương (DT thật − DT máy): <b>{revenueDiff(revenue) > 0 ? "+" : ""}{vnd(revenueDiff(revenue))}</b> · {diffWord(revenueDiff(revenue))}
           </span>
         )}
         {hasTotal && <span className={totalDiff === 0 ? "text-good" : "text-danger"}>{totalDiff === 0 ? "✅ Tổng NV cộng đúng" : `⚠️ Tổng NV ghi lệch ${vnd(totalDiff)}`}</span>}

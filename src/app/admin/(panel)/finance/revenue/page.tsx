@@ -12,6 +12,7 @@ import {
   saveCashTransfer,
 } from "@/app/admin/actions/finance";
 import { cn } from "@/lib/format";
+import { diffTone } from "@/lib/revenue";
 import DailyRevenueTable, { type DayRow } from "./DailyRevenueTable";
 
 export const dynamic = "force-dynamic";
@@ -189,7 +190,7 @@ export default async function DailyRevenuePage({
               <dd
                 className={cn(
                   "text-right font-semibold tabular-nums",
-                  c.diff ? "text-danger" : "text-good",
+                  diffTone(c.diff),
                 )}
               >
                 {c.diff > 0 ? "+" : ""}
@@ -296,8 +297,7 @@ export default async function DailyRevenuePage({
       <Card>
         <p className="mb-3 text-xs text-ink/60">
           Chốt ca là số <b>luỹ kế</b>: ca Chiều đã gồm ca Sáng, ca Tối = cả
-          ngày. Doanh thu thật = TK + TM + Shopee/Grab + Két; Âm/Dương = DT máy
-          − DT thật. Doanh thu ngày = số chốt ca <b>Tối</b> (chưa chốt Tối → tạm
+          ngày. Doanh thu thật = TK + TM + Shopee/Grab + Két; Âm/Dương = DT thật − DT máy: <b>âm = thiếu tiền</b> (ra đơn thừa chưa huỷ, thu thiếu, mất tiền, thối sai…), <b>dương = thừa tiền</b> (bán chưa ra đơn, cọc, khách trả nợ…). Doanh thu ngày = số chốt ca <b>Tối</b> (chưa chốt Tối → tạm
           tính theo ca chốt gần nhất). Bấm vào dòng để xem 3 ca.
           {owner
             ? " Bảng là số ban đầu theo chốt ca (chưa tính phiếu nộp / rút)."

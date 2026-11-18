@@ -254,7 +254,7 @@ export function writeMonthSummarySheet(wb: ExcelJS.Workbook, data: MonthSummaryD
     tot.getCell(col).numFmt = VND;
     tot.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.total } };
   }
-  w.note("Âm/Dương = DT máy − DT thật (TK + TM + Shopee/Grab + Két), chỉ tính các ngày có DT máy. Lương theo ngày là ước tính từ giờ công; mặt bằng chia đều theo ngày.");
+  w.note("Âm/Dương = DT thật (TK + TM + Shopee/Grab + Két) − DT máy: âm = thiếu tiền, dương = thừa tiền / chưa ra đơn, chỉ tính các ngày có DT máy. Lương theo ngày là ước tính từ giờ công; mặt bằng chia đều theo ngày.");
   w.gap();
 
   /* ---------- C. Chi tiết chốt ca ---------- */

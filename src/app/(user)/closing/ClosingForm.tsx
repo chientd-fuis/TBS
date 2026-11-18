@@ -7,7 +7,7 @@ import { Alert, Button, Card, Field, Textarea } from "@/components/ui";
 import ExprMoneyInput from "@/components/ExprMoneyInput";
 import { DeviceNotice } from "@/components/user/DeviceNotice";
 import { useDevice } from "@/components/user/useDevice";
-import { CLOSING_SHIFTS, closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type ClosingShiftKey, type Revenue, type RevenueKey } from "@/lib/revenue";
+import { CLOSING_SHIFTS, closingSum, evalMoneyExpr, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, diffTone, type ClosingShiftKey, type Revenue, type RevenueKey } from "@/lib/revenue";
 import { viDate } from "@/lib/time";
 
 type Raw = Record<RevenueKey, string>;
@@ -270,10 +270,10 @@ export default function ClosingForm({
           )}
         </div>
 
-        <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 ${!hasDt ? "bg-cream" : diff === 0 ? "bg-ok-bg" : "bg-bad-bg"}`}>
+        <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 ${!hasDt ? "bg-cream" : diff === 0 ? "bg-ok-bg" : diff < 0 ? "bg-bad-bg" : "bg-late-bg"}`}>
           <span className="text-sm font-semibold">Âm / Dương</span>
-          <span className={`text-lg font-bold tabular-nums ${!hasDt ? "text-ink/40" : diff === 0 ? "text-good" : "text-danger"}`}>
-            {hasDt ? `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} đ` : "—"}
+          <span className={`text-lg font-bold tabular-nums ${!hasDt ? "text-ink/40" : diffTone(diff)}`}>
+            {hasDt ? `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} đ${diff < 0 ? " · thiếu tiền" : diff > 0 ? " · thừa – chưa ra đơn?" : ""}` : "—"}
           </span>
         </div>
         <p className="mt-1 text-[11px] text-ink/60">

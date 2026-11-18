@@ -11,7 +11,8 @@ import { ActionForm } from "@/components/ActionForm";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import { Alert, Badge, Card, Empty, Field, Input, PageTitle, Select } from "@/components/ui";
 import { deleteClosing, editClosingRevenue, resendClosing, syncClosingSheet } from "../../actions/closing";
-import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, type Revenue } from "@/lib/revenue";
+import { cn } from "@/lib/format";
+import { closingSum, REVENUE_KEYS, REVENUE_LABEL, revenueDiff, diffTone, diffWord, type Revenue } from "@/lib/revenue";
 import { sheetsConfigured } from "@/lib/sheets";
 import { mismatchText } from "@/lib/cashbook";
 import { addDays } from "@/lib/time";
@@ -202,7 +203,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
                             {c.revenue.dt != null &&
                               (() => {
                                 const d = revenueDiff(c.revenue as Partial<Revenue>);
-                                return <div className={d ? "font-bold text-danger" : "text-good"}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}</div>;
+                                return <div className={cn(diffTone(d), d !== 0 && "font-bold")} title={diffWord(d)}>Âm/Dương {d > 0 ? "+" : ""}{vnd(d)}{d < 0 ? " (thiếu)" : d > 0 ? " (thừa)" : ""}</div>;
                               })()}
                             {!!c.cashMismatch?.diff && (
                               <div className="mt-0.5 rounded-md bg-danger/10 px-1.5 py-0.5 font-bold text-danger">
