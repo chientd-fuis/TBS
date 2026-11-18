@@ -122,7 +122,7 @@ export default async function HomePage() {
         storeName={(open && supportOf(open.storeId)) || store?.name || ""}
         supportNote={
           open && supportOf(open.storeId)
-            ? `Bạn đang hỗ trợ ${supportOf(open.storeId)} – check-out tại đó`
+            ? `Bạn đang làm việc ở ${supportOf(open.storeId)}`
             : supportToday.length
               ? `Hôm nay bạn có ca hỗ trợ ở ${supportToday.join(", ")} – tới đó bấm CHECK-IN, app tự nhận cơ sở theo GPS`
               : undefined
@@ -149,8 +149,8 @@ export default async function HomePage() {
                 <Camera size={19} aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold">Trước khi về: chốt ca{cur?.shiftName ? ` ${cur.shiftName}` : ""}</span>
-                <span className="block text-xs text-ink/70">Chụp tờ chốt ca – không chụp bị ghi 1 lỗi</span>
+                <span className="block text-sm font-bold">Công việc của thu ngân cuối ca</span>
+                <span className="block text-xs text-ink/70">Chụp tờ chốt ca – ghi lại thông tin chốt ca</span>
               </span>
               <ChevronRight size={20} className="shrink-0 text-accent" aria-hidden />
             </Link>
