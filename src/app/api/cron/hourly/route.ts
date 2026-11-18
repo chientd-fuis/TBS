@@ -9,6 +9,7 @@ import { migrateDayCalc, syncPendingDays } from "@/lib/day-revenue";
 import { runScheduledReports } from "@/lib/finance-report";
 import { ensureTtlIndexes, runAutoCleanup } from "@/lib/cleanup";
 import { runDailyAnomaly } from "@/lib/anomaly";
+import { escalateUnpaid } from "@/lib/unpaid-order";
 import { runAutoPenalties } from "@/lib/auto-penalty";
 import { runProbation } from "@/lib/probation";
 import { reportMissedCheckouts, runAutoCheckout } from "@/lib/auto-checkout";
@@ -36,7 +37,8 @@ export async function GET(req: Request) {
   const sheetDays = await syncPendingDays(); // ghi Google Sheet các ngày chưa ghi được
   const reports = await runScheduledReports().catch((e: Error) => ({ error: e.message })); // báo cáo ngày/tuần/tháng → nhóm Quản lý doanh thu
   const ttl = await ensureTtlIndexes().catch((e: Error) => ({ error: e.message })); // log cũ tự xoá theo thời gian
+  const unpaid = await escalateUnpaid().catch((e: Error) => ({ error: e.message })); // đơn chưa thanh toán quá 2 ngày → yêu cầu phạt
   const anomaly = await runDailyAnomaly().catch((e: Error) => ({ error: e.message })); // bất thường chốt ca & két → Telegram + Tổng quan
   const cleanup = await runAutoCleanup().catch((e: Error) => ({ error: e.message })); // tự dọn rác mỗi tháng 1 lần (nếu bật)
-  return NextResponse.json({ autoCheckout, missing, missedReported, penalties, probation, uploaded, published, closingsResent, recalculated, sheetDays, reports, ttl, anomaly, cleanup });
+  return NextResponse.json({ unpaid, autoCheckout, missing, missedReported, penalties, probation, uploaded, published, closingsResent, recalculated, sheetDays, reports, ttl, anomaly, cleanup });
 }

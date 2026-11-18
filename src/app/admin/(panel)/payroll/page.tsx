@@ -14,6 +14,7 @@ import { payrollAction, payrollItemAction } from "../../actions/ops";
 import { generatePayroll } from "@/lib/payroll";
 import { BpAmount, CopyAccount, ExtrasCell, type ExtraEntry } from "./PayrollCells";
 import PayrollColumns from "./PayrollColumns";
+import PayrollInsights from "./PayrollInsights";
 
 export const dynamic = "force-dynamic";
 
@@ -298,6 +299,24 @@ export default async function PayrollAdmin({ searchParams }: { searchParams: Pro
           <LinkButton variant="outline" href={exp("chuyenkhoan")}>Xuất danh sách chuyển khoản</LinkButton>
           <LinkButton variant="outline" href={exp("thuongphat")}>Xuất thưởng / phạt</LinkButton>
         </div>
+      )}
+
+      {payroll && items.length > 0 && (
+        <PayrollInsights
+          storeId={store._id}
+          month={month}
+          items={items.map((i) => ({
+            userId: i.userId,
+            name: nameOf(i),
+            workDays: i.workDays ?? 0,
+            totalHours: i.totalHours ?? 0,
+            lateCount: i.lateCount ?? 0,
+            earlyCount: i.earlyCount ?? 0,
+            totalBonus: i.totalBonus ?? 0,
+            totalPenalty: i.totalPenalty ?? 0,
+          }))}
+          bps={bps}
+        />
       )}
 
       {payroll?.status === "PAID" && (

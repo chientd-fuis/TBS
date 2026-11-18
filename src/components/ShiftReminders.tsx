@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { BellRing, Megaphone } from "lucide-react";
 import { cn } from "@/lib/format";
-import type { ReminderItem } from "@/lib/reminders";
+import { shiftLabel, type ReminderItem } from "@/lib/reminders";
 import { markShiftRemindersSeen } from "@/app/reminder-actions";
 
 const dm = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`;
@@ -21,7 +21,7 @@ export function ReminderCard({ r, onOk, busy, compact = false }: { r: Pick<Remin
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-[11px] font-bold tracking-wide uppercase opacity-85">Bảng tin Bơ Sầu{imp ? " · Quan trọng" : ""}</span>
-            <span className={cn("block font-extrabold", compact ? "text-sm" : "text-lg")}>Nhắc việc ca {r.shift}</span>
+            <span className={cn("block font-extrabold", compact ? "text-sm" : "text-lg")}>Nhắc việc {shiftLabel(r.shift)}</span>
           </span>
           <span className="shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-xs font-bold">
             {wd(r.date)} {dm(r.date)}
@@ -40,7 +40,7 @@ export function ReminderCard({ r, onOk, busy, compact = false }: { r: Pick<Remin
         </p>
         {!compact && (
           <p className="rounded-xl bg-cream px-3 py-2 text-xs text-ink/70">
-            Nhắc việc này nằm ở <b>Bảng tin</b> trang Chấm công tới hết ca{r.end ? ` (${r.end})` : ""}.
+            Nhắc việc này nằm ở <b>Bảng tin</b> trang Chấm công tới hết {r.shift === "Tất cả" ? "ngày" : "ca" + (r.end ? ` (${r.end})` : "")}.
           </p>
         )}
         <button
@@ -89,14 +89,16 @@ export default function ReminderPopup({ items }: { items: ReminderItem[] }) {
 /** Bảng tin trang Chấm công: các nhắc việc của ca đang / sắp làm (tới hết ca) */
 export function ReminderBoard({ items }: { items: ReminderItem[] }) {
   if (!items.length) return null;
-  const end = items[0].end;
+  // tiêu đề theo nhắc việc của ca (nếu có); chỉ có nhắc "cả ngày" thì ghi cả ngày
+  const head = items.find((x) => x.shift !== "Tất cả") ?? items[0];
+  const end = head.end;
   return (
     <section aria-label="Bảng tin Bơ Sầu" className="space-y-2.5 rounded-2xl bg-info-bg p-3 ring-1 ring-info-line">
       <div className="flex items-center gap-2">
         <Megaphone size={19} className="text-info-fg" aria-hidden />
         <b className="flex-1 text-sm text-info-fg">Bảng tin Bơ Sầu</b>
         <span className="text-xs text-info-fg/80">
-          Ca {items[0].shift}
+          {shiftLabel(head.shift).replace(/^c/, "C")}
           {end ? ` · tới ${end}` : ""}
         </span>
       </div>

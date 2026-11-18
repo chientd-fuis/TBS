@@ -6,7 +6,8 @@ import { ReminderCard } from "@/components/ShiftReminders";
 import { deleteReminder, saveReminder } from "@/app/admin/actions/reminders";
 
 export type EditReminder = { id: string; date: string; shift: string; storeIds: string[]; text: string; level: "NORMAL" | "IMPORTANT"; by: string };
-const SHIFTS = ["Sáng", "Chiều", "Tối"] as const;
+const SHIFTS = ["Sáng", "Chiều", "Tối", "Tất cả"] as const;
+const ALL = "Tất cả";
 const chip = (on: boolean) => `rounded-xl px-3.5 py-2 text-sm font-semibold ${on ? "bg-accent text-on-accent" : "bg-card ring-1 ring-line-strong"}`;
 
 /** Soạn nhắc nhở + xem trước popup / Bảng tin như nhân viên thấy */
@@ -37,7 +38,7 @@ export default function ReminderEditor({
       const r = await saveReminder({ id: f.id || undefined, date: f.date, shift: f.shift, storeIds: f.storeIds, text: f.text, level: f.level }).catch(() => ({ error: "Mất kết nối – thử lại" }));
       setBusy("");
       if (r.error) return setMsg({ err: r.error });
-      setMsg({ ok: f.id ? "Đã lưu thay đổi" : "Đã tạo nhắc nhở – nhân viên ca đó sẽ thấy 30 phút trước giờ vào ca" });
+      setMsg({ ok: f.id ? "Đã lưu thay đổi" : f.shift === ALL ? "Đã tạo nhắc nhở – mọi nhân viên cơ sở sẽ thấy khi mở app ngày đó" : "Đã tạo nhắc nhở – nhân viên ca đó sẽ thấy 30 phút trước giờ vào ca" });
       if (!f.id && "id" in r && r.id) router.replace(`/admin/reminders?id=${r.id}`);
       else router.refresh();
     });
@@ -69,10 +70,10 @@ export default function ReminderEditor({
           </div>
           <div className="space-y-1.5">
             <span className="block text-xs font-semibold text-accent">Ca</span>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {SHIFTS.map((s) => (
                 <button key={s} type="button" onClick={() => set("shift", s)} className={chip(f.shift === s)}>
-                  {s}
+                  {s === ALL ? "Tất cả các ca" : s}
                 </button>
               ))}
             </div>
@@ -102,10 +103,10 @@ export default function ReminderEditor({
             <p className="text-xs text-ink/70">
               {targets.length ? (
                 <>
-                  Gửi cho <b>{targets.length} nhân viên</b> có ca {f.shift} ngày này: {targets.map((t) => t.name).join(", ")}
+                  Gửi cho <b>{targets.length} nhân viên</b> {f.shift === ALL ? "của cơ sở" : "có ca " + f.shift + " ngày này"}: {targets.map((t) => t.name).join(", ")}
                 </>
               ) : (
-                <span className="text-warn">Chưa có nhân viên nào được xếp ca {f.shift} ngày này – xếp ca xong sẽ tự nhận.</span>
+                <span className="text-warn">{f.shift === ALL ? "Cơ sở chưa có nhân viên nào." : "Chưa có nhân viên nào được xếp ca " + f.shift + " ngày này – xếp ca xong sẽ tự nhận."}</span>
               )}
             </p>
           )}
@@ -134,7 +135,16 @@ export default function ReminderEditor({
           </div>
         </div>
         <p className="rounded-xl bg-info-bg px-3 py-2 text-[13px] text-info-fg">
-          Popup hiện <b>30 phút trước giờ vào ca {f.shift}</b> của từng nhân viên · nằm ở Bảng tin tới hết ca rồi tự ẩn. Sửa nội dung → nhân viên đã xem sẽ thấy lại.
+          {f.shift === ALL ? (
+            <>
+              Gửi <b>mọi nhân viên của cơ sở</b> (dù ngày đó có ca hay không, kể cả người có ca hỗ trợ ở cơ sở): popup hiện khi mở app <b>trong ngày đó</b> · nằm ở Bảng tin tới hết ngày.
+            </>
+          ) : (
+            <>
+              Popup hiện <b>30 phút trước giờ vào ca {f.shift}</b> của từng nhân viên · nằm ở Bảng tin tới hết ca rồi tự ẩn.
+            </>
+          )}{" "}
+          Sửa nội dung → nhân viên đã xem sẽ thấy lại.
         </p>
         {msg.err && <p className="rounded-xl bg-bad-bg px-3 py-2 text-sm text-bad-fg">{msg.err}</p>}
         {msg.ok && <p className="rounded-xl bg-ok-bg px-3 py-2 text-sm text-good">{msg.ok}</p>}

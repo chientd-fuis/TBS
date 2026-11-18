@@ -26,7 +26,7 @@ export default async function RemindersPage({ searchParams }: { searchParams: Pr
     Store.find({ active: { $ne: false } }).select("name").sort({ name: 1 }).lean(),
   ]);
   const storeName = new Map(stores.map((s) => [String(s._id), s.name.replace(/^TBS\s+/i, "")]));
-  const ORDER = { Sáng: 0, Chiều: 1, Tối: 2 } as Record<string, number>;
+  const ORDER = { "Tất cả": -1, Sáng: 0, Chiều: 1, Tối: 2 } as Record<string, number>;
   if (!past) list.sort((a, b) => a.date.localeCompare(b.date) || (ORDER[a.shift] ?? 0) - (ORDER[b.shift] ?? 0));
   // ai nhận / ai đã xem
   const seenAll = await ShiftReminderSeen.find({ reminderId: { $in: list.map((r) => r._id) } }).select("reminderId userId").lean();
@@ -76,7 +76,7 @@ export default async function RemindersPage({ searchParams }: { searchParams: Pr
               >
                 <span className="flex items-center justify-between gap-2 text-xs">
                   <b className="text-accent">
-                    {dd(r.date)} · Ca {r.shift}
+                    {dd(r.date)} · {r.shift === "Tất cả" ? "Tất cả các ca" : "Ca " + r.shift}
                   </b>
                   {r.level === "IMPORTANT" ? (
                     <span className="rounded-full bg-bad-bg px-2 py-0.5 font-bold text-bad-fg">Quan trọng</span>
@@ -96,7 +96,7 @@ export default async function RemindersPage({ searchParams }: { searchParams: Pr
                     </span>
                   </>
                 ) : (
-                  <span className="block text-xs text-warn">Chưa có nhân viên nào được xếp ca này</span>
+                  <span className="block text-xs text-warn">{r.shift === "Tất cả" ? "Cơ sở chưa có nhân viên nào" : "Chưa có nhân viên nào được xếp ca này"}</span>
                 )}
               </Link>
             );

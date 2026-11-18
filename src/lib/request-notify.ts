@@ -28,6 +28,7 @@ export const REQUEST_KINDS = [
   { key: "shiftReg", label: "🗓 Đăng ký ca" },
   { key: "payrollFeedback", label: "💬 Khiếu nại bảng lương" },
   { key: "revenueGap", label: "💸 Bù doanh thu (thiếu tiền)" },
+  { key: "unpaid", label: "🧾 Đơn chưa thanh toán (xác nhận / phạt sau 2 ngày)" },
 ] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number]["key"];
 

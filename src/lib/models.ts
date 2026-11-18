@@ -509,6 +509,35 @@ RevenueGapSchema.index({ storeId: 1, date: 1 }, { unique: true });
 RevenueGapSchema.index({ status: 1 });
 export const RevenueGap = getModel("RevenueGap", RevenueGapSchema);
 
+/**
+ * ĐƠN CHƯA THANH TOÁN (lib/unpaid-order.ts): ghi chú chốt ca có "25k chưa TT", "chưa thanh toán 25k"… → 1 bản ghi / lượt chốt ca.
+ *  OPEN      = cảnh báo admin: xác nhận khách đã chuyển chưa
+ *  ESCALATED = quá 2 ngày chưa xác nhận → yêu cầu phạt bù doanh thu (khách không trả) chờ duyệt
+ *  PAID = khách đã trả · DISMISSED = không phải đơn nợ · PENALIZED = đã ghi phạt · WAIVED = không phạt
+ */
+const UnpaidOrderSchema = new Schema(
+  {
+    closingId: { type: Schema.Types.ObjectId, ref: "ShiftClosing", required: true, unique: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+    date: { type: String, required: true }, // ngày làm của ca chốt
+    shiftName: String,
+    userId: { type: Schema.Types.ObjectId, ref: "User" }, // người chốt ca
+    name: String,
+    amount: Number, // tổng tiền đọc được (0 = không rõ số)
+    quotes: [String], // các đoạn ghi chú nhắc đơn chưa thanh toán
+    status: { type: String, enum: ["OPEN", "ESCALATED", "PAID", "DISMISSED", "PENALIZED", "WAIVED"], default: "OPEN" },
+    detectedAt: { type: Date, default: () => new Date() },
+    escalatedAt: Date,
+    decidedBy: String,
+    decidedAt: Date,
+    reply: String,
+    penalty: Number,
+  },
+  { timestamps: true },
+);
+UnpaidOrderSchema.index({ status: 1, detectedAt: 1 });
+export const UnpaidOrder = getModel("UnpaidOrder", UnpaidOrderSchema);
+
 /* ---------- Chốt ca: ảnh chụp cuối ca → gửi nhóm Telegram ---------- */
 const ShiftClosingSchema = new Schema(
   {
@@ -1045,7 +1074,8 @@ export const AnnouncementSeen = getModel("AnnouncementSeen", AnnouncementSeenSch
 const ShiftReminderSchema = new Schema(
   {
     date: { type: String, required: true, index: true }, // YYYY-MM-DD
-    shift: { type: String, enum: ["Sáng", "Chiều", "Tối"], required: true },
+    // "Tất cả" = mọi ca: mọi nhân viên của cơ sở (dù hôm đó có ca hay không), hiện cả ngày
+    shift: { type: String, enum: ["Sáng", "Chiều", "Tối", "Tất cả"], required: true },
     storeIds: [{ type: Schema.Types.ObjectId, ref: "Store" }], // trống = mọi cơ sở
     text: { type: String, required: true },
     level: { type: String, enum: ["NORMAL", "IMPORTANT"], default: "NORMAL" },

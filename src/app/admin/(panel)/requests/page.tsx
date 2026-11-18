@@ -21,6 +21,7 @@ import { Badge, Card, Empty, Input, PageTitle } from "@/components/ui";
 import { replyFeedback, resolveAdjustment } from "../../actions/ops";
 import TimeInput from "@/components/TimeInput";
 import RevenueGapCard from "./RevenueGapCard";
+import UnpaidCard from "./UnpaidCard";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,7 @@ export default async function RequestsPage() {
   return (
     <>
       <PageTitle>Yêu cầu từ nhân viên</PageTitle>
+      <UnpaidCard canDecide={can(admin, "revenue")} who={(storeId) => who(storeId, "revenue")} />
       <RevenueGapCard canDecide={can(admin, "revenue")} who={(storeId) => who(storeId, "revenue")} />
       {(probs.length > 0 || probsDone.length > 0) && (
         <Card title={`🟣 Thử việc chờ xác nhận (${probs.length})`} className="mb-4">

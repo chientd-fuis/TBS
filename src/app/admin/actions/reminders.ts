@@ -6,7 +6,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { connectDB } from "@/lib/db";
 import { ShiftReminder, ShiftReminderSeen } from "@/lib/models";
-import { REMINDER_SHIFTS } from "@/lib/reminders";
+import { REMINDER_SHIFT_OPTIONS } from "@/lib/reminders";
 import { isYmd } from "@/lib/time";
 
 export type ReminderInput = { id?: string; date: string; shift: string; storeIds: string[]; text: string; level: "NORMAL" | "IMPORTANT" };
@@ -26,7 +26,7 @@ export async function saveReminder(input: ReminderInput): Promise<Res> {
     const text = String(input.text ?? "").trim().slice(0, 200);
     if (!text) return { error: "Nhập nội dung nhắc nhở" };
     if (!isYmd(input.date)) return { error: "Chọn ngày" };
-    if (!(REMINDER_SHIFTS as readonly string[]).includes(input.shift)) return { error: "Chọn ca" };
+    if (!(REMINDER_SHIFT_OPTIONS as readonly string[]).includes(input.shift)) return { error: "Chọn ca" };
     const data = {
       date: input.date,
       shift: input.shift,

@@ -32,7 +32,7 @@ export const fold = (s: string) =>
 
 const SHORT = /\b(am|thieu|hut|lech|mat)\b/; // âm, thiếu, hụt, lệch, mất
 const OVER = /\b(du|thua|lo)\b/; // dư, thừa
-const UNPAID = /chua\s*(tt|thanh\s*toan|tra|ck|chuyen)|ghi\s*no|khach\s*no|\bno\b|ck\s*sau|tra\s*sau|chuyen\s*sau|chua\s*nhan\s*tien/;
+export const UNPAID = /chua\s*(tt|thanh\s*toan|tra|ck|chuyen)|ghi\s*no|khach\s*no|\bno\b|ck\s*sau|tra\s*sau|chuyen\s*sau|chua\s*nhan\s*tien/;
 const MONEY = /([-+−]?\s*\d[\d.,]*\s*(?:k|tr\d{0,3}|nghin|ngan|d)?)/;
 
 /**

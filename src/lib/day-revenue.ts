@@ -67,6 +67,9 @@ export async function recomputeDay(storeId: Id, date: string) {
   // ngày thiếu tiền → tạo / cập nhật yêu cầu bù doanh thu (chốt ca, admin sửa DT máy, import KiotViet đều đi qua đây)
   const { syncRevenueGap } = await import("./revenue-gap");
   await syncRevenueGap(storeId, date);
+  // ghi chú "25k chưa TT"… → cảnh báo đơn chưa thanh toán
+  const { syncUnpaidOrders } = await import("./unpaid-order");
+  await syncUnpaidOrders(storeId, date);
   return { day: day!, wasSynced: prev?.sheet?.status === "SENT", changed };
 }
 

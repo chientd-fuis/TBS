@@ -6,7 +6,8 @@ import { addDays, DEFAULT_TZ, localDate, localTime, zonedToDate } from "./time";
 
 /*
  * BẢNG TIN BƠ SẦU – nhắc việc theo ngày + ca.
- *  - Admin tạo nhắc nhở: ngày, ca (Sáng / Chiều / Tối), cơ sở (trống = tất cả), nội dung, mức độ.
+ *  - Admin tạo nhắc nhở: ngày, ca (Sáng / Chiều / Tối / Tất cả các ca), cơ sở (trống = tất cả), nội dung, mức độ.
+ *  - "Tất cả các ca": MỌI nhân viên đang làm của cơ sở (cơ sở gốc, hoặc có ca ở cơ sở đó hôm ấy) – hiện cả ngày đó.
  *  - Nhân viên có ca được xếp khớp (cùng ngày, cùng ca, cùng cơ sở) → từ 30 phút trước giờ vào ca:
  *      · popup ở MỌI trang (tải trang là hiện) cho tới khi bấm "Đã hiểu" (xem 1 lần),
  *      · nằm ở Bảng tin trang Chấm công tới hết ca rồi tự ẩn.
@@ -14,6 +15,12 @@ import { addDays, DEFAULT_TZ, localDate, localTime, zonedToDate } from "./time";
 
 export const REMINDER_SHIFTS = ["Sáng", "Chiều", "Tối"] as const;
 export type ReminderShift = (typeof REMINDER_SHIFTS)[number];
+export const ALL_SHIFTS = "Tất cả" as const;
+/** lựa chọn khi tạo nhắc nhở */
+export const REMINDER_SHIFT_OPTIONS = [...REMINDER_SHIFTS, ALL_SHIFTS] as const;
+export type ReminderShiftOption = (typeof REMINDER_SHIFT_OPTIONS)[number];
+/** "ca Sáng" / "cả ngày (mọi ca)" */
+export const shiftLabel = (s: string) => (s === ALL_SHIFTS ? "cả ngày (mọi ca)" : "ca " + s);
 export const LEAD_MS = 30 * 60_000; // hiện trước giờ vào ca 30 phút
 
 /** Ca được xếp → Sáng / Chiều / Tối: theo tên ca ("Ca sáng", "S"…), không rõ thì theo giờ vào */
@@ -37,7 +44,7 @@ function spanOf(a: { date: string; startTime?: string | null; endTime?: string |
 export type ReminderItem = {
   id: string;
   date: string;
-  shift: ReminderShift;
+  shift: ReminderShiftOption;
   text: string;
   level: "NORMAL" | "IMPORTANT";
   by: string;
@@ -55,17 +62,37 @@ export async function activeRemindersFor(userId: unknown, now = new Date()): Pro
   const today = localDate(now, tz);
   const days = [addDays(today, -1), today]; // ca qua đêm của hôm qua vẫn đang chạy
   const asg = await ShiftAssignment.find({ userId, date: { $in: days }, ...APPROVED_SHIFT }).select("storeId date startTime endTime shiftName").lean();
-  if (!asg.length) return [];
   const t = now.getTime();
+  const out: ReminderItem[] = [];
+  // "Tất cả các ca" của hôm nay: nhân viên thuộc cơ sở (cơ sở gốc / có ca ở cơ sở đó hôm nay) – hiện cả ngày
+  const allDay = await ShiftReminder.find({ date: today, shift: ALL_SHIFTS }).lean();
+  if (allDay.length) {
+    const me = await User.findById(userId).select("storeId").lean();
+    const mine = new Set([me?.storeId ? String(me.storeId) : "", ...asg.filter((a) => a.date === today).map((a) => String(a.storeId))].filter(Boolean));
+    for (const r of allDay) {
+      const ids = (r.storeIds ?? []).map(String);
+      if (ids.length && !ids.some((s: string) => mine.has(s))) continue;
+      out.push({
+        id: String(r._id),
+        date: r.date,
+        shift: ALL_SHIFTS,
+        text: r.text,
+        level: r.level === "IMPORTANT" ? "IMPORTANT" : "NORMAL",
+        by: r.createdBy ?? "Admin",
+        at: localTime(new Date(r.createdAt ?? now), tz).slice(0, 5),
+        start: "",
+        end: "",
+        seen: false,
+      });
+    }
+  }
   const live = asg
     .map((a) => {
       const [s, e] = spanOf(a, tz);
       return { a, s, e, bucket: bucketOf(a.shiftName, a.startTime) };
     })
     .filter((x) => t >= x.s - LEAD_MS && t < x.e);
-  if (!live.length) return [];
-  const rems = await ShiftReminder.find({ date: { $in: [...new Set(live.map((x) => x.a.date))] } }).lean();
-  const out: ReminderItem[] = [];
+  const rems = live.length ? await ShiftReminder.find({ date: { $in: [...new Set(live.map((x) => x.a.date))] }, shift: { $ne: ALL_SHIFTS } }).lean() : [];
   for (const r of rems) {
     const m = live.find(
       (x) => x.a.date === r.date && x.bucket === r.shift && (!(r.storeIds ?? []).length || (r.storeIds ?? []).some((s: unknown) => String(s) === String(x.a.storeId))),
@@ -104,6 +131,15 @@ export async function reminderTargets(r: { date: string; shift: string; storeIds
   await connectDB();
   const q: Record<string, unknown> = { date: r.date, ...APPROVED_SHIFT };
   if (r.storeIds?.length) q.storeId = { $in: r.storeIds };
+  if (r.shift === ALL_SHIFTS) {
+    // mọi nhân viên đang làm của cơ sở + người có ca ở cơ sở đó hôm ấy (hỗ trợ)
+    const uq: Record<string, unknown> = { status: "ACTIVE", noLogin: { $ne: true } };
+    if (r.storeIds?.length) uq.storeId = { $in: r.storeIds };
+    const [home, asg] = await Promise.all([User.find(uq).select("_id").lean(), ShiftAssignment.find(q).select("userId").lean()]);
+    const ids = [...new Set([...home.map((u) => String(u._id)), ...asg.map((a) => String(a.userId))])];
+    const users = ids.length ? await User.find({ _id: { $in: ids }, status: "ACTIVE" }).select("name").sort({ name: 1 }).lean() : [];
+    return users.map((u) => ({ id: String(u._id), name: u.name || "?" }));
+  }
   const asg = (await ShiftAssignment.find(q).select("userId storeId shiftName startTime").lean()).filter((a) => bucketOf(a.shiftName, a.startTime) === r.shift);
   const ids = [...new Set(asg.map((a) => String(a.userId)))];
   const users = ids.length ? await User.find({ _id: { $in: ids } }).select("name").lean() : [];
