@@ -28,7 +28,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }
 
@@ -48,6 +48,6 @@ export async function POST(req: Request) {
     if (!sheets.length) throw new HttpError(400, "Không thấy sheet nào đúng mẫu (cần hàng tiêu đề có cột “Ngày” và “Thời gian”)");
     return NextResponse.json({ ok: true, sheets });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

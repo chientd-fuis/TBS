@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
-import { AdminLoginLog, AuditLog, PendingPhoto, ShiftTemplate, Store } from "@/lib/models";
+import { AdminLoginLog, AuditLog, ErrorLog, HoursRecalc, PendingPhoto, ShiftTemplate, Store, User } from "@/lib/models";
 import { getSettings } from "@/lib/settings";
 import { allowedWidgets } from "@/lib/dashboard-widgets";
 import { adminDashHidden } from "@/lib/theme-server";
@@ -14,6 +14,8 @@ import { Alert, Badge, Card, Field, Input, LinkButton, PageTitle } from "@/compo
 import { disconnectDrive, saveAutoCheckout, saveAutoPenalty, saveConfig, saveGoodsEnabled, saveAiPhoto, savePhotoTempDb, saveProbationConfig, saveRequestChat, saveUserAppAccess } from "../../actions/settings";
 import { autoPenaltySummary } from "@/lib/auto-penalty";
 import CleanupCard from "./CleanupCard";
+import HoursRecalcCard from "./HoursRecalcCard";
+import { recalcModeOf } from "@/lib/hours-recalc";
 import { lastAutoCleanup, latestCutoff, safeCutoff } from "@/lib/cleanup";
 
 export const dynamic = "force-dynamic";
@@ -31,13 +33,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // tháng mốc để dọn: từ (tháng này − 2) lùi về 24 tháng
   const cleanupMonths: string[] = [];
   for (let m = latestCutoff(), i = 0; i < 27; i++, m = prevMonth(m)) cleanupMonths.push(m); // gồm cả "xoá tháng này / tháng trước"
-  const [logs, audits, pending] = isOwner
+  const [logs, audits, pending, errors24] = isOwner
     ? await Promise.all([
         AdminLoginLog.find().sort({ createdAt: -1 }).limit(30).lean(),
         AuditLog.find().sort({ createdAt: -1 }).limit(50).lean(),
         PendingPhoto.countDocuments(),
+        ErrorLog.countDocuments({ level: "error", lastAt: { $gte: new Date(Date.now() - 86_400_000) } }),
       ])
-    : [[], [], 0];
+    : [[], [], 0, 0];
   // Tự động check-out hết ca tối: cơ sở + giờ kết thúc ca muộn nhất (gợi ý giờ check-out)
   const acStores = await Store.find({ active: { $ne: false } }).select("name autoCheckoutOn autoCheckoutTime").sort({ name: 1 }).lean();
   const lastShiftEnd = new Map<string, string>();
@@ -52,6 +55,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // trang Tổng quan: khối được phép (theo quyền) + khối admin này đã tắt
   const widgets = allowedWidgets(admin);
   const dashOff = new Set(await adminDashHidden(admin.email).catch(() => []));
+  // Tự động tính lại giờ công: lần tính gần nhất
+  const lastRecalc = await HoursRecalc.findOne({ at: { $ne: null } }).sort({ at: -1 }).lean();
+  const lastRecalcUser = lastRecalc ? await User.findById(lastRecalc.userId).select("name").lean() : null;
+  const lastRecalcText = lastRecalc?.at
+    ? `${viDateTime(lastRecalc.at)} · ${lastRecalcUser?.name ?? "?"} · ${lastRecalc.by ?? ""}${lastRecalc.cancelled ? " (huỷ)" : ` · ${String(lastRecalc.before ?? "").replace(".", ",")} → ${String(lastRecalc.after ?? "").replace(".", ",")}`}`
+    : undefined;
 
   return (
     <>
@@ -101,6 +110,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               Popup giới thiệu tính năng mới giữa màn hình: mỗi người chỉ thấy 1 lần, nhiều bản chưa xem → gộp thành slide. Soạn nội dung, ảnh, nút “Thử ngay”, xem
               trước và theo dõi ai đã xem.{" "}
               <Link className="text-accent underline" href="/admin/settings/announcements">Mở Có gì mới →</Link>
+            </p>
+          </Card>
+        )}
+
+        {isOwner && (
+          <Card title="🐞 Log lỗi hệ thống">
+            <p className="text-sm text-ink/70">
+              {errors24 > 0 ? (
+                <><b className="text-danger">{errors24} lỗi hệ thống</b> trong 24 giờ qua. </>
+              ) : (
+                <><b className="text-good">Không có lỗi hệ thống</b> trong 24 giờ qua. </>
+              )}
+              Mọi lỗi nhân viên / admin gặp khi thao tác, lỗi AI, Telegram, chạy tự động: chi tiết, chức năng, người gặp, thời gian. Tự xoá sau <b>{s.errorLogDays ?? 7} ngày</b> (đổi được).{" "}
+              <Link className="text-accent underline" href="/admin/settings/errors">Mở Log lỗi →</Link>
             </p>
           </Card>
         )}
@@ -260,6 +283,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </ActionForm>
           </Card>
         )}
+
+        <HoursRecalcCard
+          mode={recalcModeOf(s.hoursRecalcMode)}
+          threshold={s.hoursRecalcThreshold ?? 1}
+          maxShort={s.hoursRecalcMaxShort ?? 23}
+          isOwner={isOwner}
+          last={lastRecalcText}
+        />
 
         <Card title="Cấu hình chấm công">
           <ActionForm action={saveConfig} submitLabel="Lưu cấu hình" successText="Đã lưu">

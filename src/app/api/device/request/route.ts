@@ -7,7 +7,7 @@ import { queueRequestNotice, storeShort } from "@/lib/request-notify";
 import { jsonError } from "@/lib/api";
 
 /** Nhân viên bấm "Yêu cầu đổi thiết bị" → admin thấy trong mục Thiết bị chờ duyệt. */
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
@@ -22,6 +22,6 @@ export async function POST() {
     );
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

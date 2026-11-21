@@ -48,6 +48,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, transactions: out });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

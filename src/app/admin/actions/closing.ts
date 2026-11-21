@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { goodsChatId } from "@/lib/goods-server";
 import { revalidatePath } from "next/cache";
 import { Store } from "@/lib/models";
@@ -9,7 +10,7 @@ import { deliverClosing } from "@/lib/closing";
 import { sendTelegramText } from "@/lib/telegram";
 import { errMsg, str, type FormState } from "./types";
 
-export async function resendClosing(_: FormState, fd: FormData): Promise<FormState> {
+async function resendClosing__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     const id = str(fd.get("id"));
@@ -24,7 +25,7 @@ export async function resendClosing(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Gửi tin nhắn thử vào nhóm Telegram của cơ sở (kiểm tra bot token / chat ID). */
-export async function testTelegram(_: FormState, fd: FormData): Promise<FormState> {
+async function testTelegram__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     await assertPerm("stores");
     const store = await Store.findById(str(fd.get("storeId"))).lean();
@@ -44,7 +45,7 @@ export async function testTelegram(_: FormState, fd: FormData): Promise<FormStat
 }
 
 /** Ghi lại doanh thu 1 ngày lên Google Sheet (admin bấm tay). */
-export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormState> {
+async function syncDayRevenue__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
     const storeId = str(fd.get("storeId"));
@@ -62,7 +63,7 @@ export async function syncDayRevenue(_: FormState, fd: FormData): Promise<FormSt
 }
 
 /** Admin sửa số liệu doanh thu của 1 lượt chốt ca → cộng lại ngày (ngày đã ghi sheet thì ghi lại). */
-export async function editClosingRevenue(_: FormState, fd: FormData): Promise<FormState> {
+async function editClosingRevenue__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("closing.edit");
     const id = str(fd.get("id"));
@@ -96,7 +97,7 @@ export async function editClosingRevenue(_: FormState, fd: FormData): Promise<Fo
 }
 
 /** Kiểm tra quyền ghi Google Sheet + tab tháng hiện tại của cơ sở. */
-export async function testRevenueSheet(_: FormState, fd: FormData): Promise<FormState> {
+async function testRevenueSheet__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     await assertPerm("stores");
     const store = await Store.findById(str(fd.get("storeId"))).lean();
@@ -115,7 +116,7 @@ export async function testRevenueSheet(_: FormState, fd: FormData): Promise<Form
 }
 
 /** Xoá hẳn 1 lượt chốt ca → cộng lại doanh thu ngày (ngày đã ghi sheet thì ghi lại số mới). */
-export async function deleteClosing(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteClosing__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("closing.edit");
     const id = str(fd.get("id"));
@@ -140,7 +141,7 @@ export async function deleteClosing(_: FormState, fd: FormData): Promise<FormSta
  * Admin bấm tay ghi Google Sheet từ 1 lượt chốt ca BẤT KỲ (Sáng / Chiều / Tối / ngoài ca).
  * Sheet ghi 1 dòng / ngày theo số LUỸ KẾ → ghi số của lượt chốt mới nhất trong ngày (đến thời điểm hiện tại).
  */
-export async function syncClosingSheet(_: FormState, fd: FormData): Promise<FormState> {
+async function syncClosingSheet__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     const id = str(fd.get("id"));
@@ -162,3 +163,12 @@ export async function syncClosingSheet(_: FormState, fd: FormData): Promise<Form
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resendClosing(...a: Parameters<typeof resendClosing__>) { return track("Admin › Chốt ca", "resendClosing", () => resendClosing__(...a)); }
+export async function testTelegram(...a: Parameters<typeof testTelegram__>) { return track("Admin › Chốt ca", "testTelegram", () => testTelegram__(...a)); }
+export async function syncDayRevenue(...a: Parameters<typeof syncDayRevenue__>) { return track("Admin › Chốt ca", "syncDayRevenue", () => syncDayRevenue__(...a)); }
+export async function editClosingRevenue(...a: Parameters<typeof editClosingRevenue__>) { return track("Admin › Chốt ca", "editClosingRevenue", () => editClosingRevenue__(...a)); }
+export async function testRevenueSheet(...a: Parameters<typeof testRevenueSheet__>) { return track("Admin › Chốt ca", "testRevenueSheet", () => testRevenueSheet__(...a)); }
+export async function deleteClosing(...a: Parameters<typeof deleteClosing__>) { return track("Admin › Chốt ca", "deleteClosing", () => deleteClosing__(...a)); }
+export async function syncClosingSheet(...a: Parameters<typeof syncClosingSheet__>) { return track("Admin › Chốt ca", "syncClosingSheet", () => syncClosingSheet__(...a)); }

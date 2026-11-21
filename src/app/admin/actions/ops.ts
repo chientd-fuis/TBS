@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Types } from "mongoose";
@@ -25,6 +26,7 @@ import { assertNotLocked, computeFields, findShiftFor, isMonthLocked, payStoreOf
 import { addDays, localDate, localMonth, zonedToDate } from "@/lib/time";
 import { addItemExtras, generatePayroll, publishPayroll, removeItemExtra, updateItemExtras } from "@/lib/payroll";
 import { upsertAttendance } from "@/lib/attendance-admin";
+import { autoRecalc, autoRecalcMany } from "@/lib/hours-recalc-server";
 import { attendancesNear, attText, dayAttendances, findOverlap, pickTarget, requestWindow } from "@/lib/adjustment";
 import { errMsg, num, str, type FormState } from "./types";
 import { extractSheetId } from "@/lib/revenue";
@@ -32,7 +34,7 @@ import { normalizeIp, parseIpList } from "@/lib/checkin-methods";
 import { clientInfo } from "@/lib/device";
 
 /** IP Internet của máy admin đang dùng (để điền IP WiFi quán khi admin đang kết nối WiFi quán). */
-export async function currentPublicIp(): Promise<{ ip: string; raw: string }> {
+async function currentPublicIp__(): Promise<{ ip: string; raw: string }> {
   await assertPerm("stores");
   const raw = (await clientInfo()).ip;
   return { ip: normalizeIp(raw), raw };
@@ -42,7 +44,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /* ===== Cửa hàng (spec 3.4) ===== */
-export async function saveStore(_: FormState, fd: FormData): Promise<FormState> {
+async function saveStore__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("stores");
     await connectDB();
@@ -99,7 +101,7 @@ export async function saveStore(_: FormState, fd: FormData): Promise<FormState> 
 }
 
 /* ===== Ca làm việc (spec 3.2) ===== */
-export async function saveShiftTemplate(_: FormState, fd: FormData): Promise<FormState> {
+async function saveShiftTemplate__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     const id = str(fd.get("id"));
@@ -168,7 +170,7 @@ async function syncTemplateAssignments(tplId: string, from: string) {
 }
 
 /** Xếp ca hàng loạt: nhiều nhân viên × khoảng ngày × thứ trong tuần. */
-export async function assignShifts(_: FormState, fd: FormData): Promise<FormState> {
+async function assignShifts__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("schedule");
     const tpl = await ShiftTemplate.findById(str(fd.get("templateId"))).lean();
@@ -201,7 +203,7 @@ export async function assignShifts(_: FormState, fd: FormData): Promise<FormStat
   }
 }
 
-export async function removeAssignment(_: FormState, fd: FormData): Promise<FormState> {
+async function removeAssignment__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("schedule");
     const id = str(fd.get("id"));
@@ -215,7 +217,7 @@ export async function removeAssignment(_: FormState, fd: FormData): Promise<Form
 }
 
 /** Copy lịch tuần trước sang tuần đang xem. */
-export async function copyPrevWeek(_: FormState, fd: FormData): Promise<FormState> {
+async function copyPrevWeek__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("schedule");
     const storeId = str(fd.get("storeId"));
@@ -243,7 +245,7 @@ export async function copyPrevWeek(_: FormState, fd: FormData): Promise<FormStat
 
 /* ===== Chấm công: chấm hộ / sửa / xoá (spec 3.5, 7.1) – logic ghi ở lib/attendance-admin.ts ===== */
 /** Chấm công hộ – không cần nhân viên xác nhận (spec 3.5). */
-export async function manualAttendance(_: FormState, fd: FormData): Promise<FormState> {
+async function manualAttendance__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("attendance.edit");
     await upsertAttendance(admin, {
@@ -274,7 +276,7 @@ const MAX_BULK = 60;
  * dryRun = false: ghi từng lượt; lượt trùng / lỗi bị bỏ qua, các lượt khác vẫn ghi.
  * Client gửi theo từng đợt ≤ 60 lượt.
  */
-export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; dryRun: boolean }): Promise<{ error?: string; results?: BulkResult[] }> {
+async function bulkAttendance__(input: { rows: BulkRow[]; reason: string; dryRun: boolean }): Promise<{ error?: string; results?: BulkResult[] }> {
   try {
     const admin = await assertPerm("attendance.edit");
     const reason = (input.reason ?? "").trim();
@@ -341,7 +343,7 @@ export async function bulkAttendance(input: { rows: BulkRow[]; reason: string; d
   }
 }
 
-export async function editAttendance(_: FormState, fd: FormData): Promise<FormState> {
+async function editAttendance__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("attendance.edit");
     const id = str(fd.get("id"));
@@ -367,7 +369,7 @@ export async function editAttendance(_: FormState, fd: FormData): Promise<FormSt
   }
 }
 
-export async function deleteAttendance(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteAttendance__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("attendance.edit");
     const id = str(fd.get("id"));
@@ -379,6 +381,7 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
     await AttendanceAdjustment.create({ attendanceId: a._id, adminName: adminActor(admin).name, action: "DELETE", before: a.toObject(), reason });
     await audit(adminActor(admin), "attendance.delete", { type: "Attendance", id }, a.toObject(), { reason });
     await a.deleteOne();
+    await autoRecalc(a.userId, a.month); // Tính lại giờ công
     revalidatePath("/admin/attendance", "layout");
     redirect(`/admin/attendance?store=${a.storeId}&user=${a.userId}&month=${a.month}`);
   } catch (e) {
@@ -387,7 +390,7 @@ export async function deleteAttendance(_: FormState, fd: FormData): Promise<Form
 }
 
 /* ===== Thưởng / phạt – admin nhập tự do (spec 3.6) ===== */
-export async function createBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
+async function createBonusPenalty__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("bonus");
     // 1 người (userId) hoặc nhiều người cùng lúc (userIds – chọn nhiều)
@@ -422,7 +425,7 @@ export async function createBonusPenalty(_: FormState, fd: FormData): Promise<Fo
 }
 
 /** Sửa khoản thưởng/phạt (khi tháng chưa chốt). */
-export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
+async function updateBonusPenalty__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("bonus");
     const bp = await BonusPenalty.findById(str(fd.get("id")));
@@ -447,7 +450,7 @@ export async function updateBonusPenalty(_: FormState, fd: FormData): Promise<Fo
   }
 }
 
-export async function deleteBonusPenalty(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteBonusPenalty__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("bonus");
     const bp = await BonusPenalty.findById(str(fd.get("id")));
@@ -465,7 +468,7 @@ export async function deleteBonusPenalty(_: FormState, fd: FormData): Promise<Fo
 }
 
 /* ===== Bảng lương (spec 3.7) ===== */
-export async function payrollAction(_: FormState, fd: FormData): Promise<FormState> {
+async function payrollAction__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("payroll");
     const actor = adminActor(admin);
@@ -519,7 +522,7 @@ export async function payrollAction(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Từng nhân viên: "Đã trả" → khoá dòng lương của người đó; "Mở khoá" (bắt buộc lý do) → tính lại được. */
-export async function payrollItemAction(_: FormState, fd: FormData): Promise<FormState> {
+async function payrollItemAction__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("payroll");
     const actor = adminActor(admin);
@@ -556,7 +559,7 @@ export async function payrollItemAction(_: FormState, fd: FormData): Promise<For
   }
 }
 
-export async function savePayrollExtras(_: FormState, fd: FormData): Promise<FormState> {
+async function savePayrollExtras__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("payroll");
     const itemId = str(fd.get("itemId"));
@@ -570,7 +573,7 @@ export async function savePayrollExtras(_: FormState, fd: FormData): Promise<For
 }
 
 /** Popup Phụ cấp / Tạm ứng: thêm 1 hoặc nhiều khoản (số tiền + nội dung). */
-export async function addPayrollExtras(itemId: string, field: string, rows: { amount: number; note: string }[]): Promise<FormState> {
+async function addPayrollExtras__(itemId: string, field: string, rows: { amount: number; note: string }[]): Promise<FormState> {
   try {
     const admin = await assertPerm("payroll");
     if (field !== "allowance" && field !== "advance") return { error: "Sai loại khoản" };
@@ -585,7 +588,7 @@ export async function addPayrollExtras(itemId: string, field: string, rows: { am
 }
 
 /** Popup Phụ cấp / Tạm ứng: xoá 1 khoản (index trong ghi chú, -1 = phần nhập tay). */
-export async function removePayrollExtra(itemId: string, field: string, index: number): Promise<FormState> {
+async function removePayrollExtra__(itemId: string, field: string, index: number): Promise<FormState> {
   try {
     const admin = await assertPerm("payroll");
     if (field !== "allowance" && field !== "advance") return { error: "Sai loại khoản" };
@@ -602,7 +605,7 @@ export async function removePayrollExtra(itemId: string, field: string, index: n
 /** Ghi chú cho NV do hệ thống tự sinh (ngoài giờ chờ xác nhận / kết quả duyệt ngoài giờ / quên check-out) – hết đúng khi giờ đã được sửa */
 const isAutoStaffNote = (n?: string | null) =>
   !!n && (n.includes("chờ admin xác nhận") || n.startsWith("Admin đã duyệt:") || n.startsWith("Admin không duyệt") || n.startsWith("Bạn quên check-out"));
-export async function resolveAdjustment(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveAdjustment__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("adjustments"); // mặc định chỉ Admin Tổng; admin cần được cấp quyền
     // GIỮ yêu cầu trước (nguyên tử): bấm đúp / 2 admin cùng bấm → chỉ 1 người xử lý, người sau nhận "đã được xử lý"
@@ -693,7 +696,7 @@ export async function resolveAdjustment(_: FormState, fd: FormData): Promise<For
   }
 }
 
-export async function replyFeedback(_: FormState, fd: FormData): Promise<FormState> {
+async function replyFeedback__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     const reply = str(fd.get("reply"));
@@ -708,7 +711,7 @@ export async function replyFeedback(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Xoá hàng loạt lượt chấm công đã tích (bảng chấm công của 1 nhân viên). Tháng đã chốt lương → bỏ qua lượt đó. */
-export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<FormState> {
+async function bulkDeleteAttendance__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("attendance.edit");
     const actor = adminActor(admin);
@@ -730,6 +733,7 @@ export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<
       await a.deleteOne();
       done++;
     }
+    await autoRecalcMany(list); // Tính lại giờ công
     await audit(actor, "attendance.bulkDelete", { type: "Attendance" }, null, { n: done, userIds: [...new Set(list.map((a) => String(a.userId)))], reason });
     revalidatePath("/admin/attendance", "layout");
     revalidatePath("/admin/work-schedule");
@@ -740,4 +744,25 @@ export async function bulkDeleteAttendance(_: FormState, fd: FormData): Promise<
   }
 }
 
-
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function currentPublicIp(...a: Parameters<typeof currentPublicIp__>) { return track("Admin › Ca / Chấm công / Lương", "currentPublicIp", () => currentPublicIp__(...a)); }
+export async function saveStore(...a: Parameters<typeof saveStore__>) { return track("Admin › Ca / Chấm công / Lương", "saveStore", () => saveStore__(...a)); }
+export async function saveShiftTemplate(...a: Parameters<typeof saveShiftTemplate__>) { return track("Admin › Ca / Chấm công / Lương", "saveShiftTemplate", () => saveShiftTemplate__(...a)); }
+export async function assignShifts(...a: Parameters<typeof assignShifts__>) { return track("Admin › Ca / Chấm công / Lương", "assignShifts", () => assignShifts__(...a)); }
+export async function removeAssignment(...a: Parameters<typeof removeAssignment__>) { return track("Admin › Ca / Chấm công / Lương", "removeAssignment", () => removeAssignment__(...a)); }
+export async function copyPrevWeek(...a: Parameters<typeof copyPrevWeek__>) { return track("Admin › Ca / Chấm công / Lương", "copyPrevWeek", () => copyPrevWeek__(...a)); }
+export async function manualAttendance(...a: Parameters<typeof manualAttendance__>) { return track("Admin › Ca / Chấm công / Lương", "manualAttendance", () => manualAttendance__(...a)); }
+export async function bulkAttendance(...a: Parameters<typeof bulkAttendance__>) { return track("Admin › Ca / Chấm công / Lương", "bulkAttendance", () => bulkAttendance__(...a)); }
+export async function editAttendance(...a: Parameters<typeof editAttendance__>) { return track("Admin › Ca / Chấm công / Lương", "editAttendance", () => editAttendance__(...a)); }
+export async function deleteAttendance(...a: Parameters<typeof deleteAttendance__>) { return track("Admin › Ca / Chấm công / Lương", "deleteAttendance", () => deleteAttendance__(...a)); }
+export async function createBonusPenalty(...a: Parameters<typeof createBonusPenalty__>) { return track("Admin › Ca / Chấm công / Lương", "createBonusPenalty", () => createBonusPenalty__(...a)); }
+export async function updateBonusPenalty(...a: Parameters<typeof updateBonusPenalty__>) { return track("Admin › Ca / Chấm công / Lương", "updateBonusPenalty", () => updateBonusPenalty__(...a)); }
+export async function deleteBonusPenalty(...a: Parameters<typeof deleteBonusPenalty__>) { return track("Admin › Ca / Chấm công / Lương", "deleteBonusPenalty", () => deleteBonusPenalty__(...a)); }
+export async function payrollAction(...a: Parameters<typeof payrollAction__>) { return track("Admin › Ca / Chấm công / Lương", "payrollAction", () => payrollAction__(...a)); }
+export async function payrollItemAction(...a: Parameters<typeof payrollItemAction__>) { return track("Admin › Ca / Chấm công / Lương", "payrollItemAction", () => payrollItemAction__(...a)); }
+export async function savePayrollExtras(...a: Parameters<typeof savePayrollExtras__>) { return track("Admin › Ca / Chấm công / Lương", "savePayrollExtras", () => savePayrollExtras__(...a)); }
+export async function addPayrollExtras(...a: Parameters<typeof addPayrollExtras__>) { return track("Admin › Ca / Chấm công / Lương", "addPayrollExtras", () => addPayrollExtras__(...a)); }
+export async function removePayrollExtra(...a: Parameters<typeof removePayrollExtra__>) { return track("Admin › Ca / Chấm công / Lương", "removePayrollExtra", () => removePayrollExtra__(...a)); }
+export async function resolveAdjustment(...a: Parameters<typeof resolveAdjustment__>) { return track("Admin › Ca / Chấm công / Lương", "resolveAdjustment", () => resolveAdjustment__(...a)); }
+export async function replyFeedback(...a: Parameters<typeof replyFeedback__>) { return track("Admin › Ca / Chấm công / Lương", "replyFeedback", () => replyFeedback__(...a)); }
+export async function bulkDeleteAttendance(...a: Parameters<typeof bulkDeleteAttendance__>) { return track("Admin › Ca / Chấm công / Lương", "bulkDeleteAttendance", () => bulkDeleteAttendance__(...a)); }

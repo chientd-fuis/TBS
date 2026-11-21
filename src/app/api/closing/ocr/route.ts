@@ -38,10 +38,10 @@ export async function POST(req: Request) {
       actor: `user:${user._id}`,
     }).catch((e: Error) => {
       console.error("[closing ocr]", e.message); // chi tiết (key, model, hết lượt…) chỉ ghi log – nhân viên thấy câu chung
-      throw new HttpError(502, "AI đang lỗi, không đọc được ảnh – hãy chụp/quét lại sau ít phút hoặc nhập tay.", { code: "OCR_FAILED" });
+      throw new HttpError(502, "AI đang lỗi, không đọc được ảnh – hãy chụp/quét lại sau ít phút hoặc nhập tay.", { code: "OCR_FAILED" }, e.message);
     });
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

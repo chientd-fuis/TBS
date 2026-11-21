@@ -21,7 +21,8 @@ export const DAY_CALC_VERSION = 2;
  * Doanh thu 1 ngày từ các lượt chốt ca. Chốt ca là số LUỸ KẾ (ca Chiều gồm ca Sáng, ca Tối = cả ngày)
  * → doanh thu ngày = lượt chốt ca muộn nhất (Tối; chưa chốt Tối thì ca gần nhất). Số đổi so với lần đã ghi sheet → chờ ghi lại.
  */
-export async function recomputeDay(storeId: Id, date: string) {
+/** quiet: dữ liệu import tháng cũ → không tạo yêu cầu bù doanh thu / cảnh báo đơn chưa thanh toán, không ghi ngược lên sheet */
+export async function recomputeDay(storeId: Id, date: string, opts: { quiet?: boolean } = {}) {
   await connectDB();
   const list = await ShiftClosing.find({ storeId, workDate: date, "revenue.tm": { $ne: null } })
     .sort({ createdAt: 1 })
@@ -59,12 +60,13 @@ export async function recomputeDay(storeId: Id, date: string) {
         note,
         // ngày mới → chờ ghi sheet; đã ghi (SENT) mà số đổi → ghi lại.
         // Không dùng $setOnInsert cho cùng path: $set + $setOnInsert "sheet.status" → MongoDB báo conflict, cả lệnh fail
-        ...(!prev || (changed && prev.sheet?.status === "SENT") ? { "sheet.status": "PENDING" } : {}),
+        ...(opts.quiet ? { "sheet.status": "SENT", "sheet.range": "(import từ Google Sheet)" } : !prev || (changed && prev.sheet?.status === "SENT") ? { "sheet.status": "PENDING" } : {}),
       },
     },
     { upsert: true, returnDocument: "after" },
   ).lean();
   // ngày thiếu tiền → tạo / cập nhật yêu cầu bù doanh thu (chốt ca, admin sửa DT máy, import KiotViet đều đi qua đây)
+  if (opts.quiet) return { day: day!, wasSynced: prev?.sheet?.status === "SENT", changed };
   const { syncRevenueGap } = await import("./revenue-gap");
   await syncRevenueGap(storeId, date);
   // ghi chú "25k chưa TT"… → cảnh báo đơn chưa thanh toán

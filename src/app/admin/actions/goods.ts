@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { isValidObjectId } from "mongoose";
 import { assertPerm } from "@/lib/guards";
@@ -14,7 +15,7 @@ import { errMsg, str, type FormState } from "./types";
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Admin nhập / sửa nhận hàng cho 1 cơ sở → (tuỳ chọn) báo nhóm Telegram cơ sở. id có → sửa bản ghi đó. */
-export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[]; alsoReturn?: AlsoReturn }): Promise<GoodsSaveResult> {
+async function saveGoodsAdmin__(input: { storeId: string; drafts: GoodsInput[]; telegram: boolean; id?: string; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[]; alsoReturn?: AlsoReturn }): Promise<GoodsSaveResult> {
   try {
     const admin = await assertPerm("goods");
     await connectDB();
@@ -67,7 +68,7 @@ export async function saveGoodsAdmin(input: { storeId: string; drafts: GoodsInpu
   }
 }
 
-export async function deleteGoods(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteGoods__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("goods");
     await connectDB();
@@ -88,7 +89,7 @@ const aliasList = (v: string) => [...new Set(v.split(",").map((x) => x.trim().sl
 const revalidateGoods = () => ["/admin/goods", "/admin/goods/stock", "/admin/goods/items", "/admin/goods/report", "/receive", "/stock"].forEach((x) => revalidatePath(x));
 
 /** Thêm (không có id) / sửa nguyên liệu. Đổi tên → đổi luôn tên trong các lần nhận / tồn kho cũ. */
-export async function saveGoodsItem(_: FormState, fd: FormData): Promise<FormState> {
+async function saveGoodsItem__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("goods.items");
     await connectDB();
@@ -124,7 +125,7 @@ export async function saveGoodsItem(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Xoá = ẩn khỏi danh mục (giữ lịch sử, khôi phục được). on=1 → khôi phục. */
-export async function toggleGoodsItem(_: FormState, fd: FormData): Promise<FormState> {
+async function toggleGoodsItem__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("goods.items");
     await connectDB();
@@ -141,7 +142,7 @@ export async function toggleGoodsItem(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Thêm mốc giá nhập: từ ngày `from` giá = `price` (cùng ngày → ghi đè). */
-export async function addGoodsPrice(_: FormState, fd: FormData): Promise<FormState> {
+async function addGoodsPrice__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("goods.items");
     await connectDB();
@@ -164,7 +165,7 @@ export async function addGoodsPrice(_: FormState, fd: FormData): Promise<FormSta
   }
 }
 
-export async function removeGoodsPrice(_: FormState, fd: FormData): Promise<FormState> {
+async function removeGoodsPrice__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("goods.items");
     await connectDB();
@@ -179,3 +180,11 @@ export async function removeGoodsPrice(_: FormState, fd: FormData): Promise<Form
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveGoodsAdmin(...a: Parameters<typeof saveGoodsAdmin__>) { return track("Admin › Hàng hoá", "saveGoodsAdmin", () => saveGoodsAdmin__(...a)); }
+export async function deleteGoods(...a: Parameters<typeof deleteGoods__>) { return track("Admin › Hàng hoá", "deleteGoods", () => deleteGoods__(...a)); }
+export async function saveGoodsItem(...a: Parameters<typeof saveGoodsItem__>) { return track("Admin › Hàng hoá", "saveGoodsItem", () => saveGoodsItem__(...a)); }
+export async function toggleGoodsItem(...a: Parameters<typeof toggleGoodsItem__>) { return track("Admin › Hàng hoá", "toggleGoodsItem", () => toggleGoodsItem__(...a)); }
+export async function addGoodsPrice(...a: Parameters<typeof addGoodsPrice__>) { return track("Admin › Hàng hoá", "addGoodsPrice", () => addGoodsPrice__(...a)); }
+export async function removeGoodsPrice(...a: Parameters<typeof removeGoodsPrice__>) { return track("Admin › Hàng hoá", "removeGoodsPrice", () => removeGoodsPrice__(...a)); }

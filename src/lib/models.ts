@@ -78,6 +78,14 @@ const SettingsSchema = new Schema(
     privacyVersion: { type: Number, default: 0 },
     privacyPublishedAt: Date,
     privacyUpdatedAt: Date,
+    // Log lỗi hệ thống (Cài đặt → Log lỗi hệ thống): giữ bao nhiêu ngày rồi tự xoá
+    errorLogDays: { type: Number, default: 7 },
+    // Tính lại giờ công (Bảng chấm công → Tính lại giờ công): giờ thực tế − giờ chấm công > ngưỡng → cộng +0,5h cho ca thiếu ít phút
+    // mode: monthEnd = 23:59 ngày cuối tháng cho cả tháng (mặc định; ngày 1–4 tháng sau tính lại lần nữa cho lượt sửa muộn)
+    //       · checkout = ngay khi nhân viên check-out / admin sửa chấm công · off = chỉ khi admin bấm. (nightly / monthly: giá trị cũ → coi như monthEnd)
+    hoursRecalcMode: { type: String, enum: ["monthEnd", "checkout", "off", "nightly", "monthly"], default: "monthEnd" },
+    hoursRecalcThreshold: { type: Number, default: 1 }, // chênh > số giờ này mới tính; tính tới khi chênh còn ≤ số này
+    hoursRecalcMaxShort: { type: Number, default: 23 }, // chỉ cộng ca thiếu tối đa bấy nhiêu phút tới mốc làm tròn kế tiếp
   },
   { timestamps: true },
 );
@@ -269,6 +277,23 @@ export const ShiftAssignment = getModel("ShiftAssignment", ShiftAssignmentSchema
 /** Điều kiện lọc ca chính thức (đã duyệt) – dùng cho chấm công, dashboard, xuất Excel. */
 export const APPROVED_SHIFT = { status: { $nin: ["PENDING", "REJECTED"] } } as const;
 
+/* ---------- Lịch sử đăng ký ca (Xếp ca → Lịch sử đăng ký tuần này) – tự xoá sau 14 ngày (lib/shift-reg-log.ts) ---------- */
+const ShiftRegLogItem = new Schema({ date: String, tplId: String, name: String }, { _id: false });
+const ShiftRegLogSchema = new Schema({
+  storeId: { type: Schema.Types.ObjectId, ref: "Store", required: true },
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: true }, // nhân viên của các ca trong dòng này
+  weekStart: { type: String, required: true }, // thứ 2 của tuần (YYYY-MM-DD)
+  // SUBMIT = nhân viên gửi / sửa đăng ký (add / remove) · APPROVE / REJECT = duyệt / từ chối · ASSIGN = admin xếp (gồm Xếp lại) · REMOVE = admin bỏ khỏi ca
+  kind: { type: String, enum: ["SUBMIT", "APPROVE", "REJECT", "ASSIGN", "REMOVE"], required: true },
+  by: String, // tên người thao tác
+  byStaff: Boolean, // true = chính nhân viên
+  add: { type: [ShiftRegLogItem], default: undefined },
+  remove: { type: [ShiftRegLogItem], default: undefined },
+  at: { type: Date, default: Date.now, expires: 14 * 86_400 }, // TTL 14 ngày
+});
+ShiftRegLogSchema.index({ storeId: 1, weekStart: 1, at: -1 });
+export const ShiftRegLog = getModel("ShiftRegLog", ShiftRegLogSchema);
+
 /* ---------- Yêu cầu đăng ký ca (admin nhắc nhân viên đăng ký ca cho 1 tuần) ---------- */
 const ShiftRegRequestSchema = new Schema(
   {
@@ -319,6 +344,10 @@ const AttendanceSchema = new Schema(
     totalHours: Number,
     roundedHours: Number, // giờ tính công = làm tròn + extraHours
     extraHours: { type: Number, default: 0 }, // admin cộng thêm cho lượt này (VD +0,5h) – đã gồm trong roundedHours
+    // TÍNH LẠI GIỜ CÔNG (lib/hours-recalc*.ts): app tự cộng +0,5h cho ca bị làm tròn xuống chỉ thiếu vài phút – đã gồm trong roundedHours.
+    // autoBase = giờ tính công trước khi cộng. computeFields (mọi lần tính lại giờ công) xoá 2 trường này → sửa giờ là bỏ phần tự cộng cũ.
+    autoPlus: { type: Number, default: 0 },
+    autoBase: Number,
     lateMinutes: { type: Number, default: 0 },
     earlyMinutes: { type: Number, default: 0 },
     outOfShift: { type: Boolean, default: false },
@@ -394,6 +423,25 @@ AttendanceSchema.index({ "overtime.status": 1 }, { partialFilterExpression: { "o
 AttendanceSchema.index({ "support.status": 1 }, { partialFilterExpression: { "support.status": "PENDING" }, name: "support_pending" });
 export type AttendanceDoc = InferSchemaType<typeof AttendanceSchema> & { _id: Types.ObjectId };
 export const Attendance = getModel("Attendance", AttendanceSchema);
+
+/* ---------- Tính lại giờ công: trạng thái theo nhân viên × tháng (lib/hours-recalc-server.ts) ---------- */
+const HoursRecalcSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    month: { type: String, required: true }, // YYYY-MM
+    cancelled: { type: Boolean, default: false }, // admin bấm Huỷ → tự động bỏ qua người này trong tháng (bấm Tính lại tay thì bỏ cờ)
+    at: Date, // lần tính / huỷ gần nhất
+    by: String, // tên admin / "Tự động"
+    actual: Number, // giờ thực tế
+    before: Number, // giờ chấm công (chưa cộng)
+    after: Number, // giờ công sau tính lại
+    picks: Number, // số ca được cộng
+    enough: Boolean, // false = không đủ ca thiếu ít phút để đưa chênh về ngưỡng
+  },
+  { timestamps: true },
+);
+HoursRecalcSchema.index({ userId: 1, month: 1 }, { unique: true });
+export const HoursRecalc = getModel("HoursRecalc", HoursRecalcSchema);
 
 /** Tóm tắt chấm công từng tháng (lưu lại trước khi dọn chấm công cũ): ngày công, giờ công – giữ thâm niên / lịch sử làm việc */
 const AttendanceArchiveSchema = new Schema(
@@ -595,6 +643,14 @@ const ShiftClosingSchema = new Schema(
       original: Number, // tiền mặt (luỹ kế) nhân viên chốt ban đầu
       at: Date,
       by: String,
+    },
+    // nhập từ Google Sheet tháng cũ (Chốt ca → Import từ Google Sheet) – 1 lượt "Tối" / ngày
+    imported: {
+      source: String, // "SHEET"
+      tab: String, // tên tab, VD "T10-26"
+      at: Date,
+      by: String,
+      noCashbook: Boolean, // tiền đã lấy rồi → không đưa tiền mặt / tài khoản vào Sổ quỹ (vẫn tính doanh thu, lãi lỗ)
     },
     editCount: { type: Number, default: 0 }, // số lần nhân viên chốt lại (cập nhật) ca này
     lastEditedAt: Date,
@@ -1236,3 +1292,23 @@ const AdminActivitySchema = new Schema({
   createdAt: { type: Date, default: Date.now, expires: ACTIVITY_DAYS * 86_400 }, // TTL 7 ngày
 });
 export const AdminActivity = getModel("AdminActivity", AdminActivitySchema);
+
+/* ---------- Log lỗi hệ thống (lib/error-log.ts) – admin theo dõi ở Cài đặt → Log lỗi hệ thống ---------- */
+const ErrorLogSchema = new Schema({
+  level: { type: String, enum: ["error", "warn"], default: "error", index: true }, // error = lỗi hệ thống · warn = thao tác bị từ chối (thiếu thông tin, sai dữ liệu…)
+  source: { type: String, enum: ["user", "admin", "system", "client"], default: "system", index: true }, // ai gặp: nhân viên / admin / tự động (cron, Telegram…) / trình duyệt
+  area: String, // chức năng (VD "Nhận hàng (NV)")
+  fn: String, // hàm / API cụ thể (VD saveGoodsUser, POST /api/goods/read)
+  message: String,
+  detail: String, // stack / chi tiết kỹ thuật
+  path: String, // trang người dùng đang mở
+  actorName: String,
+  actorEmail: String,
+  ua: String,
+  key: { type: String, index: true }, // gộp lỗi giống nhau trong 10 phút
+  count: { type: Number, default: 1 },
+  lastAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now, index: true },
+  expireAt: { type: Date, expires: 0 }, // TTL: tự xoá khi tới hạn (= lúc ghi + số ngày trong Cài đặt)
+});
+export const ErrorLog = getModel("ErrorLog", ErrorLogSchema);

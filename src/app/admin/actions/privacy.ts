@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { Settings } from "@/lib/models";
@@ -14,7 +15,7 @@ type Res = { ok?: boolean; error?: string; version?: number };
  *  publish = false: lưu sửa nhỏ, giữ số phiên bản (chưa phát hành thì chỉ là bản nháp – nhân viên chưa thấy).
  *  publish = true : phát hành phiên bản mới → mọi nhân viên phải đồng ý lại trước khi chấm công.
  */
-export async function savePrivacy(md: string, publish: boolean): Promise<Res> {
+async function savePrivacy__(md: string, publish: boolean): Promise<Res> {
   try {
     const admin = await assertOwner();
     const text = String(md ?? "").replace(/\r\n?/g, "\n").trim();
@@ -44,3 +45,6 @@ export async function savePrivacy(md: string, publish: boolean): Promise<Res> {
     return { error: (e as Error).message || "Không lưu được" };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function savePrivacy(...a: Parameters<typeof savePrivacy__>) { return track("Admin › Quyền riêng tư", "savePrivacy", () => savePrivacy__(...a)); }

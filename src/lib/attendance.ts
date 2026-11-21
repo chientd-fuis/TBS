@@ -122,6 +122,9 @@ export async function computeFields(att: {
     month: localMonth(att.checkInAt, tz),
     lateMinutes: 0,
     earlyMinutes: 0,
+    // tính lại giờ công → bỏ phần app tự cộng (+0,5h) cũ; lib/hours-recalc-server tự tính lại sau (check-out / admin sửa / cron)
+    autoPlus: 0,
+    autoBase: null,
   };
   // làm liền nhiều ca → đi muộn so với đầu ca đầu tiên, về sớm so với ca đang làm lúc ra (xem earlyMinutesInBlock)
   const block = att.shiftAssignmentId ? await shiftBlock(att.shiftAssignmentId, tz) : null;
@@ -227,12 +230,13 @@ export async function recomputeRounding(now = new Date()) {
   const locked = new Set(
     (await Payroll.find({ month: { $in: months }, status: { $ne: "DRAFT" } }).select("storeId month").lean()).map((p) => `${p.storeId}|${p.month}`),
   );
-  const list = await Attendance.find({ month: { $in: months }, checkOutAt: { $ne: null } }).select("storeId homeStoreId month checkInAt checkOutAt roundedHours extraHours payFactor").lean();
+  const list = await Attendance.find({ month: { $in: months }, checkOutAt: { $ne: null } }).select("storeId homeStoreId month checkInAt checkOutAt roundedHours extraHours payFactor autoPlus").lean();
   const ops = [];
   for (const a of list) {
     if (locked.has(`${payStoreOf(a)}|${a.month}`)) continue;
     const r = factorHours(roundedHours(a.checkInAt, a.checkOutAt!, cfg), a.payFactor, a.extraHours);
-    if (r !== a.roundedHours) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { roundedHours: r } } } });
+    // bỏ cả phần tự cộng (Tính lại giờ công) – cron / lần check-out sau tính lại theo cách làm tròn mới
+    if (r !== a.roundedHours || a.autoPlus) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { roundedHours: r, autoPlus: 0 }, $unset: { autoBase: 1 } } } });
   }
   if (ops.length) await Attendance.bulkWrite(ops);
   const { generatePayroll } = await import("./payroll");

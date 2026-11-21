@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { Settings } from "@/lib/models";
@@ -11,7 +12,7 @@ import { isPosition, normalizeHelp, POSITIONS, type FaqItem, type HelpSectionKey
 type Res = { ok?: boolean; error?: string };
 
 /** Lưu 1 mục Help (Admin Tổng). workflow: payload = { BEP: "...", ... }; faq: payload = [{q,a}]; còn lại: chuỗi. */
-export async function saveHelpSection(section: HelpSectionKey, payload: unknown, guideFile?: string): Promise<Res> {
+async function saveHelpSection__(section: HelpSectionKey, payload: unknown, guideFile?: string): Promise<Res> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -38,7 +39,7 @@ export async function saveHelpSection(section: HelpSectionKey, payload: unknown,
 }
 
 /** Đọc file Word (.docx) → chữ để admin xem trước / sửa rồi mới lưu. */
-export async function importHelpDocx(fd: FormData): Promise<{ text?: string; name?: string; error?: string }> {
+async function importHelpDocx__(fd: FormData): Promise<{ text?: string; name?: string; error?: string }> {
   try {
     await assertOwner();
     const f = fd.get("file");
@@ -53,3 +54,7 @@ export async function importHelpDocx(fd: FormData): Promise<{ text?: string; nam
     return { error: (e as Error).message || "Không đọc được file Word" };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveHelpSection(...a: Parameters<typeof saveHelpSection__>) { return track("Admin › Help", "saveHelpSection", () => saveHelpSection__(...a)); }
+export async function importHelpDocx(...a: Parameters<typeof importHelpDocx__>) { return track("Admin › Help", "importHelpDocx", () => importHelpDocx__(...a)); }

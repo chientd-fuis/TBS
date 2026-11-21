@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
@@ -11,7 +12,7 @@ import { errMsg, str, type FormState } from "./types";
  *  Cảnh báo (OPEN):      approve = Khách đã trả · reject = Bỏ cảnh báo (không phải đơn nợ)
  *  Yêu cầu phạt (ESCALATED): approve = Duyệt ghi phạt (số "amount") · reject = Không phạt · op=paid = Khách đã trả
  */
-export async function resolveUnpaidAction(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveUnpaidAction__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("revenue");
     const id = str(fd.get("id"));
@@ -30,3 +31,6 @@ export async function resolveUnpaidAction(_: FormState, fd: FormData): Promise<F
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resolveUnpaidAction(...a: Parameters<typeof resolveUnpaidAction__>) { return track("Admin › Đơn chưa thanh toán", "resolveUnpaidAction", () => resolveUnpaidAction__(...a)); }

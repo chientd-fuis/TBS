@@ -157,6 +157,6 @@ export async function POST(req: Request) {
             : null,
     });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

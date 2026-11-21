@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { isValidObjectId } from "mongoose";
 import { assertPerm } from "@/lib/guards";
@@ -19,7 +20,7 @@ const done = () => {
 };
 
 /** Tạo / sửa nhắc nhở (Bảng tin Bơ Sầu) */
-export async function saveReminder(input: ReminderInput): Promise<Res> {
+async function saveReminder__(input: ReminderInput): Promise<Res> {
   try {
     const admin = await assertPerm("reminders");
     await connectDB();
@@ -50,7 +51,7 @@ export async function saveReminder(input: ReminderInput): Promise<Res> {
   }
 }
 
-export async function deleteReminder(id: string): Promise<Res> {
+async function deleteReminder__(id: string): Promise<Res> {
   try {
     const admin = await assertPerm("reminders");
     await connectDB();
@@ -64,3 +65,7 @@ export async function deleteReminder(id: string): Promise<Res> {
     return { error: (e as Error).message };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveReminder(...a: Parameters<typeof saveReminder__>) { return track("Admin › Nhắc việc", "saveReminder", () => saveReminder__(...a)); }
+export async function deleteReminder(...a: Parameters<typeof deleteReminder__>) { return track("Admin › Nhắc việc", "deleteReminder", () => deleteReminder__(...a)); }

@@ -2,7 +2,7 @@ import { aiAllowed } from "@/lib/ai";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
-import { Attendance, ShiftTemplate, Store, User } from "@/lib/models";
+import { Attendance, HoursRecalc, ShiftTemplate, Store, User } from "@/lib/models";
 import { geminiConfigured } from "@/lib/ocr";
 import { localDate, localMonth, localTime, viDate } from "@/lib/time";
 import { hoursVi, minutesVi } from "@/lib/format";
@@ -17,6 +17,9 @@ import QuickEdit from "./QuickEdit";
 import BulkDeleteBar, { SelectAllBox } from "./BulkDeleteBar";
 import { AutoFilterForm } from "@/components/AutoFilterForm";
 import SingleTimeFields from "./SingleTimeFields";
+import RecalcPanel, { hmVi, type RecalcRowData } from "./RecalcPanel";
+import { hourStats, monthHolidays, recalcConfig, type HourStats } from "@/lib/hours-recalc-server";
+import { RECALC_MODES } from "@/lib/hours-recalc";
 import BulkAttendance from "./BulkAttendance";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +57,67 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
     : [];
   // ===== Bảng chấm công theo ca cả tháng (giống bảng xếp ca – chế độ xem) =====
   const templates = store ? await ShiftTemplate.find({ storeId: store._id, active: { $ne: false } }).sort({ startTime: 1 }).lean() : [];
+  // ===== Tính lại giờ công (dưới Tổng hợp tháng) =====
+  const showSummary = !(selected || sp.status);
+  const recalcConf = await recalcConfig();
+  const stats = new Map<string, HourStats>();
+  let recalcRows: RecalcRowData[] = [];
+  if (showSummary) {
+    const holidays = await monthHolidays(month);
+    const states = new Map((await HoursRecalc.find({ month, userId: { $in: staff.map((u) => u._id) } }).lean()).map((x) => [String(x.userId), x]));
+    const fmt = (d: Date) => new Intl.DateTimeFormat("vi-VN", { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+    const byId = new Map(rows.map((r) => [String(r._id), r]));
+    for (const u of staff) stats.set(String(u._id), hourStats(rows.filter((r) => String(r.userId) === String(u._id)), recalcConf, holidays));
+    recalcRows = staff
+      .filter((u) => rows.some((r) => String(r.userId) === String(u._id) && r.status === "COMPLETED"))
+      .map((u) => {
+        const st = stats.get(String(u._id))!;
+        const state = states.get(String(u._id));
+        const picks = new Map(st.plan.picks.map((p) => [p.id, p]));
+        const shiftIds = [...st.plan.candidates.map((c) => c.id), ...st.appliedIds.filter((id) => !st.plan.candidates.some((c) => c.id === id))];
+        return {
+          userId: String(u._id),
+          name: u.name,
+          inactive: u.status === "INACTIVE",
+          actual: st.actual,
+          base: st.base,
+          final: st.final,
+          auto: st.auto,
+          autoCount: st.autoCount,
+          matches: st.matches,
+          needed: st.plan.needed,
+          enough: st.plan.enough,
+          planAdded: st.plan.added,
+          planPicks: st.plan.picks.length,
+          planAfter: st.plan.after,
+          planGapAfter: st.plan.gapAfter,
+          gapBase: st.plan.gapBefore,
+          cancelled: !!state?.cancelled,
+          at: state?.at ? `${fmt(state.at)} · ${state.by ?? ""}` : undefined,
+          shifts: shiftIds.flatMap((id) => {
+            const a = byId.get(id);
+            if (!a?.checkOutAt) return [];
+            const c = st.plan.candidates.find((x) => x.id === id);
+            const p = picks.get(id);
+            const min = Math.round((a.checkOutAt.getTime() - a.checkInAt.getTime()) / 60000);
+            return [
+              {
+                id,
+                date: viDate(a.workDate).slice(0, 5),
+                time: `${localTime(a.checkInAt, tz).slice(0, 5)}–${localTime(a.checkOutAt, tz).slice(0, 5)}`,
+                worked: `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`,
+                rounded: c?.rounded ?? a.autoBase ?? a.roundedHours ?? 0,
+                shortMin: c?.shortMin ?? 0,
+                applied: st.appliedIds.includes(id),
+                picked: !!p,
+                gapBefore: p?.gapBefore,
+                gapAfter: p?.gapAfter,
+              },
+            ];
+          }),
+        };
+      });
+  }
   const visitorNames = new Map(
     (await User.find({ _id: { $in: visitors.map((v) => v.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]),
   );
@@ -142,8 +206,21 @@ export default async function AttendanceAdmin({ searchParams }: { searchParams: 
             <Link className="text-accent underline" href={`/admin/work-schedule?store=${store?._id}&month=${month}`}>Lịch làm việc</Link>.
           </p>
           <Card title="Tổng hợp tháng">
-            <SummaryTable rows={rows} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
+            <SummaryTable rows={rows} stats={stats} staff={staff.map((u) => ({ id: String(u._id), name: u.name, inactive: u.status === "INACTIVE" }))} storeId={String(store?._id)} month={month} />
             {rows.some((r) => r.supportLabel) && <p className="mt-2 text-xs text-ink/60">Đã gồm giờ nhân viên đi hỗ trợ cơ sở khác (lương do {store?.name} trả).</p>}
+          </Card>
+          <Card title="Tính lại giờ công">
+            <RecalcPanel
+              rows={recalcRows}
+              storeId={String(store?._id)}
+              month={month}
+              locked={locked}
+              canEdit={can(admin, "attendance.edit")}
+              threshold={recalcConf.threshold}
+              maxShort={recalcConf.maxShortMin}
+              modeLabel={RECALC_MODES.find((m) => m.v === recalcConf.mode)?.label ?? ""}
+              settingsHref={admin.kind === "OWNER" ? "/admin/settings#tinh-lai-gio-cong" : undefined}
+            />
           </Card>
           {visitors.length > 0 && (
             <Card title={`Nhân viên cơ sở khác hỗ trợ tại ${store?.name} (${visitors.length} lượt)`}>
@@ -211,6 +288,7 @@ function SummaryLine({ rows }: { rows: { status: string; roundedHours?: number |
     <div className="mb-3 flex flex-wrap gap-2 text-sm">
       <Badge tone="yellow">Giờ công: {hoursVi(s.totalRounded)}</Badge>
       <Badge tone="gray">Giờ thực tế: {hoursVi(s.totalActual)}</Badge>
+      {s.autoAdded > 0 && <Badge tone="red">Tính lại giờ công: +{hoursVi(s.autoAdded)}h ({s.autoCount} ca)</Badge>}
       <Badge tone={diff > 0 ? "green" : diff < 0 ? "red" : "gray"}>
         Chênh: {diff > 0 ? "+" : diff < 0 ? "−" : ""}
         {hoursVi(Math.abs(diff))}h
@@ -224,21 +302,75 @@ function SummaryLine({ rows }: { rows: { status: string; roundedHours?: number |
   );
 }
 
-function SummaryTable({ rows, staff, storeId, month }: { rows: (AttRow & { userId?: unknown })[]; staff: { id: string; name: string; inactive: boolean }[]; storeId: string; month: string }) {
+function SummaryTable({
+  rows,
+  stats,
+  staff,
+  storeId,
+  month,
+}: {
+  rows: (AttRow & { userId?: unknown })[];
+  stats: Map<string, HourStats>;
+  staff: { id: string; name: string; inactive: boolean }[];
+  storeId: string;
+  month: string;
+}) {
   if (!staff.length) return <Empty>Chưa có nhân viên</Empty>;
   return (
     <div className="overflow-x-auto">
+      <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/60">
+        <span>
+          Số <b className="text-sm text-[#c62828]">đỏ</b> = giờ công sau Tính lại giờ công – số dùng để tính lương (số gạch ngang là giờ chấm công gốc)
+        </span>
+        <span>Chênh = giờ thực tế − giờ công</span>
+      </p>
       <table className="tbs">
         <thead>
-          <tr><th>Nhân viên</th><th className="text-center">Giờ tính công</th><th className="text-center">Ngày công</th><th className="text-center">Đi muộn</th><th className="text-center">Về sớm</th><th className="text-center">Quên check-out</th><th className="text-center">Chấm hộ</th><th></th></tr>
+          <tr>
+            <th>Nhân viên</th>
+            <th className="text-right">Giờ thực tế</th>
+            <th className="text-right">Giờ chấm công</th>
+            <th className="text-right">Chênh</th>
+            <th className="text-right">Giờ công <span className="block text-[10px] font-normal">tính lương</span></th>
+            <th className="text-center">Ngày công</th>
+            <th className="text-center">Đi muộn</th>
+            <th className="text-center">Về sớm</th>
+            <th className="text-center">Quên check-out</th>
+            <th className="text-center">Chấm hộ</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
           {staff.map((u) => {
             const s = summarize(rows.filter((r) => String(r.userId) === u.id));
+            const h = stats.get(u.id);
+            const auto = !!h && h.auto > 0;
             return (
               <tr key={u.id} className={s.missing ? "row-missing" : ""}>
                 <td className="font-semibold">{u.name}{u.inactive && <span className="text-xs text-ink/50"> (nghỉ)</span>}</td>
-                <td className="text-center font-bold">{hoursVi(s.totalRounded)}</td>
+                <td className="text-right">{h?.actual ? hmVi(h.actual) : ""}</td>
+                <td className="text-right">{hoursVi(h ? h.base : s.totalRounded)}</td>
+                <td className="text-right whitespace-nowrap">
+                  {h?.actual ? (
+                    <>
+                      {auto && <s className="mr-1 text-xs text-ink/50">{hmVi(h.actual - h.base, true)}</s>}
+                      {hmVi(h.actual - h.final, true)}
+                    </>
+                  ) : (
+                    ""
+                  )}
+                </td>
+                <td className="text-right whitespace-nowrap">
+                  {auto && h ? (
+                    <>
+                      <s className="mr-1 text-xs text-ink/50">{hoursVi(h.base)}</s>
+                      <b className="text-base text-[#c62828]">{hoursVi(h.final)}</b>
+                      <span className="block text-[10px] font-semibold text-[#c62828]">+{hoursVi(h.auto)}h · {h.autoCount} ca</span>
+                    </>
+                  ) : (
+                    <b>{hoursVi(s.totalRounded)}</b>
+                  )}
+                </td>
                 <td className="text-center">{s.workDays}</td>
                 <td className="text-center text-warn">{s.late || ""}</td>
                 <td className="text-center text-warn">{s.early || ""}</td>

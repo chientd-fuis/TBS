@@ -30,6 +30,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

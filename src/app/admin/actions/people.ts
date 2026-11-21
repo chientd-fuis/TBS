@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { AdminAccount, Device, ProbationRequest, SalaryHistory, Store, User, WageHistory } from "@/lib/models";
@@ -15,7 +16,7 @@ import { dec, errMsg, num, str, type FormState } from "./types";
 import { makeOfficial, PROBATION_WAGE } from "@/lib/probation";
 
 /* ===== Duyệt đăng ký (spec 3.1) ===== */
-export async function approveUser(_: FormState, fd: FormData): Promise<FormState> {
+async function approveUser__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.approve");
     await connectDB();
@@ -49,7 +50,7 @@ export async function approveUser(_: FormState, fd: FormData): Promise<FormState
  *  - extend: gia hạn thử việc thêm 1 tháng từ hôm nay (bỏ "cần xem xét")
  *  - stop: bỏ thử việc, giữ nguyên lương
  */
-export async function probationAction(_: FormState, fd: FormData): Promise<FormState> {
+async function probationAction__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.pay");
     await connectDB();
@@ -93,7 +94,7 @@ export async function probationAction(_: FormState, fd: FormData): Promise<FormS
   }
 }
 
-export async function rejectUser(_: FormState, fd: FormData): Promise<FormState> {
+async function rejectUser__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.approve");
     const reason = str(fd.get("reason"));
@@ -138,7 +139,7 @@ async function applyPayTerms(user: UserInstance, payType: PayType, monthlySalary
 }
 
 /** Card "Hình thức lương" ở Chi tiết nhân viên. */
-export async function setPayTerms(_: FormState, fd: FormData): Promise<FormState> {
+async function setPayTerms__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.pay");
     await connectDB();
@@ -164,7 +165,7 @@ export async function setPayTerms(_: FormState, fd: FormData): Promise<FormState
  * Admin Tổng: tạo hồ sơ nhân viên cho 1 admin (cùng Gmail) để admin có dòng trong bảng lương.
  * Gmail đã có hồ sơ nhân viên → dùng lại hồ sơ đó (đánh dấu admin, kích hoạt, đặt lương).
  */
-export async function createAdminStaff(_: FormState, fd: FormData): Promise<FormState> {
+async function createAdminStaff__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -199,7 +200,7 @@ export async function createAdminStaff(_: FormState, fd: FormData): Promise<Form
 }
 
 /* ===== Quản lý nhân viên (spec 3.3) ===== */
-export async function updateEmployee(_: FormState, fd: FormData): Promise<FormState> {
+async function updateEmployee__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.edit");
     const user = await User.findById(str(fd.get("userId")));
@@ -233,7 +234,7 @@ export async function updateEmployee(_: FormState, fd: FormData): Promise<FormSt
 }
 
 /** Đổi lương giờ có ngày hiệu lực (hỗ trợ đổi lương giữa tháng). */
-export async function setWage(_: FormState, fd: FormData): Promise<FormState> {
+async function setWage__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.pay");
     const user = await User.findById(str(fd.get("userId")));
@@ -255,7 +256,7 @@ export async function setWage(_: FormState, fd: FormData): Promise<FormState> {
 }
 
 /* ===== Thiết bị (spec 4.1.1) ===== */
-export async function deviceAction(_: FormState, fd: FormData): Promise<FormState> {
+async function deviceAction__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.approve");
     const id = str(fd.get("deviceRefId"));
@@ -279,7 +280,7 @@ export async function deviceAction(_: FormState, fd: FormData): Promise<FormStat
 }
 
 /* ===== Chuyển tài khoản: dữ liệu Gmail cũ → Gmail mới, rồi xoá tài khoản cũ ===== */
-export async function previewAccountTransfer(fromId: string, toId: string) {
+async function previewAccountTransfer__(fromId: string, toId: string) {
   try {
     await assertPerm("employees.merge");
     const { previewMerge } = await import("@/lib/account-merge");
@@ -289,7 +290,7 @@ export async function previewAccountTransfer(fromId: string, toId: string) {
   }
 }
 
-export async function transferAccount(fromId: string, toId: string) {
+async function transferAccount__(fromId: string, toId: string) {
   try {
     const admin = await assertPerm("employees.merge");
     const { mergeUserAccount } = await import("@/lib/account-merge");
@@ -303,7 +304,7 @@ export async function transferAccount(fromId: string, toId: string) {
 }
 
 /* ===== Cấp quyền quản lý cho nhân viên (xếp ca / thưởng-phạt / duyệt đổi ca-làm hộ) ===== */
-export async function setStaffPerms(_: FormState, fd: FormData): Promise<FormState> {
+async function setStaffPerms__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.staffPerms");
     const { isStaffPerm } = await import("@/lib/permissions");
@@ -360,7 +361,7 @@ async function makeOfflineStaff(
 }
 
 /** Form ở trang Nhân viên. */
-export async function createOfflineStaff(_: FormState, fd: FormData): Promise<FormState> {
+async function createOfflineStaff__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.edit");
     await makeOfflineStaff(admin, {
@@ -380,7 +381,7 @@ export async function createOfflineStaff(_: FormState, fd: FormData): Promise<Fo
 }
 
 /** Tạo nhanh từ màn Import Excel (sheet không khớp nhân viên nào) → trả id để gán luôn. */
-export async function quickCreateOfflineStaff(name: string, storeId: string, hourlyWage: number): Promise<{ id?: string; name?: string; error?: string }> {
+async function quickCreateOfflineStaff__(name: string, storeId: string, hourlyWage: number): Promise<{ id?: string; name?: string; error?: string }> {
   try {
     const admin = await assertPerm("employees.edit");
     const u = await makeOfflineStaff(admin, { name, storeId, hourlyWage, active: false });
@@ -394,7 +395,7 @@ export async function quickCreateOfflineStaff(name: string, storeId: string, hou
  * Sửa nhanh từ danh sách nhân viên (popup): họ tên + lương giờ.
  * Lương đổi → thêm mức lương hiệu lực từ ngày chọn (mặc định hôm nay); bảng lương nháp tự tính lại khi mở.
  */
-export async function quickEditEmployee(_: FormState, fd: FormData): Promise<FormState> {
+async function quickEditEmployee__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("employees.edit");
     await connectDB();
@@ -432,3 +433,19 @@ export async function quickEditEmployee(_: FormState, fd: FormData): Promise<For
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function approveUser(...a: Parameters<typeof approveUser__>) { return track("Admin › Nhân viên", "approveUser", () => approveUser__(...a)); }
+export async function probationAction(...a: Parameters<typeof probationAction__>) { return track("Admin › Nhân viên", "probationAction", () => probationAction__(...a)); }
+export async function rejectUser(...a: Parameters<typeof rejectUser__>) { return track("Admin › Nhân viên", "rejectUser", () => rejectUser__(...a)); }
+export async function setPayTerms(...a: Parameters<typeof setPayTerms__>) { return track("Admin › Nhân viên", "setPayTerms", () => setPayTerms__(...a)); }
+export async function createAdminStaff(...a: Parameters<typeof createAdminStaff__>) { return track("Admin › Nhân viên", "createAdminStaff", () => createAdminStaff__(...a)); }
+export async function updateEmployee(...a: Parameters<typeof updateEmployee__>) { return track("Admin › Nhân viên", "updateEmployee", () => updateEmployee__(...a)); }
+export async function setWage(...a: Parameters<typeof setWage__>) { return track("Admin › Nhân viên", "setWage", () => setWage__(...a)); }
+export async function deviceAction(...a: Parameters<typeof deviceAction__>) { return track("Admin › Nhân viên", "deviceAction", () => deviceAction__(...a)); }
+export async function previewAccountTransfer(...a: Parameters<typeof previewAccountTransfer__>) { return track("Admin › Nhân viên", "previewAccountTransfer", () => previewAccountTransfer__(...a)); }
+export async function transferAccount(...a: Parameters<typeof transferAccount__>) { return track("Admin › Nhân viên", "transferAccount", () => transferAccount__(...a)); }
+export async function setStaffPerms(...a: Parameters<typeof setStaffPerms__>) { return track("Admin › Nhân viên", "setStaffPerms", () => setStaffPerms__(...a)); }
+export async function createOfflineStaff(...a: Parameters<typeof createOfflineStaff__>) { return track("Admin › Nhân viên", "createOfflineStaff", () => createOfflineStaff__(...a)); }
+export async function quickCreateOfflineStaff(...a: Parameters<typeof quickCreateOfflineStaff__>) { return track("Admin › Nhân viên", "quickCreateOfflineStaff", () => quickCreateOfflineStaff__(...a)); }
+export async function quickEditEmployee(...a: Parameters<typeof quickEditEmployee__>) { return track("Admin › Nhân viên", "quickEditEmployee", () => quickEditEmployee__(...a)); }

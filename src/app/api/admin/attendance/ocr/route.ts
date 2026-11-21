@@ -31,6 +31,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, records: normalizeAiAttendance(json, p.data.month, templates) });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

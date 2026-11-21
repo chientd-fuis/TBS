@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { Expense, FixedCost, Settings, Store } from "@/lib/models";
@@ -20,7 +21,7 @@ async function assertOwner() {
   return a;
 }
 
-export async function deleteExpense(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteExpense__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("finance.bills");
     await connectDB();
@@ -45,7 +46,7 @@ export async function deleteExpense(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Thêm / sửa tiền thuê nhà của 1 cơ sở (chi phí cố định duy nhất) – tính mỗi tháng, chia đều theo ngày. */
-export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormState> {
+async function saveFixedCost__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("finance.rent");
     await connectDB();
@@ -98,7 +99,7 @@ export async function saveFixedCost(_: FormState, fd: FormData): Promise<FormSta
   }
 }
 
-export async function deleteFixedCost(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteFixedCost__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("finance.rent");
     await connectDB();
@@ -114,7 +115,7 @@ export async function deleteFixedCost(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Cài đặt tài chính (Admin Tổng): nhóm Telegram, bật/tắt báo cáo, % phí sàn từng cơ sở. */
-export async function saveFinanceSettings(_: FormState, fd: FormData): Promise<FormState> {
+async function saveFinanceSettings__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("finance.settings");
     await connectDB();
@@ -141,7 +142,7 @@ export async function saveFinanceSettings(_: FormState, fd: FormData): Promise<F
   }
 }
 
-export async function testFinanceTelegram(_: FormState, fd: FormData): Promise<FormState> {
+async function testFinanceTelegram__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     await assertPerm("finance.settings");
     const chat = str(fd.get("chatId")) || (await financeChatId());
@@ -153,7 +154,7 @@ export async function testFinanceTelegram(_: FormState, fd: FormData): Promise<F
 }
 
 /** Gửi ngay 1 báo cáo (gửi lại kể cả đã gửi). */
-export async function sendReportNow(_: FormState, fd: FormData): Promise<FormState> {
+async function sendReportNow__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     await assertOwner();
     const kind = str(fd.get("kind"));
@@ -170,7 +171,7 @@ export async function sendReportNow(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /* ===== Sổ quỹ: nộp tiền mặt vào tài khoản / rút tài khoản ra tiền mặt (chỉ Admin Tổng – doanh thu không đổi) ===== */
-export async function saveCashTransfer(_: FormState, fd: FormData): Promise<FormState> {
+async function saveCashTransfer__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -220,7 +221,7 @@ export async function saveCashTransfer(_: FormState, fd: FormData): Promise<Form
   }
 }
 
-export async function deleteCashTransfer(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteCashTransfer__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -237,7 +238,7 @@ export async function deleteCashTransfer(_: FormState, fd: FormData): Promise<Fo
 }
 
 /** Sổ quỹ → Đếm tiền: tích / bỏ tích "đã lấy & đếm tiền mặt" ngày đó của cơ sở (Admin Tổng). */
-export async function setCashCount(storeId: string, date: string, counted: boolean): Promise<FormState> {
+async function setCashCount__(storeId: string, date: string, counted: boolean): Promise<FormState> {
   try {
     const admin = await assertOwner();
     if (!isValidObjectId(storeId) || !isYmd(date)) return { error: "Ngày / cơ sở không hợp lệ" };
@@ -255,7 +256,7 @@ export async function setCashCount(storeId: string, date: string, counted: boole
 }
 
 /** Bổ sung vốn tiền mặt: đánh dấu đã lấy / chưa lấy (cộng vào tiền thực tế đang cầm). */
-export async function toggleTransferCounted(_: FormState, fd: FormData): Promise<FormState> {
+async function toggleTransferCounted__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -276,7 +277,7 @@ export async function toggleTransferCounted(_: FormState, fd: FormData): Promise
  * Đếm tiền: tiền mặt đếm thực tế không khớp chốt ca → sửa tiền mặt ca chốt cuối ngày đó + lưu cảnh báo Thiếu / Thừa
  * (mọi admin thấy ở Chốt ca / Đếm tiền), đánh dấu luôn ngày đó đã đếm. Nhập lại đúng số chốt ca gốc = bỏ cảnh báo.
  */
-export async function recountDayCash(_: FormState, fd: FormData): Promise<FormState> {
+async function recountDayCash__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertOwner();
     const storeId = str(fd.get("storeId"));
@@ -314,3 +315,16 @@ export async function recountDayCash(_: FormState, fd: FormData): Promise<FormSt
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function deleteExpense(...a: Parameters<typeof deleteExpense__>) { return track("Admin › Tài chính", "deleteExpense", () => deleteExpense__(...a)); }
+export async function saveFixedCost(...a: Parameters<typeof saveFixedCost__>) { return track("Admin › Tài chính", "saveFixedCost", () => saveFixedCost__(...a)); }
+export async function deleteFixedCost(...a: Parameters<typeof deleteFixedCost__>) { return track("Admin › Tài chính", "deleteFixedCost", () => deleteFixedCost__(...a)); }
+export async function saveFinanceSettings(...a: Parameters<typeof saveFinanceSettings__>) { return track("Admin › Tài chính", "saveFinanceSettings", () => saveFinanceSettings__(...a)); }
+export async function testFinanceTelegram(...a: Parameters<typeof testFinanceTelegram__>) { return track("Admin › Tài chính", "testFinanceTelegram", () => testFinanceTelegram__(...a)); }
+export async function sendReportNow(...a: Parameters<typeof sendReportNow__>) { return track("Admin › Tài chính", "sendReportNow", () => sendReportNow__(...a)); }
+export async function saveCashTransfer(...a: Parameters<typeof saveCashTransfer__>) { return track("Admin › Tài chính", "saveCashTransfer", () => saveCashTransfer__(...a)); }
+export async function deleteCashTransfer(...a: Parameters<typeof deleteCashTransfer__>) { return track("Admin › Tài chính", "deleteCashTransfer", () => deleteCashTransfer__(...a)); }
+export async function setCashCount(...a: Parameters<typeof setCashCount__>) { return track("Admin › Tài chính", "setCashCount", () => setCashCount__(...a)); }
+export async function toggleTransferCounted(...a: Parameters<typeof toggleTransferCounted__>) { return track("Admin › Tài chính", "toggleTransferCounted", () => toggleTransferCounted__(...a)); }
+export async function recountDayCash(...a: Parameters<typeof recountDayCash__>) { return track("Admin › Tài chính", "recountDayCash", () => recountDayCash__(...a)); }

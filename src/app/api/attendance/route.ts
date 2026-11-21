@@ -19,6 +19,7 @@ import { dataUrlToBuffer, HttpError, jsonError } from "@/lib/api";
 import { checkinLock, checkoutCap, runAutoCheckout } from "@/lib/auto-checkout";
 import { flagOvertime } from "@/lib/overtime";
 import { syncTrial } from "@/lib/probation";
+import { autoRecalc } from "@/lib/hours-recalc-server";
 
 const Body = z.object({
   // vị trí / ảnh chỉ gửi khi cơ sở bật cách chấm tương ứng
@@ -248,6 +249,9 @@ export async function POST(req: Request) {
         const fresh = await Attendance.findById(updated._id).select("roundedHours trial").lean();
         if (fresh?.trial) rounded = fresh.roundedHours;
       }
+      // Tính lại giờ công cả tháng của nhân viên này (cài đặt "ngay khi check-out" – mặc định)
+      // chạy sau khi đã trả kết quả cho nhân viên (check-out không bị chậm)
+      after(() => autoRecalc(user._id, updated.month));
       // thông báo nhóm chấm công (chạy sau khi đã trả kết quả cho nhân viên)
       after(() =>
         notifyAttendance(
@@ -376,6 +380,6 @@ export async function POST(req: Request) {
       support: isSupport,
     });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

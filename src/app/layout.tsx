@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import PullToRefresh from "@/components/PullToRefresh";
+import ErrorReporter from "@/components/ErrorReporter";
 
 export const metadata: Metadata = {
   title: "Tiệm Bơ Sầu – Chấm công",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen antialiased">
         {children}
         <PullToRefresh />
+        <ErrorReporter />
       </body>
     </html>
   );

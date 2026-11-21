@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { BonusPenalty, CoverRequest, User } from "@/lib/models";
 import { staffManager } from "@/lib/staff-guard";
@@ -29,7 +30,7 @@ function readBp(fd: FormData) {
   return { kind: str(fd.get("kind")) === "BONUS" ? ("BONUS" as const) : ("PENALTY" as const), date, month: date.slice(0, 7), amountVnd: Math.round(amt.value), content };
 }
 
-export async function staffCreateBonus(_: FormState, fd: FormData): Promise<FormState> {
+async function staffCreateBonus__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const target = await User.findOne({ _id: str(fd.get("userId")), status: "ACTIVE" }).select("storeId name").lean();
     if (!target?.storeId) return { error: "Chọn nhân viên" };
@@ -54,7 +55,7 @@ async function ownBp(fd: FormData) {
   return { bp, ...s };
 }
 
-export async function staffUpdateBonus(_: FormState, fd: FormData): Promise<FormState> {
+async function staffUpdateBonus__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const { bp, actor } = await ownBp(fd);
     const v = readBp(fd);
@@ -70,7 +71,7 @@ export async function staffUpdateBonus(_: FormState, fd: FormData): Promise<Form
   }
 }
 
-export async function staffDeleteBonus(_: FormState, fd: FormData): Promise<FormState> {
+async function staffDeleteBonus__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const { bp, actor } = await ownBp(fd);
     await assertNotLocked(bp.storeId, bp.month, bp.userId);
@@ -83,7 +84,7 @@ export async function staffDeleteBonus(_: FormState, fd: FormData): Promise<Form
 }
 
 /** Duyệt / từ chối nhờ làm hộ – đổi ca ở cơ sở được giao (không tự duyệt yêu cầu có mình trong đó). */
-export async function staffResolveCover(_: FormState, fd: FormData): Promise<FormState> {
+async function staffResolveCover__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const id = str(fd.get("id"));
     const r = await CoverRequest.findById(id).lean();
@@ -101,3 +102,9 @@ export async function staffResolveCover(_: FormState, fd: FormData): Promise<For
     return fail(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function staffCreateBonus(...a: Parameters<typeof staffCreateBonus__>) { return track("Quản lý (NV)", "staffCreateBonus", () => staffCreateBonus__(...a)); }
+export async function staffUpdateBonus(...a: Parameters<typeof staffUpdateBonus__>) { return track("Quản lý (NV)", "staffUpdateBonus", () => staffUpdateBonus__(...a)); }
+export async function staffDeleteBonus(...a: Parameters<typeof staffDeleteBonus__>) { return track("Quản lý (NV)", "staffDeleteBonus", () => staffDeleteBonus__(...a)); }
+export async function staffResolveCover(...a: Parameters<typeof staffResolveCover__>) { return track("Quản lý (NV)", "staffResolveCover", () => staffResolveCover__(...a)); }

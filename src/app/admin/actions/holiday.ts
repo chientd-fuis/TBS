@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { Holiday, Payroll } from "@/lib/models";
 import { assertAdmin } from "@/lib/guards";
@@ -22,7 +23,7 @@ async function recalc(months: string[]) {
   revalidatePath("/admin", "layout");
 }
 
-export async function saveHoliday(_: FormState, fd: FormData): Promise<FormState> {
+async function saveHoliday__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     await connectDB();
@@ -45,7 +46,7 @@ export async function saveHoliday(_: FormState, fd: FormData): Promise<FormState
   }
 }
 
-export async function deleteHoliday(_: FormState, fd: FormData): Promise<FormState> {
+async function deleteHoliday__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     await connectDB();
@@ -61,7 +62,7 @@ export async function deleteHoliday(_: FormState, fd: FormData): Promise<FormSta
 }
 
 /** Thêm nhanh các ngày lễ dương lịch cố định của 1 năm (ngày lễ âm lịch – Tết, Giỗ Tổ – admin thêm tay). */
-export async function addSolarHolidays(_: FormState, fd: FormData): Promise<FormState> {
+async function addSolarHolidays__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     await connectDB();
@@ -88,3 +89,8 @@ export async function addSolarHolidays(_: FormState, fd: FormData): Promise<Form
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveHoliday(...a: Parameters<typeof saveHoliday__>) { return track("Admin › Ngày lễ", "saveHoliday", () => saveHoliday__(...a)); }
+export async function deleteHoliday(...a: Parameters<typeof deleteHoliday__>) { return track("Admin › Ngày lễ", "deleteHoliday", () => deleteHoliday__(...a)); }
+export async function addSolarHolidays(...a: Parameters<typeof addSolarHolidays__>) { return track("Admin › Ngày lễ", "addSolarHolidays", () => addSolarHolidays__(...a)); }

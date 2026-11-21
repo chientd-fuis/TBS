@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { Attendance } from "@/lib/models";
@@ -7,12 +8,13 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { assertNotLocked, computeFields, payStoreOf } from "@/lib/attendance";
 import { errMsg, str, type FormState } from "./types";
+import { autoRecalc } from "@/lib/hours-recalc-server";
 
 /**
  * Hỗ trợ cơ sở chưa xếp ca (nhân viên tự check-in ở cơ sở khác cơ sở gốc): Duyệt = giữ nguyên giờ công;
  * Từ chối = lượt này 0 giờ (payFactor = 0 → mọi lần tính lại giờ công vẫn giữ 0). Quyền: duyệt chấm công (adjustments).
  */
-export async function resolveSupport(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveSupport__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("adjustments");
     await connectDB();
@@ -34,7 +36,7 @@ export async function resolveSupport(_: FormState, fd: FormData): Promise<FormSt
         { _id: a._id, "support.status": "PENDING" },
         {
           $set: {
-            ...(a.checkOutAt ? { roundedHours: fields.roundedHours } : {}),
+            ...(a.checkOutAt ? { roundedHours: fields.roundedHours, autoPlus: 0, autoBase: null } : {}),
             payFactor: 0,
             "support.status": "REJECTED",
             ...decided,
@@ -43,6 +45,7 @@ export async function resolveSupport(_: FormState, fd: FormData): Promise<FormSt
         },
       );
     }
+    if (!approve) await autoRecalc(a.userId, a.month); // Tính lại giờ công
     await audit(actor, approve ? "attendance.support.approve" : "attendance.support.reject", { type: "Attendance", id: String(a._id) }, null, {
       userId: String(a.userId),
       storeId: String(a.storeId),
@@ -54,3 +57,6 @@ export async function resolveSupport(_: FormState, fd: FormData): Promise<FormSt
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resolveSupport(...a: Parameters<typeof resolveSupport__>) { return track("Admin › Hỗ trợ cơ sở", "resolveSupport", () => resolveSupport__(...a)); }

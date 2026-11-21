@@ -19,6 +19,7 @@ import { addDays } from "@/lib/time";
 import { ocrConfigured } from "@/lib/ocr";
 import AddClosing from "./AddClosing";
 import ImportRevenue from "./ImportRevenue";
+import ImportSheet from "./ImportSheet";
 import { ColsProvider, ColsToggle, FilterExpand } from "./ClosingCols";
 import { can } from "@/lib/permissions";
 
@@ -56,7 +57,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
   const existing: Record<string, string[]> = {};
   for (const c of recent) (existing[`${c.storeId}|${c.workDate}`] ??= []).push(c.shiftName ?? "");
   const firstDay = new Map(
-    (await ShiftClosing.aggregate<{ _id: unknown; d: string }>([{ $group: { _id: "$storeId", d: { $min: "$workDate" } } }])).map((x) => [String(x._id), x.d]),
+    (await ShiftClosing.aggregate<{ _id: unknown; d: string }>([{ $match: { "imported.source": { $ne: "SHEET" } } }, { $group: { _id: "$storeId", d: { $min: "$workDate" } } }])).map((x) => [String(x._id), x.d]),
   );
   const staffAll = await User.find({ status: "ACTIVE" }).select("name storeId").sort({ name: 1 }).lean();
   const addStores = stores
@@ -84,6 +85,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       )}
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
+      {admin.kind === "OWNER" && canSheet && <ImportSheet stores={stores.filter((s) => s.revenueSheetId).map((s) => ({ id: String(s._id), name: s.name }))} />}
       {can(admin, "revenue") && <ImportRevenue stores={stores.filter((s) => s.active !== false).map((s) => ({ id: String(s._id), name: s.name }))} />}
       <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured() && (await aiPhotoOn("closing")) && (await aiAllowed("closingOcr", `admin:${admin.accountId ?? "owner"}`))} />
       <ColsProvider>

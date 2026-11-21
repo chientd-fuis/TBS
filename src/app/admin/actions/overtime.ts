@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { Attendance } from "@/lib/models";
@@ -8,13 +9,14 @@ import { audit } from "@/lib/audit";
 import { assertNotLocked, payStoreOf, storeTz } from "@/lib/attendance";
 import { extraKinds, hoursShort, rejectOvertimeHours } from "@/lib/overtime";
 import { localTime } from "@/lib/time";
+import { autoRecalc } from "@/lib/hours-recalc-server";
 import { errMsg, str, type FormState } from "./types";
 
 /**
  * Làm ngoài giờ chờ xác nhận (ra muộn / vào sớm / ngoài ca): Duyệt = giữ giờ công (xoá khỏi danh sách chờ);
  * Từ chối = bỏ phần ngoài giờ (giờ vào = đầu ca / giờ ra = hết ca / ngoài ca = 0 giờ). Quyền: duyệt chấm công (adjustments).
  */
-export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveOvertime__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("adjustments");
     await connectDB();
@@ -71,6 +73,7 @@ export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormS
         },
       );
     }
+    if (!approve) await autoRecalc(a.userId, a.month); // Tính lại giờ công
     await audit(actor, approve ? "attendance.overtime.approve" : "attendance.overtime.reject", { type: "Attendance", id: String(a._id) }, null, {
       userId: String(a.userId),
       minutes: a.overtime.minutes,
@@ -85,3 +88,6 @@ export async function resolveOvertime(_: FormState, fd: FormData): Promise<FormS
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resolveOvertime(...a: Parameters<typeof resolveOvertime__>) { return track("Admin › Làm thêm giờ", "resolveOvertime", () => resolveOvertime__(...a)); }

@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { RevenuePickup, Store } from "@/lib/models";
@@ -7,7 +8,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 
 /** Menu Doanh thu: tick / bỏ tick "đã lấy doanh thu" (chưa đếm) của 1 cơ sở 1 ngày. */
-export async function setRevenuePickup(storeId: string, date: string, picked: boolean): Promise<{ ok?: boolean; error?: string; by?: string; at?: string }> {
+async function setRevenuePickup__(storeId: string, date: string, picked: boolean): Promise<{ ok?: boolean; error?: string; by?: string; at?: string }> {
   try {
     const admin = await assertPerm("revenue");
     await connectDB();
@@ -36,3 +37,6 @@ export async function setRevenuePickup(storeId: string, date: string, picked: bo
     return { error: (e as Error).message || "Không lưu được" };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function setRevenuePickup(...a: Parameters<typeof setRevenuePickup__>) { return track("Admin › Doanh thu", "setRevenuePickup", () => setRevenuePickup__(...a)); }

@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { AdminLoginSession } from "@/lib/models";
@@ -7,7 +8,7 @@ import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 
 /** Admin Tổng đăng xuất 1 phiên admin (sid) hoặc tất cả (sid = "ALL"). Admin bị đăng xuất ngay ở lần bấm tiếp theo. */
-export async function revokeAdminSession(sid: string): Promise<{ ok?: boolean; error?: string }> {
+async function revokeAdminSession__(sid: string): Promise<{ ok?: boolean; error?: string }> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đăng xuất phiên admin" };
@@ -22,3 +23,6 @@ export async function revokeAdminSession(sid: string): Promise<{ ok?: boolean; e
     return { error: (e as Error).message || "Lỗi hệ thống" };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function revokeAdminSession(...a: Parameters<typeof revokeAdminSession__>) { return track("Admin › Hoạt động admin", "revokeAdminSession", () => revokeAdminSession__(...a)); }

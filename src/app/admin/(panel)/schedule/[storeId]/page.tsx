@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { requireAdmin } from "@/lib/guards";
 import { can } from "@/lib/permissions";
-import { Store } from "@/lib/models";
+import { ShiftAssignment, Store } from "@/lib/models";
 import { loadWeek } from "@/lib/schedule-data";
 import { addDays, isYmd, localDate, viDate, weekStartOf } from "@/lib/time";
 import { Alert, LinkButton, PageTitle } from "@/components/ui";
@@ -25,7 +25,14 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   if (!store) notFound();
   const tz = store.timezone || "Asia/Ho_Chi_Minh";
   const today = localDate(new Date(), tz);
-  const ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
+  // mở màn hình (không chọn tuần): tuần sau đã có nhân viên đăng ký ca chờ duyệt → hiện luôn tuần sau để xếp
+  let autoNext = 0;
+  let ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
+  if (!isYmd(sp.week)) {
+    const next = addDays(weekStartOf(today), 7);
+    autoNext = await ShiftAssignment.countDocuments({ storeId, status: "PENDING", date: { $gte: next, $lte: addDays(next, 6) } });
+    if (autoNext) ws = next;
+  }
   const data = await loadWeek(storeId, ws);
   const link = (w: string) => `/admin/schedule/${storeId}?week=${w}`;
   const thisWeek = weekStartOf(today);
@@ -50,6 +57,11 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
       <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · ⚠ đỏ = thiếu người · ⓘ cam = ít người · xanh dương = hỗ trợ từ cơ sở khác">
         <Link href="/admin/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
+      {autoNext > 0 && (
+        <Alert tone="orange">
+          Đang mở <b>tuần sau</b> vì có <b>{autoNext} ca đăng ký chờ duyệt</b>.
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="ml-auto flex gap-2">
           <LinkButton variant="outline" href={`/admin/shifts?store=${storeId}&week=${ws}`}>Ca mẫu & xếp hàng loạt</LinkButton>
@@ -78,6 +90,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           external={data.external}
           otherStaff={data.otherStaff}
           regRequests={data.regRequests}
+          regLogs={data.regLogs}
           canRequest={ws >= addDays(thisWeek, 7)}
           isPast={addDays(ws, 6) < today}
           weekNav={weekNav}

@@ -13,6 +13,8 @@ import { escalateUnpaid } from "@/lib/unpaid-order";
 import { runAutoPenalties } from "@/lib/auto-penalty";
 import { runProbation } from "@/lib/probation";
 import { reportMissedCheckouts, runAutoCheckout } from "@/lib/auto-checkout";
+import { logError } from "@/lib/error-log";
+import { runScheduledRecalc } from "@/lib/hours-recalc-server";
 
 // Gemini API không hỗ trợ Hong Kong (region mặc định hkg1) → chạy hàm này ở Singapore
 export const preferredRegion = "sin1";
@@ -29,6 +31,8 @@ export async function GET(req: Request) {
   const missedReported = await reportMissedCheckouts().catch((e: Error) => ({ error: e.message }));
   const penalties = await runAutoPenalties().catch((e: Error) => ({ error: e.message })); // phạt tự động: muộn / bỏ ca / quên chấm công
   const probation = await runProbation().catch((e: Error) => ({ error: e.message })); // hết tháng thử việc → chính thức 22k/h hoặc "cần xem xét"
+  // Tính lại giờ công: 22:00 mỗi đêm / ngày 1 / lưới an toàn cho chế độ "ngay khi check-out" (theo Cài đặt)
+  const hoursRecalc = await runScheduledRecalc().catch((e: Error) => ({ error: e.message }));
   const uploaded = await retryPendingPhotos();
   await ensureDraftPayrolls();
   const published = await autoPublishPayrolls(); // dự phòng nếu cron ngày 5 bị lỡ
@@ -40,5 +44,11 @@ export async function GET(req: Request) {
   const unpaid = await escalateUnpaid().catch((e: Error) => ({ error: e.message })); // đơn chưa thanh toán quá 2 ngày → yêu cầu phạt
   const anomaly = await runDailyAnomaly().catch((e: Error) => ({ error: e.message })); // bất thường chốt ca & két → Telegram + Tổng quan
   const cleanup = await runAutoCleanup().catch((e: Error) => ({ error: e.message })); // tự dọn rác mỗi tháng 1 lần (nếu bật)
-  return NextResponse.json({ unpaid, autoCheckout, missing, missedReported, penalties, probation, uploaded, published, closingsResent, recalculated, sheetDays, reports, ttl, anomaly, cleanup });
+  // bước nào lỗi → ghi Log lỗi hệ thống
+  const steps = { autoCheckout, missedReported, penalties, probation, hoursRecalc, reports, ttl, unpaid, anomaly, cleanup } as Record<string, unknown>;
+  for (const [k, v] of Object.entries(steps)) {
+    const err = v && typeof v === "object" && "error" in v ? (v as { error?: unknown }).error : null;
+    if (typeof err === "string" && err) logError({ level: "error", source: "system", area: "Tự động hằng giờ (cron)", fn: k, message: err });
+  }
+  return NextResponse.json({ unpaid, autoCheckout, missing, missedReported, penalties, probation, hoursRecalc, uploaded, published, closingsResent, recalculated, sheetDays, reports, ttl, anomaly, cleanup });
 }

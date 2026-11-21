@@ -5,6 +5,7 @@ import { audit } from "./audit";
 import { assertNotLocked, computeFields, findShiftFor, payStoreOf, storeTz } from "./attendance";
 import { localMonth, zonedToDate } from "./time";
 import { syncTrial } from "./probation";
+import { autoRecalc } from "./hours-recalc-server";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -120,6 +121,9 @@ export async function upsertAttendance(
     });
     await audit(actor, "attendance.update", { type: "Attendance", id: String(existing._id) }, { checkInAt: before.checkInAt, checkOutAt: before.checkOutAt }, { checkInAt, checkOutAt, reason: opts.reason });
     if (user.probation) await syncTrial(user._id).catch((e: Error) => console.error("[trial]", e.message)); // 3 ca thử việc
+    // Tính lại giờ công (cài đặt "ngay khi check-out"): tháng mới + tháng cũ nếu đổi ngày sang tháng khác
+    await autoRecalc(opts.userId, month);
+    if (before.month !== month) await autoRecalc(opts.userId, before.month);
     return existing;
   }
   const created = await Attendance.create({
@@ -137,6 +141,7 @@ export async function upsertAttendance(
     reason: opts.reason,
   });
   if (user.probation) await syncTrial(user._id).catch((e: Error) => console.error("[trial]", e.message)); // 3 ca thử việc
+  await autoRecalc(opts.userId, month); // Tính lại giờ công
   return created;
 }
 

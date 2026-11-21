@@ -124,6 +124,6 @@ export async function POST(req: Request) {
     revalidatePath("/admin/finance", "layout");
     return NextResponse.json({ ok: true, id, updated: !!prev, telegram, sheet });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

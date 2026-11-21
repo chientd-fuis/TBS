@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { isValidObjectId } from "mongoose";
 import { assertOwner } from "@/lib/guards";
@@ -29,7 +30,7 @@ const done = () => {
 };
 
 /** Cài đặt → Có gì mới: lưu nháp / đăng / hiện lại cho tất cả (Admin Tổng). */
-export async function saveAnnouncement(input: AnnInput): Promise<{ ok?: boolean; error?: string; id?: string }> {
+async function saveAnnouncement__(input: AnnInput): Promise<{ ok?: boolean; error?: string; id?: string }> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -70,7 +71,7 @@ export async function saveAnnouncement(input: AnnInput): Promise<{ ok?: boolean;
 }
 
 /** Tắt (ngừng hiện) / bật lại / xoá */
-export async function setAnnouncementStatus(id: string, op: "off" | "on" | "delete"): Promise<{ ok?: boolean; error?: string }> {
+async function setAnnouncementStatus__(id: string, op: "off" | "on" | "delete"): Promise<{ ok?: boolean; error?: string }> {
   try {
     const admin = await assertOwner();
     await connectDB();
@@ -86,3 +87,7 @@ export async function setAnnouncementStatus(id: string, op: "off" | "on" | "dele
     return { error: (e as Error).message };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveAnnouncement(...a: Parameters<typeof saveAnnouncement__>) { return track("Admin › Có gì mới", "saveAnnouncement", () => saveAnnouncement__(...a)); }
+export async function setAnnouncementStatus(...a: Parameters<typeof setAnnouncementStatus__>) { return track("Admin › Có gì mới", "setAnnouncementStatus", () => setAnnouncementStatus__(...a)); }

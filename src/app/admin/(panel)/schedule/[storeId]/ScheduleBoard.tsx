@@ -1,7 +1,7 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, BellRing, Check, Eye, Pencil, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, X, Zap } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, Clock, Eye, Pencil, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, Undo2, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
@@ -11,6 +11,8 @@ import ExportImage from "./ExportImage";
 import WeekSheet from "./WeekSheet";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { addToSlot, autoSchedule, decideShifts, removeFromSlot, requestRegistration, saveStaffing, type PlanView } from "../../../actions/schedule";
+import type { RegLogView } from "@/lib/shift-reg-log";
+import { RegHistoryCard, SlotHistorySheet, UserHistorySheet, slotLost } from "./RegHistory";
 
 type Props = {
   storeId: string;
@@ -35,6 +37,8 @@ type Props = {
   isPast: boolean;
   /** điều hướng tuần (tuần trước / sau) – đặt ngay trên bảng xếp ca */
   weekNav?: React.ReactNode;
+  /** lịch sử đăng ký ca của tuần (lib/shift-reg-log.ts – giữ 14 ngày) */
+  regLogs?: RegLogView[];
 };
 
 const hours = (t: TplInfo) => {
@@ -50,8 +54,19 @@ export default function ScheduleBoard(p: Props) {
   const [showStaffing, setShowStaffing] = useState(false);
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [confirmApply, setConfirmApply] = useState(false);
-  const [mode, setMode] = useState<"view" | "edit">("view"); // mặc định XEM như ảnh lịch tuần
-  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; tpl: string; date: string } | null>(null);
+  // mặc định XEM như ảnh lịch tuần; có ca đăng ký chờ duyệt → mở chế độ sửa để duyệt / từ chối ngay trên lịch
+  const [mode, setMode] = useState<"view" | "edit">(() => (p.entries.some((e) => e.status === "PENDING") ? "edit" : "view"));
+  // bỏ khỏi ca: không hỏi lại (đã có lịch sử) – hiện "Hoàn tác" vài giây
+  const [undo, setUndo] = useState<{ tplId: string; date: string; userId: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(null), 8000);
+    return () => clearTimeout(t);
+  }, [undo]);
+  // lịch sử đăng ký: 1 nhân viên / 1 ô ca
+  const [histUser, setHistUser] = useState<string | null>(null);
+  const [histSlot, setHistSlot] = useState<{ date: string; tplId: string } | null>(null);
+  const hb = { logs: p.regLogs ?? [], entries: p.entries, templates: p.templates, days: p.days, names: p.names };
   // nhân viên đã có ca trùng giờ → hỏi "Vẫn yêu cầu hỗ trợ" (bỏ ca cũ, xếp vào đây)
   const [clashAsk, setClashAsk] = useState<{ tplId: string; date: string; userId: string; text: string } | null>(null);
   const [opts, setOpts] = useState<AutoOptions>({
@@ -279,21 +294,47 @@ export default function ScheduleBoard(p: Props) {
         <p className="text-xs text-ink/60">Ca xếp tự động có thể bỏ từng ca trên bảng sau khi áp dụng.</p>
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={!!removeTarget}
-        danger
-        title="Bỏ nhân viên khỏi ca?"
-        confirmLabel="Bỏ khỏi ca"
-        busy={pending}
-        onCancel={() => setRemoveTarget(null)}
-        onConfirm={() => removeTarget && run(() => removeFromSlot(p.storeId, removeTarget.id), () => setRemoveTarget(null))}
-      >
-        {removeTarget && (
-          <p>
-            <b>{removeTarget.name}</b> – ca {removeTarget.tpl}, {weekdayVi(removeTarget.date)} {viDate(removeTarget.date).slice(0, 5)}
-          </p>
-        )}
-      </ConfirmDialog>
+      {undo && (
+        <div className="fixed inset-x-3 bottom-20 z-40 mx-auto flex max-w-md items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm text-white shadow-lg lg:bottom-6">
+          <span className="flex-1">{undo.text}</span>
+          <button
+            disabled={pending}
+            onClick={() => {
+              const u = undo;
+              setUndo(null);
+              addSlot(u.tplId, u.date, u.userId);
+            }}
+            className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 font-bold text-primary underline"
+          >
+            <Undo2 size={16} /> Hoàn tác
+          </button>
+        </div>
+      )}
+
+      {histUser && (
+        <UserHistorySheet
+          b={hb}
+          userId={histUser}
+          busy={pending}
+          onClose={() => setHistUser(null)}
+          onRestore={(date, tplId) => addSlot(tplId, date, histUser)}
+        />
+      )}
+      {histSlot && (
+        <SlotHistorySheet
+          b={hb}
+          date={histSlot.date}
+          tplId={histSlot.tplId}
+          busy={pending}
+          onClose={() => setHistSlot(null)}
+          onDecide={(id, d) => run(() => decideShifts(p.storeId, [id], d))}
+          onRestore={(userId) => addSlot(histSlot.tplId, histSlot.date, userId)}
+          onOpenUser={(u) => {
+            setHistSlot(null);
+            setHistUser(u);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={!!clashAsk}
@@ -392,7 +433,12 @@ export default function ScheduleBoard(p: Props) {
                       title="Bỏ khỏi ca"
                       aria-label={`Bỏ ${p.names[e.userId] ?? ""} khỏi ca`}
                       disabled={pending}
-                      onClick={() => setRemoveTarget({ id: e.id, name: p.names[e.userId] ?? "?", tpl: t.name, date: d })}
+                      onClick={() =>
+                        run(
+                          () => removeFromSlot(p.storeId, e.id),
+                          () => setUndo({ tplId: t.id, date: d, userId: e.userId, text: `Đã bỏ ${p.names[e.userId] ?? "?"} khỏi ${t.name} ${weekdayVi(d)} ${viDate(d).slice(0, 5)}` }),
+                        )
+                      }
                       className="shrink-0 rounded p-0.5 text-danger/60 hover:bg-danger hover:text-white disabled:opacity-40"
                     >
                       <X size={12} />
@@ -405,6 +451,19 @@ export default function ScheduleBoard(p: Props) {
                   + {c.userName}
                 </div>
               ))}
+              {(() => {
+                const lost = slotLost(hb, d, t.id);
+                if (!lost.rej && !lost.gone) return null;
+                return (
+                  <button
+                    onClick={() => setHistSlot({ date: d, tplId: t.id })}
+                    className="inline-flex items-center gap-0.5 self-start rounded px-0.5 text-[11px] font-semibold text-danger hover:bg-bad-soft"
+                    title="Ai từng đăng ký ca này"
+                  >
+                    <Clock size={11} /> {[lost.rej ? `${lost.rej} từ chối` : "", lost.gone ? `${lost.gone} bỏ` : ""].filter(Boolean).join(" · ")}
+                  </button>
+                );
+              })()}
               <div className="mt-auto flex items-center gap-1 pt-0.5">
                 <select
                   className="w-full min-w-0 rounded border border-transparent bg-transparent text-[11px] text-ink/60 hover:border-grid-line hover:bg-card"
@@ -456,6 +515,7 @@ export default function ScheduleBoard(p: Props) {
             {pendingByUser.map(([uid, ids]) => (
               <div key={uid} className="flex items-center gap-1 rounded-xl bg-late-bg px-2 py-1 text-sm">
                 <b>{p.names[uid]}</b> <span className="text-xs">({ids.length} ca)</span>
+                <button onClick={() => setHistUser(uid)} aria-label={`Lịch sử đăng ký của ${p.names[uid] ?? ""}`} title="Lịch sử đăng ký" className="rounded-lg bg-card p-1 text-accent ring-1 ring-line-strong"><Clock size={14} /></button>
                 <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "APPROVED"))} className="rounded-lg bg-secondary px-2 py-0.5 text-xs font-bold text-white">Duyệt</button>
                 <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "REJECTED"))} className="rounded-lg bg-card px-2 py-0.5 text-xs text-danger ring-1 ring-danger/40">Từ chối</button>
               </div>
@@ -463,6 +523,9 @@ export default function ScheduleBoard(p: Props) {
           </div>
         </Card>
       )}
+
+      {/* Lịch sử đăng ký tuần này (giữ 14 ngày) */}
+      <RegHistoryCard b={hb} onOpenUser={setHistUser} />
 
       {/* Cảnh báo */}
       {warnings.length > 0 && (

@@ -102,6 +102,6 @@ export async function POST(req: Request) {
             : `Đã lưu ${rows.length} khoản, gửi Telegram lỗi: ${error}`,
     });
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

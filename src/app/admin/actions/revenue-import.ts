@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
@@ -23,7 +24,7 @@ export type ImportPreview = {
 };
 
 /** Bước 1–2: đọc file KiotViet + so với DT máy đang có (chưa ghi gì). Quyền Doanh thu. */
-export async function previewRevenueImport(fd: FormData): Promise<ImportPreview> {
+async function previewRevenueImport__(fd: FormData): Promise<ImportPreview> {
   try {
     const admin = await assertPerm("revenue");
     const file = fd.get("file");
@@ -51,7 +52,7 @@ export async function previewRevenueImport(fd: FormData): Promise<ImportPreview>
 export type ApplyResult = { ok?: boolean; error?: string; updated?: { date: string; prev: number | null; dt: number; closingId: string }[]; gaps?: { date: string; total: number }[] };
 
 /** Bước 3: ghi DT máy vào lượt chốt ca đã chọn → tính lại doanh thu ngày (+ sheet) → ngày thiếu tiền tự có yêu cầu bù doanh thu. */
-export async function applyRevenueImport(storeId: string, items: { closingId: string; date: string; dt: number }[], fileName: string): Promise<ApplyResult> {
+async function applyRevenueImport__(storeId: string, items: { closingId: string; date: string; dt: number }[], fileName: string): Promise<ApplyResult> {
   try {
     const admin = await assertPerm("revenue");
     const actor = adminActor(admin);
@@ -87,7 +88,7 @@ export async function applyRevenueImport(storeId: string, items: { closingId: st
 }
 
 /** Hoàn tác lần import vừa rồi: trả DT máy về số cũ (chỉ lượt vẫn còn đúng số đã import). */
-export async function undoRevenueImport(storeId: string, updated: { date: string; prev: number | null; dt: number; closingId: string }[]): Promise<ApplyResult> {
+async function undoRevenueImport__(storeId: string, updated: { date: string; prev: number | null; dt: number; closingId: string }[]): Promise<ApplyResult> {
   try {
     const admin = await assertPerm("revenue");
     const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
@@ -111,7 +112,7 @@ export async function undoRevenueImport(storeId: string, updated: { date: string
 }
 
 /** Yêu cầu → Bù doanh thu: Duyệt (ghi phạt theo số admin chốt từng ca) / Không phạt. Quyền Doanh thu. */
-export async function resolveRevenueGap(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveRevenueGap__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("revenue");
     const id = str(fd.get("id"));
@@ -133,3 +134,9 @@ export async function resolveRevenueGap(_: FormState, fd: FormData): Promise<For
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function previewRevenueImport(...a: Parameters<typeof previewRevenueImport__>) { return track("Admin › Nhập doanh thu", "previewRevenueImport", () => previewRevenueImport__(...a)); }
+export async function applyRevenueImport(...a: Parameters<typeof applyRevenueImport__>) { return track("Admin › Nhập doanh thu", "applyRevenueImport", () => applyRevenueImport__(...a)); }
+export async function undoRevenueImport(...a: Parameters<typeof undoRevenueImport__>) { return track("Admin › Nhập doanh thu", "undoRevenueImport", () => undoRevenueImport__(...a)); }
+export async function resolveRevenueGap(...a: Parameters<typeof resolveRevenueGap__>) { return track("Admin › Nhập doanh thu", "resolveRevenueGap", () => resolveRevenueGap__(...a)); }

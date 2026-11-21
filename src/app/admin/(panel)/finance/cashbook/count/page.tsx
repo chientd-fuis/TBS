@@ -39,7 +39,7 @@ export default async function CashCountPage({ searchParams }: { searchParams: Pr
   const dateQ = { $gte: `${month}-01`, $lte: `${month}-31` };
   const [stores, closings, transfers, counts, picks] = await Promise.all([
     Store.find().select("name").sort({ name: 1 }).lean(),
-    ShiftClosing.find({ ...sq, workDate: dateQ, "revenue.tm": { $ne: null } })
+    ShiftClosing.find({ ...sq, workDate: dateQ, "revenue.tm": { $ne: null }, "imported.noCashbook": { $ne: true } })
       .select("storeId workDate shiftName createdAt revenue cashMismatch")
       .lean(),
     CashTransfer.find({ ...sq, date: dateQ, kind: { $in: ["DEPOSIT", "WITHDRAW"] } }).lean(),

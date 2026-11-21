@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { connectDB } from "@/lib/db";
 import { Attendance, ProbationRequest, User } from "@/lib/models";
@@ -15,7 +16,7 @@ import { errMsg, str, type FormState } from "./types";
  *    Không nhận → cho nghỉ việc (khoá tài khoản), 3 ca thử việc vẫn trả theo giờ đã tính.
  *  - MONTH (hết tháng thử việc): Đồng ý → chính thức 22k từ ngày hết thử việc · Chưa → gia hạn thử việc thêm 1 tháng.
  */
-export async function resolveProbation(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveProbation__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     await connectDB();
@@ -76,3 +77,6 @@ export async function resolveProbation(_: FormState, fd: FormData): Promise<Form
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resolveProbation(...a: Parameters<typeof resolveProbation__>) { return track("Admin › Thử việc", "resolveProbation", () => resolveProbation__(...a)); }

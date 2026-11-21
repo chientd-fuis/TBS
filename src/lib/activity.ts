@@ -19,6 +19,8 @@ const A: Record<string, [ActivityGroup, string]> = {
   "attendance.update": ["attendance", "Sửa chấm công"],
   "attendance.delete": ["attendance", "Xoá lượt chấm công"],
   "attendance.bulkDelete": ["attendance", "Xoá hàng loạt lượt chấm công"],
+  "attendance.hoursRecalc": ["attendance", "Tính lại giờ công (cộng 0,5h ca thiếu ít phút)"],
+  "attendance.hoursRecalc.cancel": ["attendance", "Huỷ tính lại giờ công"],
   "attendance.request.create": ["attendance", "Duyệt yêu cầu sửa công"],
   "adjustment.approve": ["attendance", "Duyệt yêu cầu sửa công"],
   "adjustment.reject": ["attendance", "Từ chối yêu cầu sửa công"],

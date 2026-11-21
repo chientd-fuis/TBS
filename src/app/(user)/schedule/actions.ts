@@ -1,9 +1,11 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store } from "@/lib/models";
 import { addDays, localDate, weekDays, weekStartOf, isYmd } from "@/lib/time";
 import { queueRequestNotice, storeShort } from "@/lib/request-notify";
+import { logShiftReg, type RegItem } from "@/lib/shift-reg-log";
 
 export type RegResult = { ok?: boolean; error?: string; message?: string };
 
@@ -14,7 +16,7 @@ export type RegResult = { ok?: boolean; error?: string; message?: string };
  * - Bỏ chọn ca đang chờ → xoá đăng ký
  * - Ca đã duyệt không tự bỏ được (liên hệ admin)
  */
-export async function saveShiftRequests(weekStart: string, keys: string[]): Promise<RegResult> {
+async function saveShiftRequests__(weekStart: string, keys: string[]): Promise<RegResult> {
   const user = await requireActiveUser();
   try {
     const store = await Store.findById(user.storeId).lean();
@@ -39,10 +41,13 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
     const existing = await ShiftAssignment.find({ userId: user._id, storeId: store._id, date: { $gte: days[0], $lte: days[6] } }).lean();
     let added = 0;
     let removed = 0;
+    const addLog: RegItem[] = [];
+    const removeLog: RegItem[] = [];
     for (const e of existing) {
       const k = `${e.date}|${e.shiftTemplateId}`;
       if (!wanted.has(k) && e.status === "PENDING") {
-        await ShiftAssignment.deleteOne({ _id: e._id, status: "PENDING" });
+        const r = await ShiftAssignment.deleteOne({ _id: e._id, status: "PENDING" });
+        if (r.deletedCount) removeLog.push({ date: e.date, tplId: String(e.shiftTemplateId), name: e.shiftName });
         removed++;
       }
     }
@@ -59,8 +64,12 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
         },
         { upsert: true },
       );
+      addLog.push({ date, tplId, name: t.name });
       added++;
     }
+    // lịch sử đăng ký (admin xem lại được kể cả sau khi từ chối / nhân viên tự bỏ) – tự xoá sau 14 ngày
+    if (addLog.length || removeLog.length)
+      await logShiftReg({ storeId: store._id, userId: user._id, kind: "SUBMIT", by: user.name || user.email || "Nhân viên", byStaff: true, add: addLog, remove: removeLog });
     // có đăng ký ca trong tuần → hoàn tất yêu cầu đăng ký của admin (nếu có)
     if (wanted.size > 0)
       await ShiftRegRequest.updateOne({ userId: user._id, weekStart, status: "OPEN" }, { $set: { status: "DONE", respondedAt: new Date() } });
@@ -79,7 +88,7 @@ export async function saveShiftRequests(weekStart: string, keys: string[]): Prom
 }
 
 /** Nhân viên báo nghỉ cả tuần → đóng yêu cầu đăng ký ca của admin. */
-export async function declareWeekOff(weekStart: string): Promise<RegResult> {
+async function declareWeekOff__(weekStart: string): Promise<RegResult> {
   const user = await requireActiveUser();
   try {
     const r = await ShiftRegRequest.updateOne({ userId: user._id, weekStart, status: "OPEN" }, { $set: { status: "OFF", respondedAt: new Date() } });
@@ -90,3 +99,7 @@ export async function declareWeekOff(weekStart: string): Promise<RegResult> {
     return { error: (e as Error).message };
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveShiftRequests(...a: Parameters<typeof saveShiftRequests__>) { return track("Đăng ký ca (NV)", "saveShiftRequests", () => saveShiftRequests__(...a)); }
+export async function declareWeekOff(...a: Parameters<typeof declareWeekOff__>) { return track("Đăng ký ca (NV)", "declareWeekOff", () => declareWeekOff__(...a)); }

@@ -5,6 +5,7 @@ import { localTime, viDate } from "@/lib/time";
 import { Badge, Empty } from "@/components/ui";
 import AttEditButton from "@/components/user/AttEditButton";
 import ClampNote from "@/components/ClampNote";
+import { autoApplied } from "@/lib/hours-recalc";
 
 export type AttRow = {
   _id: unknown;
@@ -24,6 +25,9 @@ export type AttRow = {
   note?: string | null;
   staffNote?: string | null;
   extraHours?: number | null;
+  /** Tính lại giờ công: app tự cộng (+0,5h) cho ca thiếu ít phút tới mốc làm tròn – đã gồm trong roundedHours */
+  autoPlus?: number | null;
+  autoBase?: number | null;
   checkInPhotoId?: string | null;
   checkOutPhotoId?: string | null;
   checkInPendingPhotoId?: unknown;
@@ -121,6 +125,11 @@ export function AttendanceTable({
                 <td className="text-right font-bold">
                   {hoursVi(r.roundedHours)}
                   {!!r.extraHours && <span className="block text-[10px] font-semibold text-good" title="Admin cộng thêm cho ca này">gồm +{hoursVi(r.extraHours)}h</span>}
+                  {!staffView && autoApplied(r) && (
+                    <span className="block text-[10px] font-semibold text-[#c62828]" title="Tính lại giờ công: ca chỉ thiếu vài phút tới mốc làm tròn được cộng thêm">
+                      gồm +{hoursVi(r.autoPlus)}h bù làm tròn
+                    </span>
+                  )}
                   {r.trial && r.payFactor != null && r.payFactor < 1 && (
                     <span className="block text-[10px] font-semibold text-violet-fg" title={trialText(r)}>
                       thử việc {Math.round(r.payFactor * 100)}%
@@ -230,6 +239,9 @@ export function summarize(rows: AttRow[]) {
     /** tổng giờ thực tế (giờ ra − giờ vào, chưa làm tròn) của lượt đã check-out */
     totalActual: Math.round(done.reduce((s, r) => s + (r.totalHours || 0), 0) * 100) / 100,
     workDays: new Set(done.map((r) => r.workDate)).size,
+    /** phần app tự cộng (Tính lại giờ công) – đã gồm trong totalRounded */
+    autoAdded: Math.round(done.filter((r) => autoApplied(r)).reduce((s, r) => s + (r.autoPlus || 0), 0) * 100) / 100,
+    autoCount: done.filter((r) => autoApplied(r)).length,
     late: rows.filter((r) => (r.lateMinutes || 0) > 0).length,
     early: rows.filter((r) => (r.earlyMinutes || 0) > 0).length,
     missing: rows.filter((r) => r.status === "MISSING_CHECKOUT").length,

@@ -13,6 +13,6 @@ export async function POST(req: Request) {
     const r = await registerDevice(user._id, user.status, deviceId, String(body.fingerprint || "").slice(0, 128));
     return NextResponse.json(r);
   } catch (e) {
-    return jsonError(e);
+    return jsonError(e, req);
   }
 }

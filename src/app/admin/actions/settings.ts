@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { Settings } from "@/lib/models";
 import { connectDB } from "@/lib/db";
@@ -9,7 +10,7 @@ import { dec, errMsg, num, type FormState } from "./types";
 import { localDate } from "@/lib/time";
 
 /** Cấu hình chấm công (làm tròn, ngưỡng muộn/sớm…) – Admin Tổng. */
-export async function saveConfig(_: FormState, fd: FormData): Promise<FormState> {
+async function saveConfig__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
@@ -44,7 +45,7 @@ export async function saveConfig(_: FormState, fd: FormData): Promise<FormState>
   }
 }
 
-export async function disconnectDrive(_: FormState): Promise<FormState> {
+async function disconnectDrive__(_: FormState): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng" };
@@ -67,7 +68,7 @@ async function ownerOnly() {
 }
 
 /** Đếm mọi loại dữ liệu có thể dọn trước tháng đã chọn (hiện số cạnh từng ô). */
-export async function previewAllCleanup(beforeMonth: string): Promise<CleanupResult> {
+async function previewAllCleanup__(beforeMonth: string): Promise<CleanupResult> {
   try {
     await ownerOnly();
     const { previewCleanup, latestCutoff } = await import("@/lib/cleanup");
@@ -79,7 +80,7 @@ export async function previewAllCleanup(beforeMonth: string): Promise<CleanupRes
 }
 
 /** Dung lượng database (so với 512 MB bản miễn phí) + bảng nặng nhất. */
-export async function loadStorageStats(): Promise<{ error?: string; stats?: import("@/lib/cleanup").StorageStats }> {
+async function loadStorageStats__(): Promise<{ error?: string; stats?: import("@/lib/cleanup").StorageStats }> {
   try {
     await ownerOnly();
     const { getStorageStats } = await import("@/lib/cleanup");
@@ -90,7 +91,7 @@ export async function loadStorageStats(): Promise<{ error?: string; stats?: impo
 }
 
 /** Admin Tổng bật / tắt cả chức năng Nhận hàng (nhân viên + admin). */
-export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<FormState> {
+async function saveGoodsEnabled__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được bật / tắt" };
@@ -110,7 +111,7 @@ export async function saveGoodsEnabled(_: FormState, fd: FormData): Promise<Form
  * Chốt giờ công ca tối – bật / giờ chốt riêng từng cơ sở: Admin Tổng hoặc admin được cấp quyền "attendance.cutoff".
  * Giờ cấm check-in (chung mọi cơ sở): chỉ Admin Tổng – admin khác lưu thì giữ nguyên. Lưu xong chạy ngay 1 lần.
  */
-export async function saveAutoCheckout(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAutoCheckout__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertPerm("attendance.cutoff");
     const isOwner = admin.kind === "OWNER";
@@ -148,7 +149,7 @@ export async function saveAutoCheckout(_: FormState, fd: FormData): Promise<Form
 }
 
 /** Thử việc (Admin Tổng): có tháng thử việc (hết tháng hỏi lên 22k) · 3 ca thử việc tính 50% giờ công */
-export async function saveProbationConfig(_: FormState, fd: FormData): Promise<FormState> {
+async function saveProbationConfig__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
@@ -168,7 +169,7 @@ export async function saveProbationConfig(_: FormState, fd: FormData): Promise<F
 }
 
 /** Phạt tự động khi đi muộn / bỏ ca / quên chấm công – Admin Tổng. Lưu xong chạy đối soát ngay. */
-export async function saveAutoPenalty(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAutoPenalty__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi cấu hình" };
@@ -204,7 +205,7 @@ export async function saveAutoPenalty(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Admin Tổng: cho admin / chính Admin Tổng (có hồ sơ nhân viên) vào app nhân viên. */
-export async function saveUserAppAccess(_: FormState, fd: FormData): Promise<FormState> {
+async function saveUserAppAccess__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
@@ -221,7 +222,7 @@ export async function saveUserAppAccess(_: FormState, fd: FormData): Promise<For
 }
 
 /** Bật / tắt tự dọn hằng tháng. */
-export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error?: string }> {
+async function setAutoCleanup__(on: boolean): Promise<{ ok?: boolean; error?: string }> {
   try {
     const admin = await ownerOnly();
     await connectDB();
@@ -238,7 +239,7 @@ export async function setAutoCleanup(on: boolean): Promise<{ ok?: boolean; error
   }
 }
 
-export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, apply: boolean): Promise<CleanupResult> {
+async function cleanupData__(opts: import("@/lib/cleanup").CleanupOpts, apply: boolean): Promise<CleanupResult> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được dọn dữ liệu" };
@@ -255,7 +256,7 @@ export async function cleanupData(opts: import("@/lib/cleanup").CleanupOpts, app
 }
 
 /** Admin Tổng: nhóm Telegram nhận YÊU CẦU chờ admin xác nhận (lib/request-notify.ts). Bấm "Lưu & gửi thử" → bot gửi 1 tin vào nhóm. */
-export async function saveRequestChat(_: FormState, fd: FormData): Promise<FormState> {
+async function saveRequestChat__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
@@ -285,7 +286,7 @@ export async function saveRequestChat(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Admin Tổng: bật / tắt lưu ảnh chấm công tạm vào database khi Drive lỗi (lib/drive.ts savePhoto). */
-export async function savePhotoTempDb(_: FormState, fd: FormData): Promise<FormState> {
+async function savePhotoTempDb__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
@@ -301,7 +302,7 @@ export async function savePhotoTempDb(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Admin Tổng: bật / tắt đọc ảnh bằng AI cho từng chức năng (lib/ai-photo.ts) – lưu danh sách TẮT. */
-export async function saveAiPhoto(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAiPhoto__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     if (admin.kind !== "OWNER") return { error: "Chỉ Admin Tổng được đổi" };
@@ -317,3 +318,19 @@ export async function saveAiPhoto(_: FormState, fd: FormData): Promise<FormState
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveConfig(...a: Parameters<typeof saveConfig__>) { return track("Admin › Cài đặt", "saveConfig", () => saveConfig__(...a)); }
+export async function disconnectDrive(...a: Parameters<typeof disconnectDrive__>) { return track("Admin › Cài đặt", "disconnectDrive", () => disconnectDrive__(...a)); }
+export async function previewAllCleanup(...a: Parameters<typeof previewAllCleanup__>) { return track("Admin › Cài đặt", "previewAllCleanup", () => previewAllCleanup__(...a)); }
+export async function loadStorageStats(...a: Parameters<typeof loadStorageStats__>) { return track("Admin › Cài đặt", "loadStorageStats", () => loadStorageStats__(...a)); }
+export async function saveGoodsEnabled(...a: Parameters<typeof saveGoodsEnabled__>) { return track("Admin › Cài đặt", "saveGoodsEnabled", () => saveGoodsEnabled__(...a)); }
+export async function saveAutoCheckout(...a: Parameters<typeof saveAutoCheckout__>) { return track("Admin › Cài đặt", "saveAutoCheckout", () => saveAutoCheckout__(...a)); }
+export async function saveProbationConfig(...a: Parameters<typeof saveProbationConfig__>) { return track("Admin › Cài đặt", "saveProbationConfig", () => saveProbationConfig__(...a)); }
+export async function saveAutoPenalty(...a: Parameters<typeof saveAutoPenalty__>) { return track("Admin › Cài đặt", "saveAutoPenalty", () => saveAutoPenalty__(...a)); }
+export async function saveUserAppAccess(...a: Parameters<typeof saveUserAppAccess__>) { return track("Admin › Cài đặt", "saveUserAppAccess", () => saveUserAppAccess__(...a)); }
+export async function setAutoCleanup(...a: Parameters<typeof setAutoCleanup__>) { return track("Admin › Cài đặt", "setAutoCleanup", () => setAutoCleanup__(...a)); }
+export async function cleanupData(...a: Parameters<typeof cleanupData__>) { return track("Admin › Cài đặt", "cleanupData", () => cleanupData__(...a)); }
+export async function saveRequestChat(...a: Parameters<typeof saveRequestChat__>) { return track("Admin › Cài đặt", "saveRequestChat", () => saveRequestChat__(...a)); }
+export async function savePhotoTempDb(...a: Parameters<typeof savePhotoTempDb__>) { return track("Admin › Cài đặt", "savePhotoTempDb", () => savePhotoTempDb__(...a)); }
+export async function saveAiPhoto(...a: Parameters<typeof saveAiPhoto__>) { return track("Admin › Cài đặt", "saveAiPhoto", () => saveAiPhoto__(...a)); }

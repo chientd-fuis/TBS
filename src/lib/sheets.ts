@@ -107,3 +107,20 @@ export async function checkSheet(cfg: SheetCfg, month: string) {
   const tab = sheetTabName(cfg.revenueTabPattern || "T{m}", month);
   return { title: meta.data.properties?.title ?? "", tabs, tab, hasTab: tabs.includes(tab) };
 }
+
+/** Danh sách tab của sheet doanh thu cơ sở (Import từ Google Sheet). */
+export async function listSheetTabs(cfg: SheetCfg) {
+  if (!cfg.revenueSheetId) throw new Error("Cơ sở chưa gắn Google Sheet doanh thu");
+  const api = client();
+  const meta = await api.spreadsheets.get({ spreadsheetId: cfg.revenueSheetId, fields: "properties.title,sheets.properties.title" });
+  return { title: meta.data.properties?.title ?? "", tabs: (meta.data.sheets ?? []).map((s) => s.properties?.title ?? "").filter(Boolean) };
+}
+
+/** Đọc lưới ô A1:K{lastRow} của 1 tab (giá trị thô – số là số). */
+export async function readSheetGrid(cfg: SheetCfg, tab: string, lastRow: number): Promise<unknown[][]> {
+  if (!cfg.revenueSheetId) throw new Error("Cơ sở chưa gắn Google Sheet doanh thu");
+  const api = client();
+  const q = `'${tab.replace(/'/g, "''")}'`;
+  const r = await api.spreadsheets.values.get({ spreadsheetId: cfg.revenueSheetId, range: `${q}!A1:K${lastRow}`, valueRenderOption: "UNFORMATTED_VALUE" });
+  return (r.data.values ?? []) as unknown[][];
+}

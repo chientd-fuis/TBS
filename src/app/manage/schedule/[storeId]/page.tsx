@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { WeekBadge, weekLabel } from "@/components/WeekBadge";
 import { requireStaff } from "@/lib/staff-guard";
-import { Store } from "@/lib/models";
+import { ShiftAssignment, Store } from "@/lib/models";
 import { loadWeek } from "@/lib/schedule-data";
 import { addDays, isYmd, localDate, viDate, weekStartOf } from "@/lib/time";
 import { Alert, PageTitle } from "@/components/ui";
@@ -20,7 +20,14 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
   if (!store) notFound();
   const tz = store.timezone || "Asia/Ho_Chi_Minh";
   const today = localDate(new Date(), tz);
-  const ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
+  // mở màn hình (không chọn tuần): tuần sau có ca đăng ký chờ duyệt → hiện luôn tuần sau
+  let autoNext = 0;
+  let ws = weekStartOf(isYmd(sp.week) ? sp.week : today);
+  if (!isYmd(sp.week)) {
+    const next = addDays(weekStartOf(today), 7);
+    autoNext = await ShiftAssignment.countDocuments({ storeId, status: "PENDING", date: { $gte: next, $lte: addDays(next, 6) } });
+    if (autoNext) ws = next;
+  }
   const data = await loadWeek(storeId, ws);
   const link = (w: string) => `/manage/schedule/${storeId}?week=${w}`;
   const thisWeek = weekStartOf(today);
@@ -44,6 +51,11 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
       <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · ⚠ đỏ = thiếu người · xanh dương = hỗ trợ từ cơ sở khác. Thao tác của bạn được ghi lại cho admin cơ sở.">
         <Link href="/manage/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
+      {autoNext > 0 && (
+        <Alert tone="orange">
+          Đang mở <b>tuần sau</b> vì có <b>{autoNext} ca đăng ký chờ duyệt</b>.
+        </Alert>
+      )}
       {data.templates.length === 0 ? (
         <>
           {weekNav}
@@ -64,6 +76,7 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
           external={data.external}
           otherStaff={data.otherStaff}
           regRequests={data.regRequests}
+          regLogs={data.regLogs}
           canRequest={ws >= addDays(thisWeek, 7)}
           isPast={addDays(ws, 6) < today}
           weekNav={weekNav}

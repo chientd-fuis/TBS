@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { Settings, AnomalyResolved, ShiftTemplate } from "@/lib/models";
 import { assertOwner, assertAdmin } from "@/lib/guards";
@@ -30,7 +31,7 @@ function impactText(im: WeatherImpact) {
 }
 
 /** Lưu Cài đặt AI: bật/tắt + giới hạn + model từng chức năng, ngân sách token, ngưỡng bất thường. Chỉ Admin Tổng. */
-export async function saveAiSettings(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAiSettings__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -67,7 +68,7 @@ export async function saveAiSettings(_: FormState, fd: FormData): Promise<FormSt
 }
 
 /** Nội dung Trợ lý cửa hàng (6 chủ đề). Chỉ Admin Tổng. */
-export async function saveAssistantContent(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAssistantContent__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -90,7 +91,7 @@ export async function saveAssistantContent(_: FormState, fd: FormData): Promise<
 }
 
 /** Rà bất thường ngay (không chờ lịch hằng ngày). */
-export async function runAnomalyNow(_: FormState): Promise<FormState> {
+async function runAnomalyNow__(_: FormState): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await runAnomaly({ actor: `admin:${owner.accountId ?? "owner"}` });
@@ -103,7 +104,7 @@ export async function runAnomalyNow(_: FormState): Promise<FormState> {
 }
 
 /** Đánh dấu / bỏ đánh dấu "đã xử lý" 1 bất thường. */
-export async function resolveAnomaly(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveAnomaly__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     const key = str(fd.get("key")).slice(0, 200);
@@ -133,7 +134,7 @@ export type ForecastView = {
 };
 
 /** Gợi ý số người / ca cho tuần weekStart (admin). Số doanh thu dự báo chỉ trả về cho Admin Tổng. */
-export async function getForecast(storeId: string, weekStart: string): Promise<{ data?: ForecastView; error?: string }> {
+async function getForecast__(storeId: string, weekStart: string): Promise<{ data?: ForecastView; error?: string }> {
   try {
     const admin = await assertAdmin();
     if (!Types.ObjectId.isValid(String(storeId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(weekStart))) return { error: "Tham số không hợp lệ" };
@@ -180,7 +181,7 @@ ${JSON.stringify({ holidays: f.holidayNames, weather: weatherWarn, cells: f.cell
 }
 
 /** Áp dụng gợi ý làm định mức RIÊNG từng ngày của tuần đó (không đổi định mức chung, không tự xếp ai). */
-export async function applyForecast(storeId: string, weekStart: string, targets: { tplId: string; date: string; target: number }[]): Promise<{ ok?: boolean; error?: string }> {
+async function applyForecast__(storeId: string, weekStart: string, targets: { tplId: string; date: string; target: number }[]): Promise<{ ok?: boolean; error?: string }> {
   try {
     const admin = await assertAdmin();
     if (!Types.ObjectId.isValid(String(storeId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(weekStart))) return { error: "Tham số không hợp lệ" };
@@ -204,7 +205,7 @@ export async function applyForecast(storeId: string, weekStart: string, targets:
 }
 
 /* ===== Hỏi AI (admin) ===== */
-export async function askDataAction(
+async function askDataAction__(
   question: string,
   picked?: AskPick & { userId: string },
 ): Promise<{ answer?: string; source?: string; denied?: boolean; card?: AskCard; choices?: PersonChoice[]; pick?: AskPick; error?: string; left?: number }> {
@@ -243,7 +244,7 @@ async function regenSummary(rules: string, actor: string): Promise<string | null
 }
 
 /** Nút "AI tóm tắt lại" (từ nội quy đầy đủ đã lưu). Chỉ Admin Tổng. */
-export async function regenRulesSummary(_: FormState): Promise<FormState> {
+async function regenRulesSummary__(_: FormState): Promise<FormState> {
   try {
     const owner = await assertOwner();
     const err = await regenSummary((await getAiConfig()).assistant.rules, `admin:${owner.accountId ?? "owner"}`);
@@ -256,7 +257,7 @@ export async function regenRulesSummary(_: FormState): Promise<FormState> {
 }
 
 /** Admin sửa tay bản tóm tắt (để trống = nhân viên xem bản đầy đủ). Chỉ Admin Tổng. */
-export async function saveRulesSummary(_: FormState, fd: FormData): Promise<FormState> {
+async function saveRulesSummary__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -275,7 +276,7 @@ export async function saveRulesSummary(_: FormState, fd: FormData): Promise<Form
  * Admin bấm "Xác nhận" trên phiếu Hỏi AI → thực hiện bằng ĐÚNG server action của màn hình tương ứng
  * (cùng kiểm tra quyền, khoá bảng lương, nhật ký hoạt động). AI không tự ghi gì.
  */
-export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean; message?: string; error?: string }> {
+async function executeAskProposal__(p: AskProposal): Promise<{ ok?: boolean; message?: string; error?: string }> {
   try {
     const admin = await assertAdmin();
     const fd = (o: Record<string, string | number>) => {
@@ -325,7 +326,7 @@ export async function executeAskProposal(p: AskProposal): Promise<{ ok?: boolean
 }
 
 /** Hạn mức lượt miễn phí / ngày của từng model (Admin Tổng chép từ AI Studio → Rate limits). */
-export async function saveFreeLimits(_: FormState, fd: FormData): Promise<FormState> {
+async function saveFreeLimits__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -339,3 +340,16 @@ export async function saveFreeLimits(_: FormState, fd: FormData): Promise<FormSt
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveAiSettings(...a: Parameters<typeof saveAiSettings__>) { return track("Admin › Cài đặt AI", "saveAiSettings", () => saveAiSettings__(...a)); }
+export async function saveAssistantContent(...a: Parameters<typeof saveAssistantContent__>) { return track("Admin › Cài đặt AI", "saveAssistantContent", () => saveAssistantContent__(...a)); }
+export async function runAnomalyNow(...a: Parameters<typeof runAnomalyNow__>) { return track("Admin › Cài đặt AI", "runAnomalyNow", () => runAnomalyNow__(...a)); }
+export async function resolveAnomaly(...a: Parameters<typeof resolveAnomaly__>) { return track("Admin › Cài đặt AI", "resolveAnomaly", () => resolveAnomaly__(...a)); }
+export async function getForecast(...a: Parameters<typeof getForecast__>) { return track("Admin › Cài đặt AI", "getForecast", () => getForecast__(...a)); }
+export async function applyForecast(...a: Parameters<typeof applyForecast__>) { return track("Admin › Cài đặt AI", "applyForecast", () => applyForecast__(...a)); }
+export async function askDataAction(...a: Parameters<typeof askDataAction__>) { return track("Admin › Cài đặt AI", "askDataAction", () => askDataAction__(...a)); }
+export async function regenRulesSummary(...a: Parameters<typeof regenRulesSummary__>) { return track("Admin › Cài đặt AI", "regenRulesSummary", () => regenRulesSummary__(...a)); }
+export async function saveRulesSummary(...a: Parameters<typeof saveRulesSummary__>) { return track("Admin › Cài đặt AI", "saveRulesSummary", () => saveRulesSummary__(...a)); }
+export async function executeAskProposal(...a: Parameters<typeof executeAskProposal__>) { return track("Admin › Cài đặt AI", "executeAskProposal", () => executeAskProposal__(...a)); }
+export async function saveFreeLimits(...a: Parameters<typeof saveFreeLimits__>) { return track("Admin › Cài đặt AI", "saveFreeLimits", () => saveFreeLimits__(...a)); }

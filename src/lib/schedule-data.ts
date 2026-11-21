@@ -4,6 +4,7 @@ import { APPROVED_SHIFT, ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store,
 import { addDays, weekDays } from "./time";
 import { buildHistory, type Entry, type TplInfo } from "./schedule";
 import { externalShifts, otherStoreStaff } from "./support";
+import { loadRegLogs } from "./shift-reg-log";
 
 /** Dữ liệu lịch 1 tuần của 1 cơ sở (đã chuyển sang dạng thuần để truyền cho client). */
 export async function loadWeek(storeId: string, weekStart: string) {
@@ -67,6 +68,8 @@ export async function loadWeek(storeId: string, weekStart: string) {
     external,
     otherStaff,
     regRequests,
+    /** lịch sử đăng ký ca của tuần (giữ 14 ngày) */
+    regLogs: await loadRegLogs(storeId, weekStart),
   };
 }
 

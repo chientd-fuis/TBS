@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { AdjustmentRequest, Attendance, PayrollFeedback, PayrollItem } from "@/lib/models";
@@ -19,7 +20,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
  *  - EDIT (Sửa giờ ca đã chấm): chọn 1 lượt của mình (quên check-out, vào làm rồi mới check-in…) – admin duyệt sửa ĐÚNG lượt đó.
  * Lỗi → trả thông báo, form phía nhân viên giữ nguyên dữ liệu.
  */
-export async function submitAdjustment(_: AdjustState, fd: FormData): Promise<AdjustState> {
+async function submitAdjustment__(_: AdjustState, fd: FormData): Promise<AdjustState> {
   const user = await requireActiveUser();
   const kind = String(fd.get("kind") || "") === "EDIT" ? "EDIT" : "MISSING";
   const checkInTime = String(fd.get("checkInTime") || "").slice(0, 5);
@@ -91,7 +92,7 @@ export async function submitAdjustment(_: AdjustState, fd: FormData): Promise<Ad
 }
 
 /** Nhân viên huỷ yêu cầu chấm công của mình khi còn chờ duyệt (admin đang mở duyệt thì không huỷ được) */
-export async function cancelAdjustment(_: FormState, fd: FormData): Promise<FormState> {
+async function cancelAdjustment__(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireActiveUser();
   const r = await AdjustmentRequest.updateOne(
     {
@@ -108,7 +109,7 @@ export async function cancelAdjustment(_: FormState, fd: FormData): Promise<Form
 }
 
 /** Phản hồi / khiếu nại bảng lương – spec 4.6 */
-export async function submitPayrollFeedback(_: FormState, fd: FormData): Promise<FormState> {
+async function submitPayrollFeedback__(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireActiveUser();
   const itemId = String(fd.get("itemId") || "");
   const content = String(fd.get("content") || "").trim();
@@ -129,7 +130,7 @@ export async function submitPayrollFeedback(_: FormState, fd: FormData): Promise
 }
 
 /** Nhân viên tự sửa họ tên, SĐT, ngân hàng, số tài khoản. */
-export async function updateMyProfile(_: FormState, fd: FormData): Promise<FormState> {
+async function updateMyProfile__(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireActiveUser();
   const name = String(fd.get("name") || "").trim();
   const phone = String(fd.get("phone") || "").trim();
@@ -154,7 +155,7 @@ export async function updateMyProfile(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Tài khoản → Màu giao diện: lưu theo tài khoản (đổi điện thoại vẫn giữ). Thử việc luôn màu tím – không đổi được. */
-export async function setMyTheme(theme: string): Promise<{ ok?: boolean; error?: string }> {
+async function setMyTheme__(theme: string): Promise<{ ok?: boolean; error?: string }> {
   const user = await requireActiveUser();
   const { isThemeId } = await import("@/lib/themes");
   if (!isThemeId(theme)) return { error: "Màu không hợp lệ" };
@@ -166,7 +167,7 @@ export async function setMyTheme(theme: string): Promise<{ ok?: boolean; error?:
 }
 
 /** Đồng ý Chính sách quyền riêng tư (popup khi có bản mới). version = bản nhân viên đã xem – admin vừa phát hành bản mới hơn thì bắt đọc lại. */
-export async function acceptPrivacy(version: number): Promise<{ ok?: boolean; error?: string }> {
+async function acceptPrivacy__(version: number): Promise<{ ok?: boolean; error?: string }> {
   const user = await requireActiveUser();
   const { getSettings } = await import("@/lib/settings");
   const cur = (await getSettings()).privacyVersion ?? 0;
@@ -180,3 +181,11 @@ export async function acceptPrivacy(version: number): Promise<{ ok?: boolean; er
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function submitAdjustment(...a: Parameters<typeof submitAdjustment__>) { return track("App nhân viên", "submitAdjustment", () => submitAdjustment__(...a)); }
+export async function cancelAdjustment(...a: Parameters<typeof cancelAdjustment__>) { return track("App nhân viên", "cancelAdjustment", () => cancelAdjustment__(...a)); }
+export async function submitPayrollFeedback(...a: Parameters<typeof submitPayrollFeedback__>) { return track("App nhân viên", "submitPayrollFeedback", () => submitPayrollFeedback__(...a)); }
+export async function updateMyProfile(...a: Parameters<typeof updateMyProfile__>) { return track("App nhân viên", "updateMyProfile", () => updateMyProfile__(...a)); }
+export async function setMyTheme(...a: Parameters<typeof setMyTheme__>) { return track("App nhân viên", "setMyTheme", () => setMyTheme__(...a)); }
+export async function acceptPrivacy(...a: Parameters<typeof acceptPrivacy__>) { return track("App nhân viên", "acceptPrivacy", () => acceptPrivacy__(...a)); }

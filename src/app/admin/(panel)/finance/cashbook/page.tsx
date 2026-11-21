@@ -64,7 +64,7 @@ export default async function CashbookPage({ searchParams }: { searchParams: Pro
     : [];
   const [stores, closings, bills, all, payrolls, payItems, counts] = await Promise.all([
     Store.find().select("name grabFeePct shopeeFeePct").lean(),
-    ShiftClosing.find({ "revenue.tm": { $ne: null } })
+    ShiftClosing.find({ "revenue.tm": { $ne: null }, "imported.noCashbook": { $ne: true } })
       .select("storeId workDate shiftName createdAt revenue")
       .lean(),
     // bill Admin Tổng trả / chuyển khoản (bill lấy tiền két đã nằm trong tiền mặt chốt ca → không trừ lại).

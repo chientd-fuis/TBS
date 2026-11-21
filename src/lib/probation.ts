@@ -67,7 +67,9 @@ async function setFactor(a: Parameters<typeof computeFields>[0] & { _id: unknown
   const f = await computeFields({ ...a, payFactor: factor });
   await Attendance.updateOne(
     { _id: a._id },
-    trial ? { $set: { trial: true, payFactor: factor, roundedHours: f.roundedHours } } : { $set: { roundedHours: f.roundedHours }, $unset: { trial: 1, payFactor: 1 } },
+    trial
+      ? { $set: { trial: true, payFactor: factor, roundedHours: f.roundedHours, autoPlus: 0, autoBase: null } }
+      : { $set: { roundedHours: f.roundedHours, autoPlus: 0, autoBase: null }, $unset: { trial: 1, payFactor: 1 } },
   );
 }
 

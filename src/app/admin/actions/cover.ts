@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { assertAdmin } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
@@ -7,7 +8,7 @@ import { approveCover, rejectCover } from "@/lib/cover";
 import { errMsg, str, type FormState } from "./types";
 
 /** Duyệt / từ chối yêu cầu nhờ làm hộ ca. */
-export async function resolveCover(_: FormState, fd: FormData): Promise<FormState> {
+async function resolveCover__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const admin = await assertAdmin();
     const actor = adminActor(admin);
@@ -22,3 +23,6 @@ export async function resolveCover(_: FormState, fd: FormData): Promise<FormStat
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function resolveCover(...a: Parameters<typeof resolveCover__>) { return track("Admin › Làm thay", "resolveCover", () => resolveCover__(...a)); }

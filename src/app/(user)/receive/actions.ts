@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/guards";
 import { isProbation, PROBATION_OFF } from "@/lib/probation";
@@ -9,7 +10,7 @@ import { cleanAlsoReturn, hasLines, cleanInputs, cleanPhotos, type AlsoReturn, g
 export type GoodsSaveResult = { ok?: boolean; error?: string; message?: string };
 
 /** Nhân viên ghi đồ đã nhận ở cơ sở đang làm (ca hỗ trợ → cơ sở hỗ trợ) → báo nhóm Telegram cơ sở. */
-export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[]; alsoReturn?: AlsoReturn }): Promise<GoodsSaveResult> {
+async function saveGoodsUser__(input: { drafts: GoodsInput[]; telegram: boolean; kind?: "RECEIVE" | "RETURN" | "STOCK"; reason?: string; photos?: string[]; alsoReturn?: AlsoReturn }): Promise<GoodsSaveResult> {
   try {
     const user = await requireActiveUser();
     if (isProbation(user)) return { error: PROBATION_OFF };
@@ -54,7 +55,7 @@ export async function saveGoodsUser(input: { drafts: GoodsInput[]; telegram: boo
 }
 
 /** Nhân viên xoá lần ghi nhầm của chính mình (trong 24 giờ). */
-export async function deleteGoodsUser(_: unknown, fd: FormData): Promise<{ ok?: boolean; error?: string } | null> {
+async function deleteGoodsUser__(_: unknown, fd: FormData): Promise<{ ok?: boolean; error?: string } | null> {
   const user = await requireActiveUser();
   if (!(await goodsEnabled())) return { error: GOODS_OFF };
   const r = await GoodsReceipt.findOne({ _id: String(fd.get("id") ?? ""), byUserId: user._id, byAdmin: { $ne: true } }).lean().catch(() => null);
@@ -65,3 +66,7 @@ export async function deleteGoodsUser(_: unknown, fd: FormData): Promise<{ ok?: 
   revalidatePath("/stock");
   return { ok: true };
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function saveGoodsUser(...a: Parameters<typeof saveGoodsUser__>) { return track("Nhận hàng / Tồn kho (NV)", "saveGoodsUser", () => saveGoodsUser__(...a)); }
+export async function deleteGoodsUser(...a: Parameters<typeof deleteGoodsUser__>) { return track("Nhận hàng / Tồn kho (NV)", "deleteGoodsUser", () => deleteGoodsUser__(...a)); }

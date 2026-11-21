@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { Types } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { ShiftAssignment, ShiftRegRequest, ShiftTemplate, Store, User } from "@/lib/models";
@@ -9,6 +10,7 @@ import { planAutoSchedule, type AutoOptions, type PlanChange } from "@/lib/sched
 import { loadHistory, loadWeek } from "@/lib/schedule-data";
 import { findShiftClash, findShiftClashes } from "@/lib/support";
 import { notifyUser } from "@/lib/cover";
+import { byUser, logShiftReg } from "@/lib/shift-reg-log";
 
 /* Xếp ca theo tuần (spec 3.2.1): duyệt đăng ký, xếp tay, xếp tự động. Gọi trực tiếp từ client. */
 
@@ -23,14 +25,16 @@ const revalidate = (storeId: string) => {
 const fail = (e: unknown): Result => ({ error: (e as Error).message || "Lỗi hệ thống" });
 
 /** Duyệt / từ chối đăng ký ca (từng ca, từng người, hoặc tất cả – client gửi danh sách id). */
-export async function decideShifts(storeId: string, ids: string[], decision: "APPROVED" | "REJECTED"): Promise<Result> {
+async function decideShifts__(storeId: string, ids: string[], decision: "APPROVED" | "REJECTED"): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     const list = (Array.isArray(ids) ? ids : []).map(String).filter((x) => Types.ObjectId.isValid(x));
     if (!list.length) return { error: "Không có đăng ký nào" };
     const meta = { decidedBy: actor.name, decidedAt: new Date() };
     if (decision !== "APPROVED") {
+      const pendRej = await ShiftAssignment.find({ _id: { $in: list }, storeId, status: "PENDING" }).select("userId date shiftTemplateId shiftName").lean();
       const r = await ShiftAssignment.updateMany({ _id: { $in: list }, storeId, status: "PENDING" }, { $set: { status: "REJECTED", ...meta } });
+      await logShiftReg(byUser(storeId, "REJECT", actor.name, pendRej));
       await audit(actor, "schedule.reject", { type: "Store", id: storeId }, null, { ids: list, n: r.modifiedCount });
       revalidate(storeId);
       return { ok: true, message: `Đã từ chối ${r.modifiedCount} ca` };
@@ -40,6 +44,7 @@ export async function decideShifts(storeId: string, ids: string[], decision: "AP
     const names = new Map((await User.find({ _id: { $in: pend.map((p) => p.userId) } }).select("name").lean()).map((u) => [String(u._id), u.name]));
     let n = 0;
     const skipped: string[] = [];
+    const done: typeof pend = [];
     for (const p of pend) {
       const clash = p.startTime && p.endTime ? await findShiftClash(p.userId, p.date, p.startTime, p.endTime, { tplId: String(p.shiftTemplateId), date: p.date }) : null;
       if (clash) {
@@ -48,7 +53,9 @@ export async function decideShifts(storeId: string, ids: string[], decision: "AP
       }
       const r = await ShiftAssignment.updateOne({ _id: p._id, status: "PENDING" }, { $set: { status: "APPROVED", ...meta } });
       n += r.modifiedCount;
+      if (r.modifiedCount) done.push(p);
     }
+    await logShiftReg(byUser(storeId, "APPROVE", actor.name, done));
     await audit(actor, "schedule.approve", { type: "Store", id: storeId }, null, { ids: list, n, skipped: skipped.length });
     revalidate(storeId);
     if (skipped.length) return { ok: true, message: `Đã duyệt ${n} ca. ⚠ Bỏ qua ${skipped.length} ca trùng giờ: ${skipped.slice(0, 5).join("; ")}${skipped.length > 5 ? "…" : ""}` };
@@ -59,7 +66,7 @@ export async function decideShifts(storeId: string, ids: string[], decision: "AP
 }
 
 /** Xếp tay: thêm nhân viên vào 1 ô (ca × ngày). Nếu nhân viên đã đăng ký ô đó → duyệt luôn. */
-export async function addToSlot(storeId: string, tplId: string, date: string, userId: string, force = false): Promise<Result> {
+async function addToSlot__(storeId: string, tplId: string, date: string, userId: string, force = false): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(date)) return { error: "Ngày không hợp lệ" };
@@ -76,6 +83,7 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
       if (actor.kind === "USER") for (const c of clashes) await adminOrStaff("schedule", c.storeId);
       const removed = await ShiftAssignment.find({ _id: { $in: clashes.map((c) => c.id) } }).lean();
       await ShiftAssignment.deleteMany({ _id: { $in: clashes.map((c) => c.id) } });
+      await logShiftReg(removed.map((a) => byUser(a.storeId, "REMOVE", `${actor.name} (chuyển sang hỗ trợ cơ sở khác)`, [a])).flat());
       for (const a of removed) {
         await audit(actor, "schedule.remove", { type: "ShiftAssignment", id: String(a._id) }, a, { reason: "Chuyển sang hỗ trợ cơ sở khác", toStoreId: storeId });
         revalidate(String(a.storeId));
@@ -95,6 +103,7 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
       },
       { upsert: true },
     );
+    await logShiftReg({ storeId, userId, kind: "ASSIGN", by: actor.name, add: [{ date, tplId: String(tplId), name: tpl.name }] });
     await audit(actor, "schedule.add", { type: "ShiftTemplate", id: tplId }, null, {
       userId,
       date,
@@ -107,11 +116,12 @@ export async function addToSlot(storeId: string, tplId: string, date: string, us
   }
 }
 
-export async function removeFromSlot(storeId: string, id: string): Promise<Result> {
+async function removeFromSlot__(storeId: string, id: string): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     const a = await ShiftAssignment.findOneAndDelete({ _id: id, storeId }).lean();
     if (!a) return { error: "Không tìm thấy" };
+    await logShiftReg(byUser(storeId, "REMOVE", actor.name, [a]));
     await audit(actor, "schedule.remove", { type: "ShiftAssignment", id }, a, null);
     revalidate(storeId);
     return { ok: true };
@@ -121,7 +131,7 @@ export async function removeFromSlot(storeId: string, id: string): Promise<Resul
 }
 
 /** Định mức người theo ca: tối thiểu (thiếu người) & định mức (ít người). */
-export async function saveStaffing(storeId: string, tplId: string, minStaff: number, targetStaff: number): Promise<Result> {
+async function saveStaffing__(storeId: string, tplId: string, minStaff: number, targetStaff: number): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     const min = Math.max(0, Math.floor(minStaff || 0));
@@ -141,7 +151,7 @@ export type PlanView = {
 };
 
 /** Xếp ca tự động: apply=false → xem trước; apply=true → lưu. */
-export async function autoSchedule(storeId: string, weekStart: string, opts: AutoOptions, apply: boolean): Promise<Result & { plan?: PlanView }> {
+async function autoSchedule__(storeId: string, weekStart: string, opts: AutoOptions, apply: boolean): Promise<Result & { plan?: PlanView }> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
@@ -157,6 +167,9 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
 
     let approved = 0;
     let added = 0;
+    const autoBy = `${actor.name} (tự động)`;
+    const logApprove: { userId: string; date: string; tplId: string; shiftName?: string }[] = [];
+    const logAdd: typeof logApprove = [];
     for (const c of plan.changes) {
       if (c.kind === "approve") {
         const r = await ShiftAssignment.updateOne(
@@ -164,6 +177,7 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
           { $set: { status: "APPROVED", decidedBy: `${actor.name} (tự động)`, decidedAt: new Date() } },
         );
         approved += r.modifiedCount;
+        if (r.modifiedCount) logApprove.push({ userId: c.userId, date: c.date, tplId: c.tplId, shiftName: week.templates.find((t) => t.id === c.tplId)?.name });
       } else {
         const tpl = week.templates.find((t) => t.id === c.tplId)!;
         const r = await ShiftAssignment.updateOne(
@@ -174,8 +188,10 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
           { upsert: true },
         );
         added += r.upsertedCount;
+        if (r.upsertedCount) logAdd.push({ userId: c.userId, date: c.date, tplId: c.tplId, shiftName: tpl.name });
       }
     }
+    await logShiftReg([...byUser(storeId, "APPROVE", autoBy, logApprove), ...byUser(storeId, "ASSIGN", autoBy, logAdd)]);
     await audit(actor, "schedule.auto", { type: "Store", id: storeId }, null, { weekStart, opts, approved, added });
     revalidate(storeId);
     const short = view.shortages.filter((s) => s.level === "short").length;
@@ -190,7 +206,7 @@ export async function autoSchedule(storeId: string, weekStart: string, opts: Aut
 }
 
 /** Yêu cầu nhân viên đăng ký ca cho 1 tuần (tuần sau trở đi) – nhân viên thấy cảnh báo + nút Đăng ký ca. */
-export async function requestRegistration(storeId: string, weekStart: string, userIds: string[]): Promise<Result> {
+async function requestRegistration__(storeId: string, weekStart: string, userIds: string[]): Promise<Result> {
   try {
     const { actor } = await adminOrStaff("schedule", storeId);
     if (!isYmd(weekStart) || weekStartOf(weekStart) !== weekStart) return { error: "Tuần không hợp lệ" };
@@ -214,3 +230,11 @@ export async function requestRegistration(storeId: string, weekStart: string, us
     return fail(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function decideShifts(...a: Parameters<typeof decideShifts__>) { return track("Admin › Xếp ca", "decideShifts", () => decideShifts__(...a)); }
+export async function addToSlot(...a: Parameters<typeof addToSlot__>) { return track("Admin › Xếp ca", "addToSlot", () => addToSlot__(...a)); }
+export async function removeFromSlot(...a: Parameters<typeof removeFromSlot__>) { return track("Admin › Xếp ca", "removeFromSlot", () => removeFromSlot__(...a)); }
+export async function saveStaffing(...a: Parameters<typeof saveStaffing__>) { return track("Admin › Xếp ca", "saveStaffing", () => saveStaffing__(...a)); }
+export async function autoSchedule(...a: Parameters<typeof autoSchedule__>) { return track("Admin › Xếp ca", "autoSchedule", () => autoSchedule__(...a)); }
+export async function requestRegistration(...a: Parameters<typeof requestRegistration__>) { return track("Admin › Xếp ca", "requestRegistration", () => requestRegistration__(...a)); }

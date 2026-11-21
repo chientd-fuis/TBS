@@ -1,4 +1,5 @@
 "use server";
+import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
 import { AdminAccount, AdminLoginSession, Store, User } from "@/lib/models";
 import { assertOwner } from "@/lib/guards";
@@ -43,7 +44,7 @@ async function load(fd: FormData) {
 }
 
 /** Admin Tổng thêm Gmail admin – có hiệu lực ngay. */
-export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormState> {
+async function addAdminAccount__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const owner = await assertOwner();
     await connectDB();
@@ -66,7 +67,7 @@ export async function addAdminAccount(_: FormState, fd: FormData): Promise<FormS
 }
 
 /** Lưu tên, ghi chú, quyền; tài khoản đang chờ → duyệt luôn. */
-export async function saveAdminAccount(_: FormState, fd: FormData): Promise<FormState> {
+async function saveAdminAccount__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const { owner, acc, actor } = await load(fd);
     const name = str(fd.get("name")).replace(/\s+/g, " ").slice(0, 60);
@@ -93,7 +94,7 @@ export async function saveAdminAccount(_: FormState, fd: FormData): Promise<Form
   }
 }
 
-export async function setAdminStatus(_: FormState, fd: FormData): Promise<FormState> {
+async function setAdminStatus__(_: FormState, fd: FormData): Promise<FormState> {
   try {
     const { acc, actor } = await load(fd);
     const op = str(fd.get("op"));
@@ -115,3 +116,8 @@ export async function setAdminStatus(_: FormState, fd: FormData): Promise<FormSt
     return errMsg(e);
   }
 }
+
+/* ---- Log lỗi hệ thống (lib/error-log.ts): mọi lỗi của các thao tác trong file này ---- */
+export async function addAdminAccount(...a: Parameters<typeof addAdminAccount__>) { return track("Admin › Quản lý admin", "addAdminAccount", () => addAdminAccount__(...a)); }
+export async function saveAdminAccount(...a: Parameters<typeof saveAdminAccount__>) { return track("Admin › Quản lý admin", "saveAdminAccount", () => saveAdminAccount__(...a)); }
+export async function setAdminStatus(...a: Parameters<typeof setAdminStatus__>) { return track("Admin › Quản lý admin", "setAdminStatus", () => setAdminStatus__(...a)); }
