@@ -108,7 +108,8 @@ export default function MyShiftGrid({
           mode === "week" ? "h-11" : "h-10",
           !lk && (d === today ? "bg-primary-light ring-1 ring-primary" : "bg-ink/5 ring-1 ring-line"),
           c?.live && "animate-pulse",
-          sel === k && "outline-3 outline-offset-1 outline-ink",
+          // ô đang chọn: viền nâu đậm vẽ BÊN TRONG ô (inset) – không lấn sang ô bên cạnh
+          sel === k && "shadow-[inset_0_0_0_2.5px_var(--color-ink)]",
         )}
         style={lk ? { background: lk.bg, color: lk.fg } : undefined}
       >

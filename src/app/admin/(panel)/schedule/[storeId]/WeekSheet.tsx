@@ -90,7 +90,7 @@ const WeekSheet = forwardRef<
                           <button
                             type="button"
                             onClick={() => onNameClick(p.userId)}
-                            title="Xem lịch cá nhân"
+                            title="Xem lịch sử đăng ký ca"
                             style={{ all: "unset", cursor: "pointer", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
                           >
                             {label(p)}

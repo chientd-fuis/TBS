@@ -12,7 +12,6 @@ import { DayWeatherHead } from "./WeatherStrip";
 import type { DayWeather } from "@/lib/weather";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { autoSchedule, commitSchedule, requestRegistration, saveStaffing, type DraftAdd, type DraftOps, type PlanView } from "../../../actions/schedule";
-import { PersonScheduleSheet } from "./PersonSchedule";
 import type { RegLogView } from "@/lib/shift-reg-log";
 import { RegHistoryCard, SlotHistorySheet, UserHistorySheet, slotLost } from "./RegHistory";
 
@@ -78,8 +77,6 @@ export default function ScheduleBoard(p: Props) {
   // chuyển trang khi còn thay đổi chưa lưu → hỏi lại
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const [askDiscard, setAskDiscard] = useState(false);
-  // chế độ xem: bấm tên → lịch cá nhân
-  const [personUser, setPersonUser] = useState<string | null>(null);
   // lịch sử đăng ký: 1 nhân viên / 1 ô ca
   const [histUser, setHistUser] = useState<string | null>(null);
   const [histSlot, setHistSlot] = useState<{ date: string; tplId: string } | null>(null);
@@ -457,24 +454,6 @@ export default function ScheduleBoard(p: Props) {
         </Button>
       </ConfirmDialog>
 
-      {personUser && (
-        <PersonScheduleSheet
-          userId={personUser}
-          name={p.names[personUser] ?? "?"}
-          supportFrom={p.supportFrom[personUser]}
-          days={p.days}
-          today={p.today}
-          templates={p.templates}
-          entries={live}
-          external={p.external}
-          onClose={() => setPersonUser(null)}
-          onOpenHistory={() => {
-            setHistUser(personUser);
-            setPersonUser(null);
-          }}
-        />
-      )}
-
       {histUser && (
         <UserHistorySheet
           b={hb}
@@ -548,7 +527,7 @@ export default function ScheduleBoard(p: Props) {
       </div>
       {mode === "view" ? (
         <div className="overflow-x-auto rounded-2xl ring-1 ring-line">
-          <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={live} names={p.names} withPending supportFrom={p.supportFrom} width="100%" renderDayHead={dayHead} onNameClick={setPersonUser} />
+          <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={live} names={p.names} withPending supportFrom={p.supportFrom} width="100%" renderDayHead={dayHead} onNameClick={setHistUser} />
         </div>
       ) : (
       <WeekGrid
@@ -754,7 +733,7 @@ export default function ScheduleBoard(p: Props) {
               <tr>
                 <th>Nhân viên</th>
                 {p.templates.map((t) => <th key={t.id} className="hidden sm:table-cell text-center">{t.name}</th>)}
-                <th className="hidden sm:table-cell text-right">Tổng ca đã duyệt</th>
+                <th className="text-right"><span className="sm:hidden">Đã duyệt</span><span className="hidden sm:inline">Tổng ca đã duyệt</span></th>
                 <th className="hidden sm:table-cell text-right">Giờ dự kiến</th>
                 <th className="hidden sm:table-cell text-right">Chờ duyệt</th>
                 <th>Ghi chú</th>
@@ -769,7 +748,7 @@ export default function ScheduleBoard(p: Props) {
                     {s.from && <span className="ml-1 rounded bg-info-bg px-1 text-[10px] font-normal text-info-fg">hỗ trợ từ {s.from}</span>}
                   </td>
                   {p.templates.map((t) => <td key={t.id} className="hidden sm:table-cell text-center">{s.byTpl[t.id] || ""}</td>)}
-                  <td className="hidden sm:table-cell text-right font-bold">{s.ok}</td>
+                  <td className="text-right font-bold">{s.ok}</td>
                   <td className="hidden sm:table-cell text-right">{s.h ? s.h.toFixed(1) : ""}</td>
                   <td className="hidden sm:table-cell text-right text-warn">{s.wait || ""}</td>
                   <td className="text-xs">
@@ -808,7 +787,7 @@ export default function ScheduleBoard(p: Props) {
               <tr>
                 <td className="font-bold">TỔNG</td>
                 {p.templates.map((t) => <td key={t.id} className="hidden sm:table-cell text-center font-bold">{summary.reduce((a, s) => a + (s.byTpl[t.id] || 0), 0)}</td>)}
-                <td className="hidden sm:table-cell text-right font-bold">{summary.reduce((a, s) => a + s.ok, 0)}</td>
+                <td className="text-right font-bold">{summary.reduce((a, s) => a + s.ok, 0)}</td>
                 <td className="hidden sm:table-cell text-right font-bold">{summary.reduce((a, s) => a + s.h, 0).toFixed(1)}</td>
                 <td className="hidden sm:table-cell text-right font-bold text-warn">{pendingAll.length || ""}</td>
                 <td className="text-xs">TB {avg.toFixed(1)} ca/người</td>
