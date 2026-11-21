@@ -66,7 +66,7 @@ function summarize(b: Base, userId: string) {
 }
 
 /* ---------------- Khung (điện thoại: từ dưới lên · máy tính: bên phải) ---------------- */
-function Sheet({ title, sub, onClose, children }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, sub, onClose, children }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
