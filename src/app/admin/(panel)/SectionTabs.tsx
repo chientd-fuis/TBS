@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/format";
 import { activeLink, canSee, NAV } from "./nav-items";
 
-/** Thanh tab đầu trang cho mục menu gộp nhiều trang (Ca làm việc | Ngày lễ, Duyệt đăng ký | Thiết bị, Quản lý admin | Hoạt động admin). */
+/** Thanh tab đầu trang cho mục menu gộp nhiều trang (Cài đặt | Ca làm việc | Ngày lễ, Duyệt đăng ký | Thiết bị, Quản lý admin | Hoạt động admin). */
 export default function SectionTabs({ counts, owner = false, perms = [], hide = [] }: { counts: Record<string, number>; owner?: boolean; perms?: string[]; hide?: string[] }) {
   const path = usePathname();
   const access = { owner, perms, hide };

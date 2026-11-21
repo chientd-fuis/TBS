@@ -1,4 +1,4 @@
-import { addDays, zonedToDate } from "./time";
+import { addDays, localTime, zonedToDate } from "./time";
 
 /*
  * Bảng chấm công theo CA cả tháng (giống bảng xếp ca chế độ xem): hàng = ca làm việc của cơ sở,
@@ -35,6 +35,9 @@ export type BoardChip = {
   live?: boolean;
   /** CSx – đi hỗ trợ cơ sở khác (away) hoặc từ cơ sở khác sang (from) */
   tag?: { label: string; kind: "away" | "from"; storeId: string };
+  /** giờ vào / ra (HH:mm) – Lịch của tôi bấm ô xem chi tiết */
+  inAt?: string;
+  outAt?: string;
 };
 
 const win = (date: string, start: string, end: string, tz: string) => {
@@ -82,6 +85,7 @@ export function buildMonthBoard(input: {
     }
     return ov > 0 && ov * 2 >= aw[1] - aw[0];
   };
+  const hm = (d?: Date | null) => (d ? localTime(d, tz).slice(0, 5) : undefined);
   const used = new Set<string>(); // lượt chấm công đã gắn vào ít nhất 1 ca có lịch
   const tagFor = (a: BoardAtt): BoardChip["tag"] =>
     a.storeId !== storeId
@@ -113,6 +117,8 @@ export function buildMonthBoard(input: {
       early: earlyHere || undefined,
       missingOut: mine.some((a) => a.status === "MISSING_CHECKOUT") || undefined,
       live: mine.some((a) => a.status === "OPEN") || undefined,
+      inAt: hm(a0?.checkInAt),
+      outAt: hm(aN?.checkOutAt),
       tag: a0 ? tagFor(a0) : homeOf[s.userId] && homeOf[s.userId] !== storeId ? { label: storeTag[homeOf[s.userId]] ?? "CS?", kind: "from", storeId: homeOf[s.userId] } : undefined,
     });
   }
@@ -148,6 +154,8 @@ export function buildMonthBoard(input: {
       extra: a.storeId === storeId && (a.outOfShift ?? true) ? true : undefined,
       missingOut: a.status === "MISSING_CHECKOUT" || undefined,
       live: a.status === "OPEN" || undefined,
+      inAt: hm(a.checkInAt),
+      outAt: hm(a.checkOutAt),
       tag: tagFor(a),
     });
   }

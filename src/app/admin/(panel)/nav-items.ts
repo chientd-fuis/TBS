@@ -1,6 +1,5 @@
 import {
   BadgeCheck,
-  CalendarClock,
   CalendarDays,
   CalendarRange,
   ClipboardList,
@@ -57,15 +56,6 @@ export const NAV: NavGroup[] = [
       { href: "/admin/goods/report", label: "Tổng hợp hàng nhập", perm: ["goods.report"] },
     ],
   },
-  {
-    label: "Ca làm việc",
-    icon: CalendarClock,
-    tabs: true,
-    links: [
-      { href: "/admin/shifts", label: "Ca làm việc" },
-      { href: "/admin/holidays", label: "Ngày lễ" },
-    ],
-  },
   { label: "Xuất Excel", icon: FileSpreadsheet, links: [{ href: "/admin/export", label: "Xuất Excel", perm: ["export"] }] },
   { label: "Cơ sở", icon: Store, links: [{ href: "/admin/stores", label: "Cơ sở", perm: ["stores"] }] },
   {
@@ -77,7 +67,17 @@ export const NAV: NavGroup[] = [
       { href: "/admin/activity", label: "Hoạt động admin", perm: ["activity"] },
     ],
   },
-  { label: "Cài đặt", icon: Settings, links: [{ href: "/admin/settings", label: "Cài đặt" }] },
+  {
+    // Ca làm việc & Ngày lễ nằm trong Cài đặt (thanh tab đầu trang)
+    label: "Cài đặt",
+    icon: Settings,
+    tabs: true,
+    links: [
+      { href: "/admin/settings", label: "Cài đặt" },
+      { href: "/admin/shifts", label: "Ca làm việc" },
+      { href: "/admin/holidays", label: "Ngày lễ" },
+    ],
+  },
 ];
 
 export type NavAccess = { owner: boolean; perms: readonly string[]; hide: readonly string[] };

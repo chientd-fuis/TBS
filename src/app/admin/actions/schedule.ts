@@ -130,6 +130,55 @@ async function removeFromSlot__(storeId: string, id: string): Promise<Result> {
   }
 }
 
+/** Thay đổi nháp trên bảng xếp ca – chỉ lưu khi admin bấm "Chốt lịch". */
+export type DraftAdd = { tplId: string; date: string; userId: string; force?: boolean };
+export type DraftOps = { approve: string[]; reject: string[]; remove: string[]; add: DraftAdd[] };
+export type CommitResult = Result & {
+  /** ca thêm bị trùng giờ (chưa lưu) → giao diện hỏi "Vẫn xếp" rồi chốt lại với force */
+  clashes?: (DraftAdd & { text: string })[];
+  /** thao tác lỗi (chưa lưu) */
+  errors?: string[];
+};
+
+/**
+ * Chốt lịch: lưu 1 lần mọi thay đổi nháp. Thứ tự: bỏ khỏi ca → từ chối → duyệt → thêm
+ * (bỏ trước để ca thêm không bị báo trùng với ca vừa bỏ).
+ */
+async function commitSchedule__(storeId: string, ops: DraftOps): Promise<CommitResult> {
+  try {
+    await adminOrStaff("schedule", storeId);
+    const msgs: string[] = [];
+    const errors: string[] = [];
+    const clashes: CommitResult["clashes"] = [];
+    let removed = 0;
+    let added = 0;
+    for (const id of ops.remove ?? []) {
+      const r = await removeFromSlot__(storeId, id);
+      if (r.error) errors.push(r.error);
+      else removed++;
+    }
+    if (removed) msgs.push(`bỏ ${removed} ca`);
+    for (const [ids, d] of [[ops.reject ?? [], "REJECTED"], [ops.approve ?? [], "APPROVED"]] as const) {
+      if (!ids.length) continue;
+      const r = await decideShifts__(storeId, ids, d);
+      if (r.error) errors.push(r.error);
+      else if (r.message) msgs.push(r.message.replace(/^Đã /, "")); // "từ chối 2 ca" / "duyệt 3 ca. ⚠ Bỏ qua…"
+    }
+    for (const a of ops.add ?? []) {
+      const r = await addToSlot__(storeId, a.tplId, a.date, a.userId, !!a.force);
+      if (r.clash) clashes.push({ ...a, text: r.clash });
+      else if (r.error) errors.push(r.error);
+      else added++;
+    }
+    if (added) msgs.push(`thêm ${added} ca`);
+    const head = msgs.length ? `Đã chốt lịch: ${msgs.join(" · ")}` : "";
+    if (errors.length) return { error: `${head ? `${head}. ` : ""}Lỗi: ${errors.slice(0, 3).join("; ")}`, clashes, errors };
+    return { ok: true, message: head || undefined, clashes };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Định mức người theo ca: tối thiểu (thiếu người) & định mức (ít người). */
 async function saveStaffing__(storeId: string, tplId: string, minStaff: number, targetStaff: number): Promise<Result> {
   try {
@@ -235,6 +284,7 @@ async function requestRegistration__(storeId: string, weekStart: string, userIds
 export async function decideShifts(...a: Parameters<typeof decideShifts__>) { return track("Admin › Xếp ca", "decideShifts", () => decideShifts__(...a)); }
 export async function addToSlot(...a: Parameters<typeof addToSlot__>) { return track("Admin › Xếp ca", "addToSlot", () => addToSlot__(...a)); }
 export async function removeFromSlot(...a: Parameters<typeof removeFromSlot__>) { return track("Admin › Xếp ca", "removeFromSlot", () => removeFromSlot__(...a)); }
+export async function commitSchedule(...a: Parameters<typeof commitSchedule__>) { return track("Admin › Xếp ca", "commitSchedule", () => commitSchedule__(...a)); }
 export async function saveStaffing(...a: Parameters<typeof saveStaffing__>) { return track("Admin › Xếp ca", "saveStaffing", () => saveStaffing__(...a)); }
 export async function autoSchedule(...a: Parameters<typeof autoSchedule__>) { return track("Admin › Xếp ca", "autoSchedule", () => autoSchedule__(...a)); }
 export async function requestRegistration(...a: Parameters<typeof requestRegistration__>) { return track("Admin › Xếp ca", "requestRegistration", () => requestRegistration__(...a)); }

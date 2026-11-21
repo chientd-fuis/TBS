@@ -48,7 +48,7 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
   );
   return (
     <>
-      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · ⚠ đỏ = thiếu người · xanh dương = hỗ trợ từ cơ sở khác. Thao tác của bạn được ghi lại cho admin cơ sở.">
+      <PageTitle sub="Thao tác trên lịch chỉ là nháp – bấm Chốt lịch để lưu · cam = chờ duyệt · xanh dương = hỗ trợ từ cơ sở khác. Thao tác của bạn được ghi lại cho admin cơ sở.">
         <Link href="/manage/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
       {autoNext > 0 && (
@@ -63,6 +63,7 @@ export default async function ManageStoreSchedule({ params, searchParams }: { pa
         </>
       ) : (
         <ScheduleBoard
+          key={ws}
           storeId={storeId}
           storeName={store.name}
           weekStart={ws}

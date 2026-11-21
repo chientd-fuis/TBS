@@ -21,7 +21,6 @@ import AddClosing from "./AddClosing";
 import ImportRevenue from "./ImportRevenue";
 import ImportSheet from "./ImportSheet";
 import { ColsProvider, ColsToggle, FilterExpand } from "./ClosingCols";
-import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +85,7 @@ export default async function ClosingsPage({ searchParams }: { searchParams: Pro
       {!sheetsConfigured() && <Alert tone="orange">Chưa cấu hình <b>service account Google</b> (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) – doanh thu chỉ lưu trong app, chưa ghi Google Sheet.</Alert>}
       {!telegramConfigured() && <Alert tone="orange">Chưa cấu hình <b>TELEGRAM_BOT_TOKEN</b> – ảnh chốt ca chỉ được lưu, chưa gửi Telegram. Xem hướng dẫn trong README.</Alert>}
       {admin.kind === "OWNER" && canSheet && <ImportSheet stores={stores.filter((s) => s.revenueSheetId).map((s) => ({ id: String(s._id), name: s.name }))} />}
-      {can(admin, "revenue") && <ImportRevenue stores={stores.filter((s) => s.active !== false).map((s) => ({ id: String(s._id), name: s.name }))} />}
+      {admin.kind === "OWNER" && <ImportRevenue stores={stores.filter((s) => s.active !== false).map((s) => ({ id: String(s._id), name: s.name }))} />}
       <AddClosing stores={addStores} existing={existing} today={today} ocrEnabled={ocrConfigured() && (await aiPhotoOn("closing")) && (await aiAllowed("closingOcr", `admin:${admin.accountId ?? "owner"}`))} />
       <ColsProvider>
       <Card>

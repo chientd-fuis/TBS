@@ -18,6 +18,7 @@ export function WeekGrid({
   renderCell,
   cellClass,
   renderRowHead,
+  renderDayHead,
 }: {
   templates: GridTpl[];
   days: string[];
@@ -25,6 +26,8 @@ export function WeekGrid({
   renderCell: (tpl: GridTpl, date: string) => ReactNode;
   cellClass?: (tpl: GridTpl, date: string) => string | undefined;
   renderRowHead?: (tpl: GridTpl) => ReactNode;
+  /** nội dung thêm dưới ngày ở tiêu đề cột (VD thời tiết) */
+  renderDayHead?: (date: string) => ReactNode;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl ring-1 ring-grid-line">
@@ -36,6 +39,7 @@ export function WeekGrid({
               <th key={d} className={cn("border border-grid-line px-2 py-1.5", d === today ? "bg-primary text-on-primary" : "bg-grid-head text-ink")}>
                 <div className="font-bold">{weekdayVi(d)}</div>
                 <div className="text-[11px] font-normal">{d.slice(8)}/{d.slice(5, 7)}</div>
+                {renderDayHead?.(d)}
               </th>
             ))}
           </tr>

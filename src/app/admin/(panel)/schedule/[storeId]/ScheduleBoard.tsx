@@ -1,16 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, BellRing, Check, Clock, Eye, Pencil, CircleAlert, Loader2, Settings2, Sparkles, TriangleAlert, Undo2, X, Zap } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, ChevronDown, Clock, Eye, Pencil, Loader2, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, X, Zap } from "lucide-react";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { WeekGrid, type GridTpl } from "@/components/WeekGrid";
 import { cn } from "@/lib/format";
 import { slotLevel, targetFor, type AutoOptions, type Entry, type TplInfo } from "@/lib/schedule";
 import { viDate, weekdayVi } from "@/lib/time";
-import ExportImage from "./ExportImage";
 import WeekSheet from "./WeekSheet";
+import { DayWeatherHead } from "./WeatherStrip";
+import type { DayWeather } from "@/lib/weather";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { addToSlot, autoSchedule, decideShifts, removeFromSlot, requestRegistration, saveStaffing, type PlanView } from "../../../actions/schedule";
+import { autoSchedule, commitSchedule, requestRegistration, saveStaffing, type DraftAdd, type DraftOps, type PlanView } from "../../../actions/schedule";
+import { PersonScheduleSheet } from "./PersonSchedule";
 import type { RegLogView } from "@/lib/shift-reg-log";
 import { RegHistoryCard, SlotHistorySheet, UserHistorySheet, slotLost } from "./RegHistory";
 
@@ -39,7 +41,15 @@ type Props = {
   weekNav?: React.ReactNode;
   /** lịch sử đăng ký ca của tuần (lib/shift-reg-log.ts – giữ 14 ngày) */
   regLogs?: RegLogView[];
+  /** ngày → thời tiết (hiện trong tiêu đề cột ngày) */
+  weather?: Record<string, DayWeather>;
 };
+
+/** thao tác nháp trên 1 ca đã có (chưa lưu) */
+type EntryOp = "approve" | "reject" | "remove";
+/** ca hiển thị = ca đã lưu + thao tác nháp */
+type Eff = Entry & { draft?: EntryOp | "add" };
+const sameAdd = (a: DraftAdd, b: DraftAdd) => a.tplId === b.tplId && a.date === b.date && a.userId === b.userId;
 
 const hours = (t: TplInfo) => {
   const [a, b] = [t.startTime, t.endTime].map((x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3)));
@@ -52,23 +62,28 @@ export default function ScheduleBoard(p: Props) {
   const [msg, setMsg] = useState<{ tone: "green" | "red"; text: string } | null>(null);
   const [showAuto, setShowAuto] = useState(false);
   const [showStaffing, setShowStaffing] = useState(false);
+  // cảnh báo ca thiếu: điện thoại thu gọn thành panel, bấm mới mở
+  const [showWarn, setShowWarn] = useState(false);
+  const dayHead = (d: string) => <DayWeatherHead w={p.weather?.[d]} past={d < p.today} />;
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [confirmApply, setConfirmApply] = useState(false);
   // mặc định XEM như ảnh lịch tuần; có ca đăng ký chờ duyệt → mở chế độ sửa để duyệt / từ chối ngay trên lịch
   const [mode, setMode] = useState<"view" | "edit">(() => (p.entries.some((e) => e.status === "PENDING") ? "edit" : "view"));
-  // bỏ khỏi ca: không hỏi lại (đã có lịch sử) – hiện "Hoàn tác" vài giây
-  const [undo, setUndo] = useState<{ tplId: string; date: string; userId: string; text: string } | null>(null);
-  useEffect(() => {
-    if (!undo) return;
-    const t = setTimeout(() => setUndo(null), 8000);
-    return () => clearTimeout(t);
-  }, [undo]);
+  // ---- NHÁP: duyệt / từ chối / thêm / bỏ chỉ ghi ở máy; bấm "Chốt lịch" mới lưu 1 lần ----
+  const [ops, setOps] = useState<Record<string, EntryOp>>({});
+  const [adds, setAdds] = useState<DraftAdd[]>([]);
+  const dirtyN = Object.keys(ops).length + adds.length;
+  // ca thêm bị trùng giờ khi chốt → hỏi "Vẫn xếp"
+  const [clashList, setClashList] = useState<(DraftAdd & { text: string })[] | null>(null);
+  // chuyển trang khi còn thay đổi chưa lưu → hỏi lại
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  const [askDiscard, setAskDiscard] = useState(false);
+  // chế độ xem: bấm tên → lịch cá nhân
+  const [personUser, setPersonUser] = useState<string | null>(null);
   // lịch sử đăng ký: 1 nhân viên / 1 ô ca
   const [histUser, setHistUser] = useState<string | null>(null);
   const [histSlot, setHistSlot] = useState<{ date: string; tplId: string } | null>(null);
   const hb = { logs: p.regLogs ?? [], entries: p.entries, templates: p.templates, days: p.days, names: p.names };
-  // nhân viên đã có ca trùng giờ → hỏi "Vẫn yêu cầu hỗ trợ" (bỏ ca cũ, xếp vào đây)
-  const [clashAsk, setClashAsk] = useState<{ tplId: string; date: string; userId: string; text: string } | null>(null);
   const [opts, setOpts] = useState<AutoOptions>({
     approvePending: true,
     fillTo: "min",
@@ -78,6 +93,13 @@ export default function ScheduleBoard(p: Props) {
     onlyRequested: false,
   });
 
+  /** Tải lại dữ liệu nhưng GIỮ tuần đang xếp: trang mở không có ?week= (tự nhảy tuần sau vì có ca chờ duyệt)
+   *  → refresh sau khi duyệt hết sẽ rơi về tuần hiện tại, nên ghim ?week= vào URL. */
+  const reload = () => {
+    if (new URLSearchParams(window.location.search).get("week") === p.weekStart) router.refresh();
+    else router.replace(`${window.location.pathname}?week=${p.weekStart}`, { scroll: false }); // dùng chung cho /admin và /manage
+  };
+
   const run = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string; plan?: PlanView }>, after?: (r: { plan?: PlanView }) => void) =>
     start(async () => {
       const r = await fn();
@@ -85,25 +107,101 @@ export default function ScheduleBoard(p: Props) {
       else {
         setMsg(r.message ? { tone: "green", text: r.message } : null);
         after?.(r);
-        router.refresh();
+        reload();
       }
     });
 
-  /** Xếp 1 người vào ô; trùng ca đã xếp ở nơi khác → mở popup cảnh báo thay vì báo lỗi. */
-  const addSlot = (tplId: string, date: string, userId: string, force = false) =>
+  /** Nháp: đặt / bỏ thao tác cho các ca đã có. */
+  const setOp = (ids: string[], op: EntryOp | null) =>
+    setOps((o) => {
+      const n = { ...o };
+      for (const id of ids) {
+        if (op) n[id] = op;
+        else delete n[id];
+      }
+      return n;
+    });
+  const decide = (ids: string[], d: "APPROVED" | "REJECTED") => setOp(ids, d === "APPROVED" ? "approve" : "reject");
+  /** Nháp: xếp 1 người vào ô. Người đó đang có ca ở ô (vừa bị bỏ / đang chờ) → chỉ cần huỷ bỏ / duyệt. */
+  const addSlot = (tplId: string, date: string, userId: string) => {
+    const ex = p.entries.find((e) => e.tplId === tplId && e.date === date && e.userId === userId && e.status !== "REJECTED");
+    if (ex) return setOp([ex.id], ex.status === "PENDING" ? "approve" : null);
+    const a = { tplId, date, userId };
+    setAdds((l) => (l.some((x) => sameAdd(x, a)) ? l : [...l, a]));
+  };
+  const dropAdd = (a: DraftAdd) => setAdds((l) => l.filter((x) => !sameAdd(x, a)));
+  const discard = () => {
+    setOps({});
+    setAdds([]);
+  };
+
+  const eff = useMemo<Eff[]>(
+    () => [
+      ...p.entries.map((e) => (ops[e.id] ? { ...e, draft: ops[e.id] } : e)),
+      ...adds.map((a) => ({ id: `new|${a.date}|${a.tplId}|${a.userId}`, userId: a.userId, tplId: a.tplId, date: a.date, status: "APPROVED" as const, source: "MANUAL", draft: "add" as const })),
+    ],
+    [p.entries, ops, adds],
+  );
+  /** lịch SAU KHI chốt (để đếm, cảnh báo, chế độ xem): duyệt → APPROVED, từ chối → REJECTED, bỏ → mất */
+  const live = useMemo<Eff[]>(
+    () => eff.filter((e) => e.draft !== "remove").map((e) => (e.draft === "approve" ? { ...e, status: "APPROVED" as const } : e.draft === "reject" ? { ...e, status: "REJECTED" as const } : e)),
+    [eff],
+  );
+
+  /** Chốt lịch: gửi toàn bộ nháp 1 lần. force = các ca trùng giờ admin đồng ý "Vẫn xếp". */
+  const commit = (force?: DraftAdd[], after?: () => void) =>
     start(async () => {
-      const r = await addToSlot(p.storeId, tplId, date, userId, force);
-      if (r.clash && !force) {
-        setClashAsk({ tplId, date, userId, text: r.clash });
+      const payload: DraftOps = {
+        approve: Object.keys(ops).filter((k) => ops[k] === "approve"),
+        reject: Object.keys(ops).filter((k) => ops[k] === "reject"),
+        remove: Object.keys(ops).filter((k) => ops[k] === "remove"),
+        add: adds.map((a) => (force?.some((x) => sameAdd(x, a)) ? { ...a, force: true } : a)),
+      };
+      const noPendingLeft = !live.some((e) => e.status === "PENDING");
+      const r = await commitSchedule(p.storeId, payload);
+      if (r.error && !r.errors) {
+        // lỗi chung (quyền, mạng…) → giữ nguyên nháp
+        setMsg({ tone: "red", text: r.error });
         return;
       }
-      setClashAsk(null);
-      if (r.error) setMsg({ tone: "red", text: r.error });
+      const clashes = r.clashes ?? [];
+      setOps({});
+      setAdds(clashes.map(({ tplId, date, userId }) => ({ tplId, date, userId })));
+      setMsg(r.error ? { tone: "red", text: r.error } : r.message ? { tone: "green", text: r.message } : null);
+      if (clashes.length) setClashList(clashes);
       else {
-        setMsg(r.message ? { tone: "green", text: r.message } : null);
-        router.refresh();
+        setClashList(null);
+        if (noPendingLeft) setMode("view");
+        after?.();
       }
+      if (!after || clashes.length) reload();
     });
+
+  // còn thay đổi chưa lưu: chặn đóng tab / tải lại và mọi link chuyển trang trong app → hỏi lại
+  useEffect(() => {
+    if (!dirtyN) return;
+    const onBefore = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.origin !== window.location.origin) return; // trang ngoài: beforeunload lo
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaveTo(url.pathname + url.search + url.hash);
+    };
+    window.addEventListener("beforeunload", onBefore);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBefore);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirtyN]);
 
   const otherGroups = useMemo(
     () => Object.entries(p.otherStaff.reduce<Record<string, Props["otherStaff"]>>((m, s) => ((m[s.storeName] ??= []).push(s), m), {})),
@@ -111,16 +209,18 @@ export default function ScheduleBoard(p: Props) {
   );
   /** Nhân viên đang có ca ở cơ sở khác trong ngày → tên cơ sở (để admin biết khi xếp) */
   const busyAway = (uid: string, date: string) => p.external.find((x) => x.userId === uid && x.date === date)?.storeName;
-  const cell = (tplId: string, date: string) => p.entries.filter((e) => e.tplId === tplId && e.date === date && e.status !== "REJECTED");
-  const pendingAll = p.entries.filter((e) => e.status === "PENDING");
+  /** ca trong ô theo lịch sau khi chốt (để đếm) */
+  const cell = (tplId: string, date: string) => live.filter((e) => e.tplId === tplId && e.date === date && e.status !== "REJECTED");
+  /** ca chờ duyệt chưa được quyết (kể cả nháp) */
+  const pendingAll = live.filter((e) => e.status === "PENDING");
   const proposed = useMemo(() => new Map((plan?.changes ?? []).filter((c) => c.kind === "add").map((c) => [`${c.date}|${c.tplId}|${c.userId}`, c])), [plan]);
 
   // tổng hợp theo nhân viên
   const summary = useMemo(() => {
-    const ids = new Set([...p.staff.map((s) => s.id), ...p.entries.map((e) => e.userId)]);
+    const ids = new Set([...p.staff.map((s) => s.id), ...live.map((e) => e.userId)]);
     return [...ids]
       .map((id) => {
-        const mine = p.entries.filter((e) => e.userId === id);
+        const mine = live.filter((e) => e.userId === id);
         const ok = mine.filter((e) => e.status === "APPROVED");
         const byTpl = Object.fromEntries(p.templates.map((t) => [t.id, ok.filter((e) => e.tplId === t.id).length]));
         const h = ok.reduce((s, e) => s + hours(p.templates.find((t) => t.id === e.tplId) ?? p.templates[0]), 0);
@@ -138,7 +238,7 @@ export default function ScheduleBoard(p: Props) {
         };
       })
       .sort((a, b) => b.ok - a.ok || a.name.localeCompare(b.name));
-  }, [p]);
+  }, [p, live]);
   const homeIds = new Set(p.staff.map((x) => x.id));
   // nhân viên cơ sở chưa có ca nào trong tuần (không tính người đã báo nghỉ / đang được yêu cầu)
   const unregistered = summary.filter((x) => homeIds.has(x.id) && x.ok + x.wait === 0 && !x.away.length && !["OPEN", "OFF"].includes(p.regRequests[x.id]?.status ?? ""));
@@ -161,13 +261,16 @@ export default function ScheduleBoard(p: Props) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", dirtyN > 0 && "pb-24")}>
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       {p.isPast && <Alert tone="gray">Tuần đã qua – vẫn sửa được nhưng không ảnh hưởng chấm công đã ghi nhận.</Alert>}
 
       {/* Thanh công cụ */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" disabled={pending || !pendingAll.length} onClick={() => run(() => decideShifts(p.storeId, pendingAll.map((e) => e.id), "APPROVED"))}>
+        <Button disabled={pending || !dirtyN} onClick={() => commit()} title="Lưu mọi thay đổi trên lịch">
+          <Save size={16} /> Chốt lịch{dirtyN ? ` (${dirtyN})` : ""}
+        </Button>
+        <Button variant="secondary" disabled={pending || !pendingAll.length} onClick={() => decide(pendingAll.map((e) => e.id), "APPROVED")}>
           <Check size={16} /> Duyệt tất cả ({pendingAll.length})
         </Button>
         <Button onClick={() => { setShowAuto((v) => !v); setPlan(null); }}>
@@ -176,15 +279,14 @@ export default function ScheduleBoard(p: Props) {
         <Button variant="outline" onClick={() => setShowStaffing((v) => !v)}>
           <Settings2 size={16} /> Định mức người / ca
         </Button>
-        <ExportImage storeName={p.storeName} weekStart={p.weekStart} days={p.days} templates={p.templates} entries={p.entries} names={p.names} supportFrom={p.supportFrom} />
         {pending && <Loader2 className="animate-spin text-accent" size={18} />}
-        <div className="ml-auto flex flex-wrap gap-2 text-xs">
-          <Badge tone="orange">Chờ duyệt</Badge>
-          <Badge tone="gray">Đã duyệt</Badge>
-          <span className="inline-flex items-center gap-1"><Zap size={12} className="text-secondary" /> Tự động xếp</span>
-          <Badge tone="red">Thiếu người</Badge>
-          <Badge tone="yellow">Ít người</Badge>
-          <span className="inline-flex items-center gap-1 rounded-md bg-info-bg px-1.5 text-info-fg"><ArrowLeftRight size={12} /> Hỗ trợ</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-md bg-card px-1.5 py-0.5 ring-1 ring-line"><Check size={11} className="text-secondary" /> Đã lưu</span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-late-strong px-1.5 py-0.5 font-semibold text-warn ring-1 ring-warn/40"><Clock size={11} /> Chờ duyệt</span>
+          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-secondary bg-ok-soft px-1.5 py-0.5 font-semibold text-good"><Plus size={11} /> Chưa lưu</span>
+          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-danger/60 bg-bad-soft px-1.5 py-0.5 text-danger/80 line-through">Sẽ bỏ</span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-info-bg px-1.5 py-0.5 text-info-fg ring-1 ring-info-line"><ArrowLeftRight size={11} /> Hỗ trợ</span>
+          <span className="inline-flex items-center gap-1"><Zap size={11} className="text-secondary" /> Tự động</span>
         </div>
       </div>
 
@@ -233,10 +335,11 @@ export default function ScheduleBoard(p: Props) {
             </label>
           </div>
           <p className="mt-2 text-xs text-ink/60">Luôn ưu tiên người đang có <b>ít ca nhất</b> trong tuần; không xếp trùng giờ; không xếp người đã bị từ chối ca đó.</p>
+          {dirtyN > 0 && <p className="mt-2 text-xs font-semibold text-warn">Đang có {dirtyN} thay đổi chưa lưu – bấm Chốt lịch trước khi xếp tự động.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" disabled={pending} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => { setPlan(r.plan ?? null); setMode("edit"); })}>Xem trước</Button>
+            <Button variant="outline" disabled={pending || dirtyN > 0} onClick={() => run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => { setPlan(r.plan ?? null); setMode("edit"); })}>Xem trước</Button>
             <Button
-              disabled={pending}
+              disabled={pending || dirtyN > 0}
               onClick={() =>
                 // luôn tính lại bản xem trước để hộp xác nhận hiện đúng số ca sẽ thay đổi
                 run(() => autoSchedule(p.storeId, p.weekStart, opts, false), (r) => {
@@ -294,21 +397,82 @@ export default function ScheduleBoard(p: Props) {
         <p className="text-xs text-ink/60">Ca xếp tự động có thể bỏ từng ca trên bảng sau khi áp dụng.</p>
       </ConfirmDialog>
 
-      {undo && (
-        <div className="fixed inset-x-3 bottom-20 z-40 mx-auto flex max-w-md items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm text-white shadow-lg lg:bottom-6">
-          <span className="flex-1">{undo.text}</span>
-          <button
-            disabled={pending}
-            onClick={() => {
-              const u = undo;
-              setUndo(null);
-              addSlot(u.tplId, u.date, u.userId);
-            }}
-            className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 font-bold text-primary underline"
-          >
-            <Undo2 size={16} /> Hoàn tác
+      {dirtyN > 0 && (
+        <div className="fixed inset-x-3 bottom-20 z-40 mx-auto flex max-w-lg items-center gap-2 rounded-2xl bg-ink px-3 py-2 text-sm text-white shadow-lg lg:bottom-6">
+          <span className="flex-1">
+            <b>{dirtyN}</b> thay đổi chưa lưu
+          </span>
+          <button disabled={pending} onClick={() => setAskDiscard(true)} className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-white/80 underline disabled:opacity-50">
+            <Undo2 size={16} /> Huỷ
+          </button>
+          <button disabled={pending} onClick={() => commit()} className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-primary px-3 font-bold text-on-primary disabled:opacity-50">
+            {pending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Chốt lịch
           </button>
         </div>
+      )}
+
+      <ConfirmDialog
+        open={askDiscard}
+        danger
+        title="Huỷ mọi thay đổi chưa lưu?"
+        confirmLabel="Huỷ thay đổi"
+        cancelLabel="Giữ lại"
+        onCancel={() => setAskDiscard(false)}
+        onConfirm={() => {
+          discard();
+          setAskDiscard(false);
+        }}
+      >
+        <p>{dirtyN} thay đổi trên lịch (duyệt / từ chối / thêm / bỏ ca) sẽ mất.</p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!leaveTo}
+        danger
+        title="Lịch có thay đổi chưa lưu"
+        confirmLabel="Bỏ thay đổi & chuyển trang"
+        cancelLabel="Ở lại"
+        busy={pending}
+        onCancel={() => setLeaveTo(null)}
+        onConfirm={() => {
+          const to = leaveTo!;
+          discard();
+          setLeaveTo(null);
+          router.push(to);
+        }}
+      >
+        <p>
+          Bạn có <b>{dirtyN} thay đổi</b> chưa bấm <b>Chốt lịch</b>. Chuyển trang bây giờ sẽ mất các thay đổi này.
+        </p>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            const to = leaveTo!;
+            setLeaveTo(null);
+            commit(undefined, () => router.push(to));
+          }}
+        >
+          <Save size={16} /> Chốt lịch rồi chuyển trang
+        </Button>
+      </ConfirmDialog>
+
+      {personUser && (
+        <PersonScheduleSheet
+          userId={personUser}
+          name={p.names[personUser] ?? "?"}
+          supportFrom={p.supportFrom[personUser]}
+          days={p.days}
+          today={p.today}
+          templates={p.templates}
+          entries={live}
+          external={p.external}
+          onClose={() => setPersonUser(null)}
+          onOpenHistory={() => {
+            setHistUser(personUser);
+            setPersonUser(null);
+          }}
+        />
       )}
 
       {histUser && (
@@ -327,7 +491,7 @@ export default function ScheduleBoard(p: Props) {
           tplId={histSlot.tplId}
           busy={pending}
           onClose={() => setHistSlot(null)}
-          onDecide={(id, d) => run(() => decideShifts(p.storeId, [id], d))}
+          onDecide={(id, d) => decide([id], d)}
           onRestore={(userId) => addSlot(histSlot.tplId, histSlot.date, userId)}
           onOpenUser={(u) => {
             setHistSlot(null);
@@ -337,19 +501,24 @@ export default function ScheduleBoard(p: Props) {
       )}
 
       <ConfirmDialog
-        open={!!clashAsk}
+        open={!!clashList}
         danger
-        title="Nhân viên đã được xếp ca trùng giờ"
-        confirmLabel={pending ? "Đang xếp…" : "Vẫn yêu cầu hỗ trợ"}
+        title="Có ca trùng giờ – chưa lưu"
+        confirmLabel={pending ? "Đang xếp…" : "Vẫn xếp (bỏ ca cũ)"}
+        cancelLabel="Để sau"
         busy={pending}
-        onCancel={() => setClashAsk(null)}
-        onConfirm={() => clashAsk && addSlot(clashAsk.tplId, clashAsk.date, clashAsk.userId, true)}
+        onCancel={() => setClashList(null)}
+        onConfirm={() => clashList && commit(clashList)}
       >
-        {clashAsk && (
+        {clashList && (
           <div className="space-y-2">
-            <p className="font-semibold text-danger">⚠ {clashAsk.text}</p>
+            <ul className="list-disc space-y-1 pl-5 font-semibold text-danger">
+              {clashList.map((c) => (
+                <li key={`${c.date}${c.tplId}${c.userId}`}>{c.text}</li>
+              ))}
+            </ul>
             <p>
-              Bấm <b>Vẫn yêu cầu hỗ trợ</b> để <b>bỏ ca đã xếp</b> ở trên và xếp nhân viên vào ca này. Nhân viên sẽ nhận thông báo đổi lịch.
+              Bấm <b>Vẫn xếp</b> để <b>bỏ ca đã xếp</b> ở trên và xếp nhân viên vào ca này (nhân viên nhận thông báo đổi lịch). Bấm <b>Để sau</b> thì các ca này vẫn nằm trong nháp.
             </p>
           </div>
         )}
@@ -379,76 +548,95 @@ export default function ScheduleBoard(p: Props) {
       </div>
       {mode === "view" ? (
         <div className="overflow-x-auto rounded-2xl ring-1 ring-line">
-          <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={p.entries} names={p.names} withPending supportFrom={p.supportFrom} width="100%" />
+          <WeekSheet storeName={p.storeName} days={p.days} templates={p.templates} entries={live} names={p.names} withPending supportFrom={p.supportFrom} width="100%" renderDayHead={dayHead} onNameClick={setPersonUser} />
         </div>
       ) : (
       <WeekGrid
         templates={p.templates as GridTpl[]}
         days={p.days}
         today={p.today}
-        renderRowHead={(t) => (
-          <>
-            <div className="text-base font-bold">{t.name}</div>
-            <div className="text-[11px] font-normal">{t.startTime}–{t.endTime}</div>
-            {(t.minStaff || t.targetStaff) ? <div className="text-[10px] font-normal text-ink/60">tối thiểu {t.minStaff} · định mức {t.targetStaff}</div> : null}
-          </>
-        )}
+        renderDayHead={dayHead}
+        renderRowHead={(t) => <div className="text-base font-bold">{t.name}</div>}
         renderCell={(t, d) => {
-          const list = cell(t.id, d);
+          // ca trong ô kể cả ca nháp sẽ bỏ / từ chối (gạch ngang, bấm hoàn tác được)
+          const list = eff.filter((e) => e.tplId === t.id && e.date === d && e.status !== "REJECTED");
           const inCell = new Set(list.map((e) => e.userId));
-          const approvedN = list.filter((e) => e.status === "APPROVED").length;
-          const tpl = t as TplInfo;
-          const tgt = targetFor(tpl, d);
-          const lv = slotLevel(approvedN, tpl.minStaff, tgt);
           const props = [...proposed.values()].filter((c) => c.date === d && c.tplId === t.id);
           return (
             <div className="flex min-h-16 flex-col gap-0.5">
-              {list.map((e) => (
-                <div
-                  key={e.id}
-                  className={cn(
-                    "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-xs",
-                    e.status === "PENDING"
-                      ? "bg-late-strong font-semibold text-warn ring-1 ring-warn/40"
-                      : p.supportFrom[e.userId]
-                        ? "bg-info-bg text-info-fg ring-1 ring-info-line"
-                        : "bg-card/80",
-                  )}
-                  title={
-                    p.supportFrom[e.userId]
-                      ? `Hỗ trợ từ ${p.supportFrom[e.userId]}`
-                      : e.status === "PENDING" ? "Nhân viên đăng ký – chờ duyệt" : e.source === "AUTO" ? "Xếp tự động" : ""
-                  }
-                >
-                  {p.supportFrom[e.userId] && <ArrowLeftRight size={10} className="shrink-0" />}
-                  {e.source === "AUTO" && e.status === "APPROVED" && <Zap size={10} className="shrink-0 text-secondary" />}
-                  <span className="flex-1 truncate">{p.names[e.userId] ?? "?"}</span>
-                  {e.status === "PENDING" ? (
-                    <>
-                      <button title="Duyệt" disabled={pending} onClick={() => run(() => decideShifts(p.storeId, [e.id], "APPROVED"))} className="rounded bg-secondary px-0.5 text-white"><Check size={12} /></button>
-                      <button title="Từ chối" disabled={pending} onClick={() => run(() => decideShifts(p.storeId, [e.id], "REJECTED"))} className="rounded bg-danger px-0.5 text-white"><X size={12} /></button>
-                    </>
-                  ) : (
-                    <button
-                      title="Bỏ khỏi ca"
-                      aria-label={`Bỏ ${p.names[e.userId] ?? ""} khỏi ca`}
-                      disabled={pending}
-                      onClick={() =>
-                        run(
-                          () => removeFromSlot(p.storeId, e.id),
-                          () => setUndo({ tplId: t.id, date: d, userId: e.userId, text: `Đã bỏ ${p.names[e.userId] ?? "?"} khỏi ${t.name} ${weekdayVi(d)} ${viDate(d).slice(0, 5)}` }),
-                        )
-                      }
-                      className="shrink-0 rounded p-0.5 text-danger/60 hover:bg-danger hover:text-white disabled:opacity-40"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
+              {list.map((e) => {
+                const name = p.names[e.userId] ?? "?";
+                const sup = p.supportFrom[e.userId];
+                const gone = e.draft === "remove" || e.draft === "reject";
+                const tip =
+                  e.draft === "add" ? "Chưa lưu: sẽ xếp khi chốt lịch"
+                  : e.draft === "approve" ? "Chưa lưu: sẽ duyệt khi chốt lịch"
+                  : e.draft === "reject" ? "Chưa lưu: sẽ từ chối khi chốt lịch"
+                  : e.draft === "remove" ? "Chưa lưu: sẽ bỏ khỏi ca khi chốt lịch"
+                  : e.status === "PENDING" ? "Nhân viên đăng ký – chờ duyệt"
+                  : sup ? `Đã lưu · hỗ trợ từ ${sup}`
+                  : e.source === "AUTO" ? "Đã lưu · xếp tự động" : "Đã lưu";
+                return (
+                  <div
+                    key={e.id}
+                    title={tip}
+                    className={cn(
+                      "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-xs",
+                      gone
+                        ? "border border-dashed border-danger/60 bg-bad-soft text-danger/80"
+                        : e.draft
+                          ? "border border-dashed border-secondary bg-ok-soft font-semibold text-good"
+                          : e.status === "PENDING"
+                            ? "bg-late-strong font-semibold text-warn ring-1 ring-warn/40"
+                            : sup
+                              ? "bg-info-bg text-info-fg ring-1 ring-info-line"
+                              : "bg-card ring-1 ring-line",
+                    )}
+                  >
+                    {e.draft === "add" ? (
+                      <Plus size={10} className="shrink-0" />
+                    ) : e.draft === "approve" ? (
+                      <Check size={10} className="shrink-0" />
+                    ) : gone ? null : e.status === "PENDING" ? (
+                      <Clock size={10} className="shrink-0" />
+                    ) : sup ? (
+                      <ArrowLeftRight size={10} className="shrink-0" />
+                    ) : e.source === "AUTO" ? (
+                      <Zap size={10} className="shrink-0 text-secondary" />
+                    ) : (
+                      <Check size={10} className="shrink-0 text-secondary" />
+                    )}
+                    <span className={cn("flex-1 truncate", gone && "line-through")}>{name}</span>
+                    {e.draft ? (
+                      <button
+                        title="Hoàn tác"
+                        aria-label={`Hoàn tác thay đổi của ${name}`}
+                        onClick={() => (e.draft === "add" ? dropAdd(e) : setOp([e.id], null))}
+                        className="shrink-0 rounded p-0.5 hover:bg-card"
+                      >
+                        <Undo2 size={12} />
+                      </button>
+                    ) : e.status === "PENDING" ? (
+                      <>
+                        <button title="Duyệt" aria-label={`Duyệt ${name}`} onClick={() => setOp([e.id], "approve")} className="rounded bg-secondary px-0.5 text-white"><Check size={12} /></button>
+                        <button title="Từ chối" aria-label={`Từ chối ${name}`} onClick={() => setOp([e.id], "reject")} className="rounded bg-danger px-0.5 text-white"><X size={12} /></button>
+                      </>
+                    ) : (
+                      <button
+                        title="Bỏ khỏi ca"
+                        aria-label={`Bỏ ${name} khỏi ca`}
+                        onClick={() => setOp([e.id], "remove")}
+                        className="shrink-0 rounded p-0.5 text-danger/60 hover:bg-danger hover:text-white"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {props.map((c) => (
-                <div key={c.userId} className="rounded-md border border-dashed border-secondary px-1 py-0.5 text-xs text-good" title={c.reason}>
-                  + {c.userName}
+                <div key={c.userId} className="rounded-md border border-dotted border-secondary px-1 py-0.5 text-xs text-good" title={c.reason}>
+                  + {c.userName} <span className="text-[10px] opacity-70">(đề xuất)</span>
                 </div>
               ))}
               {(() => {
@@ -491,16 +679,6 @@ export default function ScheduleBoard(p: Props) {
                     ) : null;
                   })}
                 </select>
-                {lv === "short" && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-card/80 px-1 text-[10px] font-bold text-danger" title={`Thiếu người: ${approvedN}/${tpl.minStaff} (tối thiểu)`}>
-                    <TriangleAlert size={11} /> Thiếu {tpl.minStaff - approvedN}
-                  </span>
-                )}
-                {lv === "low" && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-card/80 px-1 text-[10px] font-bold text-warn" title={`Ít người: ${approvedN}/${tgt} (định mức${tgt !== tpl.targetStaff ? " riêng ngày này" : ""})`}>
-                    <CircleAlert size={11} /> Ít {approvedN}/{tgt}
-                  </span>
-                )}
               </div>
             </div>
           );
@@ -516,8 +694,8 @@ export default function ScheduleBoard(p: Props) {
               <div key={uid} className="flex items-center gap-1 rounded-xl bg-late-bg px-2 py-1 text-sm">
                 <b>{p.names[uid]}</b> <span className="text-xs">({ids.length} ca)</span>
                 <button onClick={() => setHistUser(uid)} aria-label={`Lịch sử đăng ký của ${p.names[uid] ?? ""}`} title="Lịch sử đăng ký" className="rounded-lg bg-card p-1 text-accent ring-1 ring-line-strong"><Clock size={14} /></button>
-                <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "APPROVED"))} className="rounded-lg bg-secondary px-2 py-0.5 text-xs font-bold text-white">Duyệt</button>
-                <button disabled={pending} onClick={() => run(() => decideShifts(p.storeId, ids, "REJECTED"))} className="rounded-lg bg-card px-2 py-0.5 text-xs text-danger ring-1 ring-danger/40">Từ chối</button>
+                <button disabled={pending} onClick={() => decide(ids, "APPROVED")} className="rounded-lg bg-secondary px-2 py-0.5 text-xs font-bold text-white">Duyệt</button>
+                <button disabled={pending} onClick={() => decide(ids, "REJECTED")} className="rounded-lg bg-card px-2 py-0.5 text-xs text-danger ring-1 ring-danger/40">Từ chối</button>
               </div>
             ))}
           </div>
@@ -529,15 +707,27 @@ export default function ScheduleBoard(p: Props) {
 
       {/* Cảnh báo */}
       {warnings.length > 0 && (
-        <Card title="⚠️ Cảnh báo ca thiếu / ít người">
-          <ul className="grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-2xl bg-card p-4 ring-1 ring-line">
+          <button
+            type="button"
+            onClick={() => setShowWarn((v) => !v)}
+            aria-expanded={showWarn}
+            className="flex w-full items-center gap-2 text-left font-bold lg:pointer-events-none"
+          >
+            <TriangleAlert size={18} className="text-danger" />
+            <span className="flex-1">
+              Cảnh báo ca thiếu / ít người ({warnings.length})
+            </span>
+            <ChevronDown size={18} className={cn("transition-transform lg:hidden", showWarn && "rotate-180")} />
+          </button>
+          <ul className={cn("mt-3 grid gap-1 text-sm sm:grid-cols-2 lg:grid lg:grid-cols-3", !showWarn && "hidden")}>
             {warnings.map((w) => (
               <li key={`${w.d}${w.t.id}`}>
                 <Badge tone={w.level === "short" ? "red" : "yellow"}>{w.level === "short" ? "Thiếu người" : "Ít người"}</Badge> {w.t.name} · {weekdayVi(w.d)} {viDate(w.d).slice(0, 5)}: {w.c}/{w.level === "short" ? w.t.minStaff : w.tg}
               </li>
             ))}
           </ul>
-        </Card>
+        </div>
       )}
 
       {/* Tổng hợp số ca */}
@@ -563,10 +753,10 @@ export default function ScheduleBoard(p: Props) {
             <thead>
               <tr>
                 <th>Nhân viên</th>
-                {p.templates.map((t) => <th key={t.id} className="text-center">{t.name}</th>)}
-                <th className="text-right">Tổng ca đã duyệt</th>
-                <th className="text-right">Giờ dự kiến</th>
-                <th className="text-right">Chờ duyệt</th>
+                {p.templates.map((t) => <th key={t.id} className="hidden sm:table-cell text-center">{t.name}</th>)}
+                <th className="hidden sm:table-cell text-right">Tổng ca đã duyệt</th>
+                <th className="hidden sm:table-cell text-right">Giờ dự kiến</th>
+                <th className="hidden sm:table-cell text-right">Chờ duyệt</th>
                 <th>Ghi chú</th>
                 <th className="text-center">Đăng ký ca</th>
               </tr>
@@ -575,13 +765,13 @@ export default function ScheduleBoard(p: Props) {
               {summary.map((s) => (
                 <tr key={s.id} className={s.ok === 0 && !s.wait && !s.away.length && p.regRequests[s.id]?.status !== "OFF" ? "row-missing" : ""}>
                   <td className="font-semibold">
-                    {s.name}
+                    <button type="button" onClick={() => setHistUser(s.id)} className="text-left font-semibold underline decoration-dotted underline-offset-2 hover:text-accent" title="Xem lịch sử đăng ký ca">{s.name}</button>
                     {s.from && <span className="ml-1 rounded bg-info-bg px-1 text-[10px] font-normal text-info-fg">hỗ trợ từ {s.from}</span>}
                   </td>
-                  {p.templates.map((t) => <td key={t.id} className="text-center">{s.byTpl[t.id] || ""}</td>)}
-                  <td className="text-right font-bold">{s.ok}</td>
-                  <td className="text-right">{s.h ? s.h.toFixed(1) : ""}</td>
-                  <td className="text-right text-warn">{s.wait || ""}</td>
+                  {p.templates.map((t) => <td key={t.id} className="hidden sm:table-cell text-center">{s.byTpl[t.id] || ""}</td>)}
+                  <td className="hidden sm:table-cell text-right font-bold">{s.ok}</td>
+                  <td className="hidden sm:table-cell text-right">{s.h ? s.h.toFixed(1) : ""}</td>
+                  <td className="hidden sm:table-cell text-right text-warn">{s.wait || ""}</td>
                   <td className="text-xs">
                     {s.ok === 0 && !s.wait && !s.away.length && p.regRequests[s.id]?.status !== "OFF" && <Badge tone="red">Chưa có ca</Badge>}{" "}
                     {s.ok > 0 && avg > 0 && s.ok >= avg * 1.5 && <Badge tone="orange">Nhiều ca</Badge>}{" "}
@@ -617,10 +807,10 @@ export default function ScheduleBoard(p: Props) {
               ))}
               <tr>
                 <td className="font-bold">TỔNG</td>
-                {p.templates.map((t) => <td key={t.id} className="text-center font-bold">{summary.reduce((a, s) => a + (s.byTpl[t.id] || 0), 0)}</td>)}
-                <td className="text-right font-bold">{summary.reduce((a, s) => a + s.ok, 0)}</td>
-                <td className="text-right font-bold">{summary.reduce((a, s) => a + s.h, 0).toFixed(1)}</td>
-                <td className="text-right font-bold text-warn">{pendingAll.length || ""}</td>
+                {p.templates.map((t) => <td key={t.id} className="hidden sm:table-cell text-center font-bold">{summary.reduce((a, s) => a + (s.byTpl[t.id] || 0), 0)}</td>)}
+                <td className="hidden sm:table-cell text-right font-bold">{summary.reduce((a, s) => a + s.ok, 0)}</td>
+                <td className="hidden sm:table-cell text-right font-bold">{summary.reduce((a, s) => a + s.h, 0).toFixed(1)}</td>
+                <td className="hidden sm:table-cell text-right font-bold text-warn">{pendingAll.length || ""}</td>
                 <td className="text-xs">TB {avg.toFixed(1)} ca/người</td>
                 <td />
               </tr>

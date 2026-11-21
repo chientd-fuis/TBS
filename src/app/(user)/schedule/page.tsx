@@ -10,6 +10,7 @@ import { cn } from "@/lib/format";
 import { WeekNav } from "./WeekNav";
 import MonthShiftBoard from "@/app/admin/(panel)/attendance/MonthShiftBoard";
 import { loadMonthBoard } from "@/app/admin/(panel)/attendance/month-board-data";
+import MyShiftGrid from "@/components/user/MyShiftGrid";
 
 export const dynamic = "force-dynamic";
 
@@ -161,7 +162,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <LinkButton href={`/schedule/register?week=${ws >= nextWeek ? ws : nextWeek}`} className="w-full">
         📝 Đăng ký ca {ws >= nextWeek ? "tuần này đang xem" : "tuần sau"}
       </LinkButton>
-      {pendingCount > 0 && <Alert tone="orange">Bạn có {pendingCount} ca đăng ký đang chờ admin duyệt (ô màu cam).</Alert>}
+      {pendingCount > 0 && <Alert tone="orange">Bạn có {pendingCount} ca đăng ký đang chờ admin duyệt ({all ? "ô màu cam" : "ô ?"}).</Alert>}
 
       {view === "week" ? (
         <>
@@ -170,7 +171,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <Alert tone="yellow">Cơ sở chưa có ca làm việc.</Alert>
           ) : (
             <Card>
-              <MonthShiftBoard month={ws.slice(0, 7)} today={today} {...board} compactLegend linkable={false} meId={all ? String(user._id) : undefined} />
+              {all ? (
+                <MonthShiftBoard month={ws.slice(0, 7)} today={today} {...board} compactLegend linkable={false} meId={String(user._id)} />
+              ) : (
+                <MyShiftGrid key={ws} mode="week" today={today} days={board.days} templates={board.templates} cells={board.cells} storeNames={board.storeNames} holidays={board.holidays} />
+              )}
             </Card>
           )}
           {supportList(weekDays(ws))}
@@ -185,7 +190,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           </div>
           {board && board.templates.length ? (
             <Card>
-              <MonthShiftBoard month={month} today={today} {...board} compactLegend linkable={false} meId={all ? String(user._id) : undefined} />
+              {all ? (
+                <MonthShiftBoard month={month} today={today} {...board} compactLegend linkable={false} meId={String(user._id)} />
+              ) : (
+                <MyShiftGrid key={month} mode="month" today={today} days={board.days} templates={board.templates} cells={board.cells} storeNames={board.storeNames} holidays={board.holidays} />
+              )}
               <p className="mt-2 text-center text-sm">
                 Tháng này bạn có <b>{approvedCount(daysOfMonth(month))}</b> ca đã duyệt.
               </p>

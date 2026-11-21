@@ -13,19 +13,25 @@ const WeekSheet = forwardRef<
     storeName: string;
     days: string[];
     templates: TplInfo[];
-    entries: Entry[];
+    entries: (Entry & { draft?: string })[];
     names: Record<string, string>;
     withPending: boolean;
     supportFrom?: Record<string, string>;
     width?: number | string;
+    /** nội dung thêm dưới ngày ở tiêu đề cột (VD thời tiết) */
+    renderDayHead?: (date: string) => React.ReactNode;
+    /** bấm tên nhân viên (VD mở lịch cá nhân) */
+    onNameClick?: (userId: string) => void;
   }
->(function WeekSheet({ storeName, days, templates, entries, names, withPending, supportFrom = {}, width = 1100 }, ref) {
+>(function WeekSheet({ storeName, days, templates, entries, names, withPending, supportFrom = {}, width = 1100, renderDayHead, onNameClick }, ref) {
   const list = (tplId: string, date: string) =>
     entries
       .filter((e) => e.tplId === tplId && e.date === date && (e.status === "APPROVED" || (withPending && e.status === "PENDING")))
-      .map((e) => ({ name: names[e.userId] ?? "?", pending: e.status === "PENDING", support: !!supportFrom[e.userId] }))
+      .map((e) => ({ userId: e.userId, name: names[e.userId] ?? "?", pending: e.status === "PENDING", support: !!supportFrom[e.userId], draft: !!e.draft }))
       .sort((a, b) => Number(a.pending) - Number(b.pending) || a.name.localeCompare(b.name));
+  const label = (p: { name: string; pending: boolean; support: boolean; draft: boolean }) => `${p.support ? "⇄ " : ""}${p.name}${p.pending ? " (chờ)" : ""}${p.draft ? " *" : ""}`;
   const rowsPerTpl = Math.max(3, ...templates.flatMap((t) => days.map((d) => list(t.id, d).length)));
+  const hasDraft = entries.some((e) => e.draft);
   const cellBorder = "1px solid #9fb3cf";
   return (
     <div ref={ref} style={{ width, minWidth: typeof width === "string" ? 900 : undefined, padding: 24, background: "#fff", fontFamily: "Arial, 'Segoe UI', Roboto, sans-serif", color: "#2b1b1b" }}>
@@ -47,6 +53,7 @@ const WeekSheet = forwardRef<
               <th key={d} style={{ background: "#a9c4ea", border: cellBorder, padding: "6px 4px" }}>
                 <div style={{ fontWeight: 700 }}>{weekdayVi(d)}</div>
                 <div style={{ fontSize: 12, fontWeight: 400 }}>{d.slice(8)}/{d.slice(5, 7)}</div>
+                {renderDayHead?.(d)}
               </th>
             ))}
           </tr>
@@ -59,7 +66,6 @@ const WeekSheet = forwardRef<
                 {r === 0 && (
                   <th rowSpan={rowsPerTpl} style={{ border: cellBorder, padding: 6, verticalAlign: "middle" }}>
                     <div style={{ fontSize: 24, fontWeight: 700 }}>{t.name}</div>
-                    <div style={{ fontSize: 12, fontWeight: 400 }}>{t.startTime}–{t.endTime}</div>
                   </th>
                 )}
                 {days.map((d) => {
@@ -75,11 +81,23 @@ const WeekSheet = forwardRef<
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        color: p?.pending ? "#E8590C" : p?.support ? "#1e40af" : undefined,
-                        fontStyle: p?.pending ? "italic" : undefined,
+                        color: p?.draft ? "#15803d" : p?.pending ? "#E8590C" : p?.support ? "#1e40af" : undefined,
+                        fontStyle: p?.pending || p?.draft ? "italic" : undefined,
                       }}
                     >
-                      {p ? `${p.support ? "⇄ " : ""}${p.name}${p.pending ? " (chờ)" : ""}` : ""}
+                      {p &&
+                        (onNameClick ? (
+                          <button
+                            type="button"
+                            onClick={() => onNameClick(p.userId)}
+                            title="Xem lịch cá nhân"
+                            style={{ all: "unset", cursor: "pointer", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
+                          >
+                            {label(p)}
+                          </button>
+                        ) : (
+                          label(p)
+                        ))}
                     </td>
                   );
                 })}
@@ -93,6 +111,7 @@ const WeekSheet = forwardRef<
           {templates.map((t) => `${t.name}: ${t.startTime}–${t.endTime}`).join("  ·  ")}
           {withPending ? "  ·  (chờ) = chưa duyệt" : ""}
           {Object.keys(supportFrom).length ? "  ·  ⇄ = hỗ trợ từ cơ sở khác" : ""}
+          {hasDraft ? "  ·  * = chưa chốt lịch" : ""}
         </span>
         <span>Tiệm Bơ Sầu</span>
       </div>

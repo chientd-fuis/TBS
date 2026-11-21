@@ -1,7 +1,7 @@
 "use server";
 import { track } from "@/lib/error-log";
 import { revalidatePath } from "next/cache";
-import { assertPerm } from "@/lib/guards";
+import { assertOwner, assertPerm } from "@/lib/guards";
 import { adminActor } from "@/lib/admin-session";
 import { audit } from "@/lib/audit";
 import { RevenueGap, ShiftClosing, Store } from "@/lib/models";
@@ -26,7 +26,7 @@ export type ImportPreview = {
 /** Bước 1–2: đọc file KiotViet + so với DT máy đang có (chưa ghi gì). Quyền Doanh thu. */
 async function previewRevenueImport__(fd: FormData): Promise<ImportPreview> {
   try {
-    const admin = await assertPerm("revenue");
+    const admin = await assertOwner(); // chỉ Admin Tổng (import / hoàn tác DT máy)
     const file = fd.get("file");
     if (!(file instanceof File) || !file.size) return { error: "Chọn file báo cáo (.xlsx / .xls / .pdf)" };
     if (file.size > 8 * 1024 * 1024) return { error: "File quá lớn (tối đa 8MB)" };
@@ -54,7 +54,7 @@ export type ApplyResult = { ok?: boolean; error?: string; updated?: { date: stri
 /** Bước 3: ghi DT máy vào lượt chốt ca đã chọn → tính lại doanh thu ngày (+ sheet) → ngày thiếu tiền tự có yêu cầu bù doanh thu. */
 async function applyRevenueImport__(storeId: string, items: { closingId: string; date: string; dt: number }[], fileName: string): Promise<ApplyResult> {
   try {
-    const admin = await assertPerm("revenue");
+    const admin = await assertOwner();
     const actor = adminActor(admin);
     const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
     const updated: NonNullable<ApplyResult["updated"]> = [];
@@ -90,7 +90,7 @@ async function applyRevenueImport__(storeId: string, items: { closingId: string;
 /** Hoàn tác lần import vừa rồi: trả DT máy về số cũ (chỉ lượt vẫn còn đúng số đã import). */
 async function undoRevenueImport__(storeId: string, updated: { date: string; prev: number | null; dt: number; closingId: string }[]): Promise<ApplyResult> {
   try {
-    const admin = await assertPerm("revenue");
+    const admin = await assertOwner();
     const { recomputeDay, syncDaySheet } = await import("@/lib/day-revenue");
     for (const u of updated) {
       const r = await ShiftClosing.updateOne(

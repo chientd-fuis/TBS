@@ -36,7 +36,7 @@ export default async function ScheduleStores() {
                 <div className="rounded-xl bg-grid-1 p-2"><p className="text-xs">Ca tuần này</p><p className="text-xl font-bold">{thisWeek}</p></div>
                 <div className="rounded-xl bg-late-bg p-2"><p className="text-xs">Đăng ký tuần sau</p><p className="text-xl font-bold text-warn">{pendingNext}</p></div>
               </div>
-              {tpls === 0 && <p className="mt-2 text-xs text-danger">Chưa có ca mẫu – tạo ở mục Ca làm việc.</p>}
+              {tpls === 0 && <p className="mt-2 text-xs text-danger">Chưa có ca mẫu – tạo ở Cài đặt → Ca làm việc.</p>}
               <p className="mt-2 text-right text-sm font-semibold text-accent">Mở lịch →</p>
             </Card>
           </Link>

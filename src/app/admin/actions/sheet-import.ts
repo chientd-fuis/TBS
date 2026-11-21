@@ -102,44 +102,113 @@ async function applySheetImport__(i: { storeId: string; tab: string; month: stri
     const admin = await assertOwner();
     checkInput(i);
     const s = await loadStore(i.storeId);
-    const r = await readMonth(s, i.tab, i.month, i.scale === 1000 ? 1000 : 1);
-    const todo = r.rows.filter((x) => x.status === "new");
-    const markTaken = i.markTaken !== false;
-    const { recomputeDay } = await import("@/lib/day-revenue");
-    const now = new Date();
-    for (const d of todo) {
-      await ShiftClosing.create({
-        storeId: s._id,
-        workDate: d.date,
-        shiftName: "Tối",
-        isDayEnd: true,
-        employeeName: IMPORT_BY,
-        addedByAdmin: admin.name,
-        note: d.note ? `Sheet: ${d.note}` : "",
-        revenue: d.revenue,
-        telegram: { status: "DISABLED" },
-        imported: { source: "SHEET", tab: i.tab, at: now, by: admin.name, noCashbook: markTaken },
-        // xếp đúng chỗ trong lịch sử chốt ca (không nhảy lên đầu danh sách)
-        createdAt: new Date(`${d.date}T23:00:00+07:00`),
-      });
-      await recomputeDay(String(s._id), d.date, { quiet: true });
-      if (markTaken) {
-        await RevenuePickup.updateOne({ storeId: s._id, date: d.date }, { $setOnInsert: { month: i.month, by: IMPORT_BY } }, { upsert: true });
-        await CashCount.updateOne({ storeId: s._id, date: d.date }, { $setOnInsert: { countedAt: now, countedBy: IMPORT_BY } }, { upsert: true });
+    const res = await applyOne(admin, s, i);
+    revalidateAll();
+    return res;
+  } catch (e) {
+    return { error: friendly(e) };
+  }
+}
+
+const revalidateAll = () => {
+  revalidatePath("/admin/closings");
+  revalidatePath("/admin/finance", "layout");
+  revalidatePath("/admin/revenue");
+};
+
+/** Nhập 1 tab tháng của 1 cơ sở (đã kiểm tra quyền + đầu vào). */
+async function applyOne(admin: Awaited<ReturnType<typeof assertOwner>>, s: StoreCfg, i: { tab: string; month: string; scale?: number; markTaken?: boolean }): Promise<ApplyResult> {
+  const r = await readMonth(s, i.tab, i.month, i.scale === 1000 ? 1000 : 1);
+  const todo = r.rows.filter((x) => x.status === "new");
+  const markTaken = i.markTaken !== false;
+  const { recomputeDay } = await import("@/lib/day-revenue");
+  const now = new Date();
+  for (const d of todo) {
+    await ShiftClosing.create({
+      storeId: s._id,
+      workDate: d.date,
+      shiftName: "Tối",
+      isDayEnd: true,
+      employeeName: IMPORT_BY,
+      addedByAdmin: admin.name,
+      note: d.note ? `Sheet: ${d.note}` : "",
+      revenue: d.revenue,
+      telegram: { status: "DISABLED" },
+      imported: { source: "SHEET", tab: i.tab, at: now, by: admin.name, noCashbook: markTaken },
+      // xếp đúng chỗ trong lịch sử chốt ca (không nhảy lên đầu danh sách)
+      createdAt: new Date(`${d.date}T23:00:00+07:00`),
+    });
+    await recomputeDay(String(s._id), d.date, { quiet: true });
+    if (markTaken) {
+      await RevenuePickup.updateOne({ storeId: s._id, date: d.date }, { $setOnInsert: { month: i.month, by: IMPORT_BY } }, { upsert: true });
+      await CashCount.updateOne({ storeId: s._id, date: d.date }, { $setOnInsert: { countedAt: now, countedBy: IMPORT_BY } }, { upsert: true });
+    }
+  }
+  await audit(adminActor(admin), "closing.sheetImport", { type: "Store", id: String(s._id) }, null, {
+    tab: i.tab,
+    month: i.month,
+    created: todo.length,
+    skipped: r.rows.length - todo.length,
+    scale: i.scale === 1000 ? 1000 : 1,
+    markTaken,
+  });
+  return { ok: true, created: todo.length, skipped: r.rows.length - todo.length };
+}
+
+/* ---- Import HÀNG LOẠT: nhiều cơ sở × nhiều tab tháng 1 lần ---- */
+export type BatchItem = { storeId: string; tab: string; month: string; scale?: number };
+export type BatchPreviewItem = BatchItem & { storeName: string } & SheetPreview;
+export type BatchApplyItem = BatchItem & { storeName: string } & ApplyResult;
+const BATCH_MAX = 60;
+
+function checkBatch(items: BatchItem[]) {
+  if (!Array.isArray(items) || !items.length) throw new Error("Chọn ít nhất 1 tab tháng");
+  if (items.length > BATCH_MAX) throw new Error(`Tối đa ${BATCH_MAX} tab mỗi lần – chia nhỏ ra`);
+}
+
+/** Xem trước nhiều tab: mỗi tab đọc riêng, lỗi tab nào báo tab đó (không dừng cả lô). */
+async function previewSheetBatch__(items: BatchItem[]): Promise<{ error?: string; items?: BatchPreviewItem[] }> {
+  try {
+    await assertOwner();
+    checkBatch(items);
+    const stores = new Map<string, StoreCfg>();
+    const out: BatchPreviewItem[] = [];
+    for (const i of items) {
+      let s = stores.get(i.storeId);
+      try {
+        checkInput(i);
+        if (!s) stores.set(i.storeId, (s = await loadStore(i.storeId)));
+        const r = await readMonth(s, i.tab, i.month, i.scale === 1000 ? 1000 : 1);
+        out.push({ ...i, storeName: s.name, rows: r.rows, layout: r.layout, firstRow: r.firstRow, thousands: i.scale !== 1000 && looksThousands(r.days) });
+      } catch (e) {
+        out.push({ ...i, storeName: s?.name ?? "?", error: friendly(e) });
       }
     }
-    await audit(adminActor(admin), "closing.sheetImport", { type: "Store", id: String(s._id) }, null, {
-      tab: i.tab,
-      month: i.month,
-      created: todo.length,
-      skipped: r.rows.length - todo.length,
-      scale: i.scale === 1000 ? 1000 : 1,
-      markTaken,
-    });
-    revalidatePath("/admin/closings");
-    revalidatePath("/admin/finance", "layout");
-    revalidatePath("/admin/revenue");
-    return { ok: true, created: todo.length, skipped: r.rows.length - todo.length };
+    return { items: out };
+  } catch (e) {
+    return { error: friendly(e) };
+  }
+}
+
+/** Nhập nhiều tab 1 lần (tuần tự – tab trùng tháng của cùng cơ sở: tab sau tự bỏ qua ngày đã import). */
+async function applySheetBatch__(items: BatchItem[], markTaken = true): Promise<{ error?: string; items?: BatchApplyItem[] }> {
+  try {
+    const admin = await assertOwner();
+    checkBatch(items);
+    const stores = new Map<string, StoreCfg>();
+    const out: BatchApplyItem[] = [];
+    for (const i of items) {
+      let s = stores.get(i.storeId);
+      try {
+        checkInput(i);
+        if (!s) stores.set(i.storeId, (s = await loadStore(i.storeId)));
+        out.push({ ...i, storeName: s.name, ...(await applyOne(admin, s, { ...i, markTaken })) });
+      } catch (e) {
+        out.push({ ...i, storeName: s?.name ?? "?", error: friendly(e) });
+      }
+    }
+    revalidateAll();
+    return { items: out };
   } catch (e) {
     return { error: friendly(e) };
   }
@@ -178,4 +247,6 @@ async function undoSheetImport__(i: { storeId: string; month: string }): Promise
 export async function sheetImportTabs(...a: Parameters<typeof sheetImportTabs__>) { return track("Admin › Import chốt ca từ Google Sheet", "sheetImportTabs", () => sheetImportTabs__(...a)); }
 export async function previewSheetImport(...a: Parameters<typeof previewSheetImport__>) { return track("Admin › Import chốt ca từ Google Sheet", "previewSheetImport", () => previewSheetImport__(...a)); }
 export async function applySheetImport(...a: Parameters<typeof applySheetImport__>) { return track("Admin › Import chốt ca từ Google Sheet", "applySheetImport", () => applySheetImport__(...a)); }
+export async function previewSheetBatch(...a: Parameters<typeof previewSheetBatch__>) { return track("Admin › Import chốt ca từ Google Sheet", "previewSheetBatch", () => previewSheetBatch__(...a)); }
+export async function applySheetBatch(...a: Parameters<typeof applySheetBatch__>) { return track("Admin › Import chốt ca từ Google Sheet", "applySheetBatch", () => applySheetBatch__(...a)); }
 export async function undoSheetImport(...a: Parameters<typeof undoSheetImport__>) { return track("Admin › Import chốt ca từ Google Sheet", "undoSheetImport", () => undoSheetImport__(...a)); }

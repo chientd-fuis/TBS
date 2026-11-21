@@ -4,14 +4,12 @@ import { WeekBadge, weekLabel } from "@/components/WeekBadge";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { requireAdmin } from "@/lib/guards";
-import { can } from "@/lib/permissions";
 import { ShiftAssignment, Store } from "@/lib/models";
 import { loadWeek } from "@/lib/schedule-data";
 import { addDays, isYmd, localDate, viDate, weekStartOf } from "@/lib/time";
-import { Alert, LinkButton, PageTitle } from "@/components/ui";
+import { Alert, PageTitle } from "@/components/ui";
 import ScheduleBoard from "./ScheduleBoard";
 import ForecastPanel from "./ForecastPanel";
-import WeatherStrip from "./WeatherStrip";
 import { loadWeather } from "@/lib/weather";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +35,8 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   const link = (w: string) => `/admin/schedule/${storeId}?week=${w}`;
   const thisWeek = weekStartOf(today);
   // điều hướng tuần – hiển thị ngay trên bảng xếp ca
+  // thời tiết hiện ngay trong tiêu đề cột ngày của lịch
+  const weather = (await getAiConfig()).weather.schedule ? Object.fromEntries(await loadWeather(data.days, store.lat, store.lng)) : {};
   const weekNav = (
     <div className="flex flex-wrap items-center gap-2">
       <Link href={link(addDays(ws, -7))} className="rounded-xl bg-card p-2 ring-1 ring-line hover:bg-primary-light" aria-label="Tuần trước"><ChevronLeft size={18} /></Link>
@@ -54,7 +54,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
   );
   return (
     <>
-      <PageTitle sub="Cam = nhân viên đăng ký chờ duyệt · ⚠ đỏ = thiếu người · ⓘ cam = ít người · xanh dương = hỗ trợ từ cơ sở khác">
+      <PageTitle sub="Thao tác trên lịch chỉ là nháp (nét đứt) – bấm Chốt lịch để lưu · cam = chờ duyệt · xanh dương = hỗ trợ từ cơ sở khác">
         <Link href="/admin/schedule" className="text-sm font-normal underline">Xếp ca</Link> / {store.name}
       </PageTitle>
       {autoNext > 0 && (
@@ -62,13 +62,6 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           Đang mở <b>tuần sau</b> vì có <b>{autoNext} ca đăng ký chờ duyệt</b>.
         </Alert>
       )}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="ml-auto flex gap-2">
-          <LinkButton variant="outline" href={`/admin/shifts?store=${storeId}&week=${ws}`}>Ca mẫu & xếp hàng loạt</LinkButton>
-          {can(admin, "export") && <LinkButton variant="outline" href={`/api/admin/export?type=lichca&store=${storeId}&from=${ws.slice(0, 7)}&to=${addDays(ws, 6).slice(0, 7)}`}>Xuất Excel</LinkButton>}
-        </div>
-      </div>
-      {(await getAiConfig()).weather.schedule && <WeatherStrip days={data.days} weather={await loadWeather(data.days, store.lat, store.lng)} today={today} />}
       {data.templates.length > 0 && (await aiAllowed("forecast", `admin:${admin.accountId ?? "owner"}`)) && <ForecastPanel key={ws} storeId={storeId} weekStart={ws} />}
       {data.templates.length === 0 && weekNav}
       {data.templates.length === 0 ? (
@@ -77,6 +70,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
         </Alert>
       ) : (
         <ScheduleBoard
+          key={ws}
           storeId={storeId}
           storeName={store.name}
           weekStart={ws}
@@ -94,6 +88,7 @@ export default async function StoreSchedule({ params, searchParams }: { params: 
           canRequest={ws >= addDays(thisWeek, 7)}
           isPast={addDays(ws, 6) < today}
           weekNav={weekNav}
+          weather={weather}
         />
       )}
     </>

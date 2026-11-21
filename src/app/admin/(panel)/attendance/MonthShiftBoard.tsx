@@ -59,7 +59,7 @@ export default function MonthShiftBoard({
         {compactLegend && <span>Tên <i className="text-warn">(Chờ duyệt)</i></span>}
         <span className="inline-flex items-center gap-1"><span className="rounded bg-holiday px-1 text-[10px] font-bold text-danger">🎉 Lễ ×2</span> ngày lễ – đi làm được nhân lương</span>
       </div>
-      <div className="overflow-x-auto rounded-xl ring-1 ring-grid-line" data-month-board>
+      <div className="isolate overflow-x-auto rounded-xl ring-1 ring-grid-line" data-month-board>
         <ScrollToToday />
         <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, tableLayout: "fixed" }}>
           <thead>
